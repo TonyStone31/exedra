@@ -198,6 +198,35 @@ A few things worth knowing first:
   one zip with everything.
 - **Update with the same script:** `sudo sh install.sh update`.
 
+### Would you rather not set up a proxy?
+
+The proxy is the hardest step of the install, and I know it. Exedra
+could serve HTTPS itself and get its Let's Encrypt certificate from the
+admin page, so a small site would need no proxy at all. I have not
+built that yet, and I would like to know if people want it.
+
+A proxy is still the better setup for a busy site:
+
+- nginx, HAProxy and Caddy face the whole internet every day. The TLS
+  library Exedra uses is much younger.
+- Ports 80 and 443 belong to one program. If the server also runs a
+  website or another app, a proxy is how they share them.
+- The proxy keeps answering while Exedra restarts for an update.
+- It stops slow connections, floods and oversized requests before they
+  reach the app.
+- HTTP/2, HTTP/3, compression and caching come with it.
+
+Building it in makes sense for one small server with one site, run by
+someone who has never configured a proxy. A club, a makerspace, a small
+shop. For them a working site with good enough HTTPS beats a perfect
+setup they never finish.
+
+A middle road is the installer setting up Caddy for you from one option
+that names your domain. Caddy gets and renews the certificate itself.
+
+If you want either one, [open an issue](https://github.com/TonyStone31/exedra/issues)
+and say which. That decides what gets built first.
+
 ## What it does
 
 ### Shared by every module

@@ -33,6 +33,10 @@ Where Exedra stands and what comes next. Dates are not promised.
 ## Next
 
 - A Docker compose file.
+- HTTPS without the work, if people ask for it (the README says how):
+  the installer setting up a proxy that gets its own certificate, or
+  Exedra serving HTTPS itself with a Let's Encrypt certificate from the
+  admin page. A proxy in front stays the advice for a busy site.
 - Release builds of Exedra Desktop for Linux, Windows and macOS.
 - Forum: a solved mark on a topic, mentions.
 - Private messages for a site without channels: a setting that runs the
