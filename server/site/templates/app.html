@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="{{lang}}" dir="{{dir}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+<title>{{title}} - {{site}}</title>
+<script src="/words.js?l={{langcode}}&amp;v={{v}}"></script>
+<script src="/static/words.js?v={{v}}"></script>
+<script src="/static/theme.js?v={{v}}"></script>
+<link rel="stylesheet" href="/static/site.css?v={{v}}">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="{{icon32}}">
+<link rel="apple-touch-icon" href="{{icon180}}">
+<meta name="theme-color" content="#0f1720">
+</head>
+<body class="app" data-view="{{view}}" data-target="{{target}}" data-thread="{{thread}}"
+  data-me="{{me}}" data-site="{{site}}" data-sso="{{sso}}">
+<div id="layout">
+  <aside id="side">
+    <div class="sidehead">
+      <a class="brand" href="/">{{brand}}</a>
+      <button type="button" id="theme" class="iconbtn" title="{{t:Theme: auto}}"></button>
+    </div>
+    {{search_form}}
+    <nav class="sidenav" aria-label="{{t:Site}}">{{nav}}</nav>
+    <input id="jump" type="search" placeholder="{{t:Jump to a channel or person}}" autocomplete="off">
+    <nav id="roomlist"></nav>
+    <div id="side-language" hidden>{{language_form}}</div>
+    {{powered}}
+    <div id="account" class="account"></div>
+  </aside>
+  <main id="main">
+    <header id="roomhead"></header>
+    <section id="card"></section>
+    <div id="stream" role="log" aria-live="polite"><noscript>{{plain}}</noscript></div>
+    <div id="typing"></div>
+    <div id="composer-area"></div>
+  </main>
+  <aside id="panel" hidden></aside>
+</div>
+<div id="toasts"></div>
+<div id="lightbox" hidden></div>
+<script src="/static/keys.js?v={{v}}"></script>
+<script src="/static/side.js?v={{v}}"></script>
+<script src="/static/app.js?v={{v}}"></script>
+{{partscripts}}
+</body>
+</html>

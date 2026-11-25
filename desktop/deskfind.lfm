@@ -1,0 +1,97 @@
+object FindForm: TFindForm
+  Left = 10
+  Height = 520
+  Top = 10
+  Width = 620
+  Caption = 'Find'
+  ClientHeight = 520
+  ClientWidth = 620
+  Constraints.MinHeight = 320
+  Constraints.MinWidth = 320
+  Position = poOwnerFormCenter
+  object FindPanel: TPanel
+    Left = 12
+    Height = 76
+    Top = 12
+    Width = 596
+    Align = alTop
+    BevelOuter = bvNone
+    BorderSpacing.Around = 12
+    TabOrder = 0
+    object SearchRow: TPanel
+      Left = 0
+      Height = 36
+      Top = 0
+      Width = 596
+      Align = alTop
+      BevelOuter = bvNone
+      TabOrder = 0
+      object FindEdit: TEdit
+        Left = 0
+        Height = 36
+        Top = 0
+        Width = 500
+        Align = alClient
+        TabOrder = 0
+        TextHint = 'Words of three letters or more'
+        OnKeyDown = FindEditKeyDown
+      end
+      object FindButton: TButton
+        Left = 508
+        Height = 36
+        Top = 0
+        Width = 88
+        Align = alRight
+        BorderSpacing.Left = 8
+        Caption = 'Find'
+        Default = True
+        Hint = 'Find these words in the selected history'
+        ShowHint = True
+        TabOrder = 1
+        OnClick = FindButtonClick
+      end
+    end
+    object OnlyHere: TCheckBox
+      Left = 0
+      Height = 28
+      Top = 44
+      Width = 596
+      Align = alTop
+      BorderSpacing.Top = 8
+      AutoSize = False
+      Caption = 'Only in this channel'
+      Checked = True
+      State = cbChecked
+      TabOrder = 1
+    end
+  end
+  object Results: TInkMemo
+    OnKeyDown = ResultsKeyDown
+    Hint = 'Alt+Down or Alt+Up selects a link preview; Enter opens or closes it. Ctrl+Enter opens the link.'
+    ShowHint = True
+    Left = 12
+    Height = 408
+    Top = 100
+    Width = 596
+    Align = alClient
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 12
+    Color = clWindow
+    TabOrder = 1
+    WordWrap = True
+    OnLinkClick = ResultsLinkClick
+    Borders.Left = 10
+    Borders.Top = 8
+    Borders.Right = 10
+    Borders.Bottom = 8
+    StyleSheet.Strings = (
+      'p { margin: 2px 0 }'
+      '.who { margin-top: 10px }'
+      '.at, .edited, .reactions, .replies { color: gray; font-size: smaller }'
+      '.badge { color: gray; font-size: x-small; font-weight: bold }'
+      '.codebar { display: none }'
+      'img.shot { max-width: 100%; max-height: 200px }'
+    )
+  end
+end

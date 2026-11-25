@@ -1,0 +1,43 @@
+# Only explicitly listed project files are candidates for publication.
+/*
+**/.*
+**/*.md
+!/.gitignore
+!/README.md
+!/INSTALL.md
+!/ROADMAP.md
+!/SECURITY.md
+!/LICENSE
+!/install.sh
+!/docs/
+!/docs/API.md
+!/docs/CODE-MAP.md
+!/docs/MODULES.md
+
+# The server: its program and site files, not its build, tests or tools.
+!/server/
+/server/*
+!/server/exedra.lpr
+!/server/exedra.lpi
+!/server/exedra.ini.example
+!/server/exedra.service
+!/server/exedra.rc
+!/server/src/
+!/server/site/
+!/server/site/templates/wiki-help.md
+# what a server run from the source tree writes beside its pages
+/server/site/data/
+
+# The desktop client; desktop/.gitignore lists what of it is published.
+!/desktop/
+
+lib/
+backup/
+release/
+*.ppu
+*.o
+*.compiled
+*.res
+*.lps
+*.log
+

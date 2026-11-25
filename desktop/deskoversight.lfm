@@ -1,0 +1,226 @@
+object OversightForm: TOversightForm
+  Left = 10
+  Height = 600
+  Top = 10
+  Width = 880
+  Caption = 'Private channels and conversations'
+  ClientHeight = 600
+  ClientWidth = 880
+  Color = clBtnFace
+  Constraints.MinHeight = 420
+  Constraints.MinWidth = 320
+  Position = poMainFormCenter
+  OnDestroy = FormDestroy
+  object FilterPanel: TPanel
+    Left = 12
+    Height = 76
+    Top = 12
+    Width = 856
+    Align = alTop
+    BorderSpacing.Around = 12
+    BevelOuter = bvNone
+    TabOrder = 0
+    object FilterLabel: TLabel
+      Left = 0
+      Height = 32
+      Top = 0
+      Width = 856
+      Align = alTop
+      AutoSize = False
+      Caption = 'Filter by channel or member name'
+      FocusControl = FilterEdit
+      Layout = tlCenter
+    end
+    object FilterEdit: TEdit
+      Left = 0
+      Height = 32
+      Top = 36
+      Width = 856
+      Align = alTop
+      BorderSpacing.Top = 4
+      TabOrder = 0
+      TextHint = 'Type a name...'
+      OnChange = FilterChange
+    end
+  end
+  object Pages: TPageControl
+    Left = 12
+    Height = 256
+    Top = 100
+    Width = 856
+    Align = alClient
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 8
+    ActivePage = ChannelsPage
+    TabIndex = 0
+    TabOrder = 1
+    OnChange = PageChanged
+    object ChannelsPage: TTabSheet
+      Caption = 'Channels'
+      object Channels: TListView
+        Left = 0
+        Height = 228
+        Top = 0
+        Width = 848
+        Align = alClient
+        Columns = <
+          item
+            Caption = 'Channel'
+            Width = 160
+          end
+          item
+            Caption = 'Owner'
+            Width = 120
+          end
+          item
+            Caption = 'Members'
+            Width = 210
+          end
+          item
+            Caption = 'Messages'
+            Width = 80
+          end
+          item
+            Caption = 'Last activity'
+            Width = 200
+          end
+          item
+            Caption = 'Archived'
+            Width = 80
+          end>
+        HideSelection = False
+        ReadOnly = True
+        RowSelect = True
+        PopupMenu = RowMenu
+        TabOrder = 0
+        ViewStyle = vsReport
+        OnMouseDown = ListMouseDown
+        OnSelectItem = SelectionChanged
+      end
+    end
+    object ConversationsPage: TTabSheet
+      Caption = 'Conversations'
+      object Conversations: TListView
+        Left = 0
+        Height = 228
+        Top = 0
+        Width = 848
+        Align = alClient
+        Columns = <
+          item
+            Caption = 'Members'
+            Width = 280
+          end
+          item
+            Caption = 'Messages'
+            Width = 80
+          end
+          item
+            Caption = 'Last activity'
+            Width = 200
+          end
+          item
+            Caption = 'Privacy'
+            Width = 100
+          end>
+        HideSelection = False
+        ReadOnly = True
+        RowSelect = True
+        PopupMenu = RowMenu
+        TabOrder = 0
+        ViewStyle = vsReport
+        OnMouseDown = ListMouseDown
+        OnSelectItem = SelectionChanged
+      end
+    end
+  end
+  object Details: TMemo
+    Left = 12
+    Height = 100
+    Top = 364
+    Width = 856
+    Align = alBottom
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 8
+    Color = clWindow
+    ReadOnly = True
+    ScrollBars = ssAutoVertical
+    TabOrder = 2
+  end
+  object Status: TMemo
+    Left = 12
+    Height = 64
+    Top = 472
+    Width = 856
+    Align = alBottom
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 12
+    BorderStyle = bsNone
+    Color = clBtnFace
+    ReadOnly = True
+    ScrollBars = ssAutoVertical
+    TabOrder = 3
+  end
+  object Buttons: TPanel
+    Left = 12
+    Height = 40
+    Top = 548
+    Width = 856
+    Align = alBottom
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 12
+    BevelOuter = bvNone
+    TabOrder = 4
+    object RefreshButton: TButton
+      Left = 0
+      Height = 40
+      Top = 0
+      Width = 88
+      Align = alLeft
+      Caption = 'Refresh'
+      OnClick = RefreshClick
+      TabOrder = 0
+    end
+    object CloseButton: TButton
+      Left = 768
+      Height = 40
+      Top = 0
+      Width = 88
+      Align = alRight
+      Caption = 'Close'
+      Cancel = True
+      OnClick = CloseClick
+      TabOrder = 2
+    end
+    object DeleteButton: TButton
+      Left = 672
+      Height = 40
+      Top = 0
+      Width = 88
+      Align = alRight
+      BorderSpacing.Right = 8
+      Caption = 'Delete...'
+      Enabled = False
+      OnClick = DeleteClick
+      TabOrder = 1
+    end
+  end
+  object RowMenu: TPopupMenu
+    Left = 48
+    Top = 140
+    object DeleteItem: TMenuItem
+      Caption = 'Delete...'
+      Enabled = False
+      OnClick = DeleteClick
+    end
+  end
+  object NoticeBar: TInfoBar
+  end
+  object NoticeToast: TToast
+  end
+
+end

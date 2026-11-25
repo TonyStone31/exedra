@@ -1,0 +1,85 @@
+object AboutForm: TAboutForm
+  Left = 10
+  Height = 260
+  Top = 10
+  Width = 400
+  AutoSize = True
+  BorderIcons = [biSystemMenu]
+  BorderStyle = bsDialog
+  Caption = 'About Exedra'
+  ClientHeight = 260
+  ClientWidth = 400
+  Constraints.MinWidth = 400
+  OnCreate = FormCreate
+  Position = poOwnerFormCenter
+  object Logo: TImage
+    Left = 16
+    Height = 96
+    Top = 20
+    Width = 368
+    Align = alTop
+    BorderSpacing.Left = 16
+    BorderSpacing.Top = 20
+    BorderSpacing.Right = 16
+    Center = True
+    Proportional = True
+    Stretch = True
+  end
+  object NameLabel: TLabel
+    Left = 16
+    Height = 25
+    Top = 124
+    Width = 368
+    Align = alTop
+    Alignment = taCenter
+    BorderSpacing.Left = 16
+    BorderSpacing.Top = 8
+    BorderSpacing.Right = 16
+    Caption = 'Exedra desktop'
+    Font.Height = -20
+    Font.Style = [fsBold]
+    ParentFont = False
+  end
+  object WhatLabel: TLabel
+    Left = 16
+    Height = 17
+    Top = 153
+    Width = 368
+    Align = alTop
+    Alignment = taCenter
+    BorderSpacing.Left = 16
+    BorderSpacing.Top = 4
+    BorderSpacing.Right = 16
+    Caption = 'A native client for Exedra chat servers, written in Free Pascal with Lazarus.'
+    WordWrap = True
+  end
+  object ServerLabel: TLabel
+    Left = 16
+    Height = 17
+    Top = 178
+    Width = 368
+    Align = alTop
+    Alignment = taCenter
+    BorderSpacing.Left = 16
+    BorderSpacing.Top = 8
+    BorderSpacing.Right = 16
+    Caption = ''
+    Font.Color = clGrayText
+    ParentFont = False
+  end
+  object ButtonPanel1: TButtonPanel
+    Left = 16
+    Height = 36
+    Top = 211
+    Width = 368
+    Align = alTop
+    BorderSpacing.Left = 16
+    BorderSpacing.Top = 16
+    BorderSpacing.Right = 16
+    BorderSpacing.Bottom = 16
+    ShowButtons = [pbClose]
+    ShowBevel = False
+    ShowGlyphs = []
+    TabOrder = 0
+  end
+end

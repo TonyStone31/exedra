@@ -1,0 +1,289 @@
+object SignInForm: TSignInForm
+  Left = 10
+  Height = 360
+  Top = 10
+  Width = 420
+  ActiveControl = NameEdit
+  AutoSize = True
+  BorderIcons = [biSystemMenu]
+  BorderStyle = bsDialog
+  Caption = 'Sign in'
+  ClientHeight = 360
+  ClientWidth = 420
+  Color = clBtnFace
+  Constraints.MinWidth = 420
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  OnShow = FormShow
+  Position = poScreenCenter
+  object Logo: TImage
+    Left = 24
+    Height = 56
+    Top = 100
+    Width = 372
+    Align = alTop
+    BorderSpacing.Left = 24
+    BorderSpacing.Top = 24
+    BorderSpacing.Right = 24
+    Center = True
+    Proportional = True
+    Stretch = True
+  end
+  object TitleLabel: TLabel
+    Left = 24
+    Height = 28
+    Top = 200
+    Width = 372
+    Align = alTop
+    Alignment = taCenter
+    BorderSpacing.Left = 24
+    BorderSpacing.Top = 8
+    BorderSpacing.Right = 24
+    Caption = 'Exedra'
+    Font.Height = -22
+    Font.Style = [fsBold]
+    ParentFont = False
+  end
+  object SubtitleLabel: TLabel
+    Left = 24
+    Height = 17
+    Top = 250
+    Width = 372
+    Align = alTop
+    Alignment = taCenter
+    BorderSpacing.Left = 24
+    BorderSpacing.Top = 2
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 8
+    Caption = 'Sign in to an Exedra server'
+    Font.Color = clGrayText
+    ParentFont = False
+  end
+  object ServerLabel: TLabel
+    Left = 24
+    Height = 17
+    Top = 300
+    Width = 372
+    Align = alTop
+    BorderSpacing.Left = 24
+    BorderSpacing.Top = 12
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 4
+    Caption = 'Server'
+    FocusControl = ServerEdit
+  end
+  object ServerEdit: TEdit
+    Left = 24
+    Height = 29
+    Top = 400
+    Width = 372
+    Align = alTop
+    BorderSpacing.Left = 24
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 12
+    TabOrder = 0
+    OnChange = ServerEditChange
+    TextHint = 'https://chat.example.org'
+  end
+  object NameLabel: TLabel
+    Left = 24
+    Height = 17
+    Top = 500
+    Width = 372
+    Align = alTop
+    BorderSpacing.Left = 24
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 4
+    Caption = 'Name'
+    FocusControl = NameEdit
+  end
+  object NameEdit: TEdit
+    Left = 24
+    Height = 29
+    Top = 600
+    Width = 372
+    Align = alTop
+    BorderSpacing.Left = 24
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 12
+    TabOrder = 1
+  end
+  object PasswordLabel: TLabel
+    Left = 24
+    Height = 17
+    Top = 700
+    Width = 372
+    Align = alTop
+    BorderSpacing.Left = 24
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 4
+    Caption = 'Password'
+    FocusControl = PasswordEdit
+  end
+  object PasswordEdit: TEdit
+    Left = 24
+    Height = 29
+    Top = 800
+    Width = 372
+    Align = alTop
+    BorderSpacing.Left = 24
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 12
+    PasswordChar = '*'
+    TabOrder = 2
+  end
+  object JoinPanel: TPanel
+    Left = 24
+    Height = 140
+    Top = 820
+    Width = 372
+    Align = alTop
+    AutoSize = True
+    BevelOuter = bvNone
+    BorderSpacing.Left = 24
+    BorderSpacing.Right = 24
+    TabOrder = 3
+    object RepeatLabel: TLabel
+      Left = 0
+      Height = 17
+      Top = 0
+      Width = 372
+      Align = alTop
+      BorderSpacing.Bottom = 4
+      Caption = 'Password again'
+      FocusControl = RepeatEdit
+    end
+    object RepeatEdit: TEdit
+      Left = 0
+      Height = 29
+      Top = 30
+      Width = 372
+      Align = alTop
+      BorderSpacing.Bottom = 12
+      PasswordChar = '*'
+      TabOrder = 0
+    end
+    object EmailLabel: TLabel
+      Left = 0
+      Height = 17
+      Top = 70
+      Width = 372
+      Align = alTop
+      BorderSpacing.Bottom = 4
+      Caption = 'Email (needed where the server sends a verification mail)'
+      FocusControl = EmailEdit
+      WordWrap = True
+    end
+    object EmailEdit: TEdit
+      Left = 0
+      Height = 29
+      Top = 110
+      Width = 372
+      Align = alTop
+      BorderSpacing.Bottom = 12
+      TabOrder = 1
+    end
+  end
+  object StatusLabel: TLabel
+    Left = 24
+    Height = 20
+    Top = 900
+    Width = 372
+    Align = alTop
+    Alignment = taCenter
+    BorderSpacing.Left = 24
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 8
+    Caption = ''
+    Constraints.MinHeight = 20
+    WordWrap = True
+  end
+  object ButtonPanel1: TButtonPanel
+    Left = 24
+    Height = 36
+    Top = 950
+    Width = 372
+    Align = alTop
+    BorderSpacing.Left = 24
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 4
+    AutoSize = True
+    OKButton.DefaultCaption = False
+    OKButton.Caption = 'Sign in'
+    OKButton.Hint = 'Sign in to the server'
+    OKButton.ShowHint = True
+    OKButton.OnClick = OKButtonClick
+    CancelButton.Hint = 'Cancel sign-in'
+    CancelButton.ShowHint = True
+    ShowButtons = [pbOK, pbCancel]
+    ShowBevel = False
+    ShowGlyphs = []
+    TabOrder = 4
+  end
+  object SsoLabel: TLabel
+    Left = 24
+    Height = 17
+    Top = 1000
+    Width = 372
+    Align = alTop
+    Alignment = taCenter
+    BorderSpacing.Left = 24
+    BorderSpacing.Top = 8
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 8
+    Caption = ''
+    Font.Color = clGrayText
+    ParentFont = False
+  end
+  object SsoPanel: TPanel
+    Left = 24
+    Height = 1
+    Top = 1050
+    Width = 372
+    Align = alTop
+    AutoSize = True
+    BorderSpacing.Left = 24
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 8
+    BevelOuter = bvNone
+    ChildSizing.VerticalSpacing = 8
+    ChildSizing.EnlargeHorizontal = crsHomogenousChildResize
+    ChildSizing.Layout = cclLeftToRightThenTopToBottom
+    ChildSizing.ControlsPerLine = 1
+    TabOrder = 5
+    Visible = False
+  end
+  object JoinRow: TPanel
+    Left = 24
+    Height = 34
+    Top = 1100
+    Width = 372
+    Align = alTop
+    BevelOuter = bvNone
+    BorderSpacing.Left = 24
+    BorderSpacing.Top = 8
+    BorderSpacing.Right = 24
+    BorderSpacing.Bottom = 20
+    TabOrder = 6
+    object JoinLabel: TButton
+      AnchorSideLeft.Control = JoinRow
+      AnchorSideLeft.Side = asrCenter
+      AnchorSideTop.Control = JoinRow
+      Left = 110
+      Height = 29
+      Top = 0
+      Width = 152
+      AutoSize = True
+      Caption = 'No account yet? &Join'
+      OnClick = JoinLabelClick
+      TabOrder = 0
+    end
+  end
+  object LookupTimer: TTimer
+    Enabled = False
+    Interval = 700
+    OnTimer = LookupTick
+    Left = 360
+    Top = 40
+  end
+end

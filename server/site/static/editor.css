@@ -1,0 +1,124 @@
+/* The editor the parts share (editor.js): a bar with the formatting tools
+   over the text and the views on the right, then the text and the page as
+   it will look, side by side on a wide screen and by tabs on a phone, then
+   a line for help and news. */
+.editor .editor-panes textarea {
+  display: block; width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; background: var(--bg); color: var(--ink);
+  height: calc(100vh - 190px); min-height: 320px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px; line-height: 1.65; tab-size: 2;
+}
+/* the editor's own buttons, not those of the text it previews */
+.editor-bar button, .editor-foot button { font-family: inherit; cursor: pointer; }
+/* a short box, for a reply */
+.editor-compact .editor-panes textarea, .editor-compact .editor-view { height: 260px; min-height: 160px; }
+.editor-shell { margin: 18px 0 0; }
+.editor-bar { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px;
+  padding: 6px; border: 1px solid var(--line); border-bottom: 0; border-radius: 8px 8px 0 0; background: var(--bg-soft); }
+/* side by side: the tools stand over the text, the views over the page */
+.editor-bar[data-mode="split"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 0; gap: 0; }
+.editor-bar[data-mode="split"] .editor-tools { padding: 6px; }
+.editor-bar[data-mode="split"] .editor-side { justify-content: flex-end; height: 100%; padding: 6px; border-left: 1px solid var(--line); }
+.editor-bar[data-mode="preview"] .editor-tools { visibility: hidden; }
+.editor-tools { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; min-width: 0; }
+.editor-side { display: flex; align-items: center; justify-content: flex-end; gap: 6px; box-sizing: border-box; }
+.editor .editor-tool { display: inline-flex; align-items: center; justify-content: center; gap: 2px; min-width: 32px; height: 32px; padding: 0 7px;
+  border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink); font-weight: 600; font-size: 14px; }
+.editor .editor-tool:hover:not(:disabled), .editor .editor-tool[aria-expanded="true"] { border-color: var(--line); background: var(--bg); }
+.editor .editor-tool:focus-visible, .editor .editor-mode:focus-visible, .editor .editor-whole:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.editor .editor-tool:disabled { opacity: .35; }
+.editor-tool-more { font-size: 10px; color: var(--dim); }
+.editor-tool svg, .editor-whole svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.editor-tool svg circle { fill: currentColor; stroke: none; }
+.editor-tool svg rect + circle { fill: none; stroke: currentColor; stroke-width: 1.6; }
+.editor-tool-gap { width: 1px; height: 20px; margin: 0 4px; background: var(--line); }
+.editor-modes { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
+.editor .editor-mode { padding: 5px 12px; border: 0; border-radius: 6px; background: transparent; font-weight: 600; font-size: 13px; color: var(--dim); }
+.editor .editor-mode:hover { color: var(--ink); }
+.editor .editor-mode[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.editor .editor-whole { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
+  border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); }
+.editor .editor-whole:hover { border-color: var(--line); background: var(--bg); color: var(--ink); }
+.editor-panes { display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid var(--line); overflow: hidden; }
+.editor .editor-panes textarea { border: 0; border-radius: 0; margin: 0; }
+.editor .editor-panes textarea:focus { outline: none; }
+.editor-shell:focus-within .editor-panes { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.editor-shell.dropping .editor-panes { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent-soft); }
+.editor-view { height: calc(100vh - 190px); min-height: 320px; overflow: auto; padding: 14px 20px; background: var(--bg); transition: opacity .15s; }
+.editor-view.busy { opacity: .6; }
+.editor-panes[data-mode="write"] .editor-view, .editor .editor-panes[data-mode="preview"] textarea { display: none; }
+.editor-panes[data-mode="split"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.editor-panes[data-mode="split"] .editor-view { border-left: 1px solid var(--line); }
+.editor .editor-panes[data-mode="split"] textarea { resize: none; }
+.editor-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 7px 10px; border: 1px solid var(--line); border-top: 0;
+  border-radius: 0 0 8px 8px; background: var(--bg-soft); font-size: 13px; color: var(--dim); }
+.editor-hint { flex: 1 1 auto; min-width: 0; }
+.editor-news { color: var(--ink); font-weight: 600; }
+.editor-news.bad { color: var(--red, #c0392b); }
+.editor .editor-link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+.editor .editor-link:hover { text-decoration: underline; }
+.editor-help { margin-top: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-soft); font-size: 13px; }
+.editor-help table { width: 100%; border-collapse: collapse; }
+.editor-help td { padding: 5px 8px; vertical-align: top; border-bottom: 1px solid var(--line); }
+.editor-help td:first-child { width: 46%; }
+.editor-help code { white-space: pre-wrap; font-size: 12.5px; }
+.editor-help .fine { margin: 10px 0 0; }
+.editor input::placeholder { color: var(--faint); font-weight: 400; }
+/* full screen: the editor fills the window, the rest of the form below it */
+html.editor-whole { overflow: hidden; }
+.editor-shell.whole { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; margin: 0; padding: 12px; background: var(--bg); }
+.editor-shell.whole .editor-panes { flex: 1; min-height: 0; }
+.editor-shell.whole .editor-panes textarea, .editor-shell.whole .editor-view { height: 100%; min-height: 0; }
+.editor-shell.whole .editor-help { max-height: 40vh; overflow: auto; }
+/* The row under the editor: what sends it, and what goes with that */
+.editor-send { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 12px 0 0; }
+.editor-send > p { display: flex; align-items: center; gap: 10px; margin: 0; }
+.editor-shell.whole .editor-send { margin: 10px 0 0; }
+.editor .editor-whole[aria-pressed="true"] { color: var(--accent); }
+/* the small boxes under a tool: page finder, heading menu, table grid, images */
+.editor-tools-pop { position: absolute; top: 100%; z-index: 60; min-width: 240px; margin-top: 4px; padding: 10px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--bg); box-shadow: 0 10px 28px rgba(0, 0, 0, .16); }
+.editor-tools-pop input { margin: 0; padding: 7px 10px; font-size: 14px; }
+/* the emoji panel: a search and the set in groups, and the list under a :keyword being typed */
+.editor-emoji { width: 344px; max-width: calc(100vw - 24px); }
+.editor-emoji input { width: 100%; box-sizing: border-box; }
+.editor-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; margin-top: 8px; max-height: 300px; overflow: auto; }
+.editor-emoji-group { grid-column: 1 / -1; margin: 6px 2px 2px; color: var(--dim); font-size: 12px; font-weight: 600; }
+.editor .editor-emoji-cell { display: flex; align-items: center; justify-content: center; height: 38px; padding: 0; border: 0; border-radius: 8px; background: transparent; }
+.editor .editor-emoji-cell:hover, .editor .editor-emoji-cell:focus-visible { background: var(--hover); outline: none; }
+.editor-emoji-cell .emo { width: 24px; height: 24px; font-size: 21px; line-height: 24px; }
+.editor-emoji-none { grid-column: 1 / -1; margin: 6px 2px; color: var(--dim); font-size: 13px; }
+.editor-suggest { position: fixed; z-index: 80; min-width: 220px; max-width: 360px; margin: 0; padding: 4px; list-style: none; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--bg); color: var(--ink); box-shadow: 0 10px 28px rgba(0, 0, 0, .18); font-size: 14px; }
+.editor-suggest li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.editor-suggest li.on, .editor-suggest li:hover { background: var(--hover); }
+.editor-suggest .emo { width: 20px; height: 20px; font-size: 18px; line-height: 20px; flex: none; }
+.editor-suggest-key { font-family: var(--mono, monospace); font-size: 13px; }
+.editor-suggest-name { color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+.editor-tools-menu { min-width: 190px; padding: 6px; }
+.editor .editor-tools-menu button { display: block; width: 100%; padding: 6px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+.editor .editor-tools-menu button:hover, .editor .editor-tools-menu button:focus-visible { background: var(--hover); outline: none; }
+.editor .editor-tools-menu button[aria-current="true"] { color: var(--accent); }
+.editor .editor-tools-menu .editor-tools-h2 { font-size: 18px; }
+.editor .editor-tools-menu .editor-tools-h3 { font-size: 16px; }
+.editor .editor-tools-menu .editor-tools-h4 { font-size: 14px; }
+.editor .editor-tools-menu .editor-tools-h0 { font-size: 14px; font-weight: 400; }
+.editor-tools-grid { display: grid; grid-template-columns: repeat(6, 22px); gap: 3px; }
+.editor .editor-tools-grid button { width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-soft); }
+.editor .editor-tools-grid button.on { background: var(--accent-soft); border-color: var(--accent); }
+.editor-tools-size { margin: 6px 0 0; min-height: 1.4em; font-size: 13px; color: var(--dim); }
+@media (max-width: 899px) {
+  .editor-bar { grid-template-columns: minmax(0, 1fr); }
+  .editor-side { order: -1; }
+  .editor-modes { flex: 1; }
+  .editor .editor-mode { flex: 1; }
+  /* one row of tools that scrolls sideways, as on GitLab */
+  .editor-tools { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .editor-tools::-webkit-scrollbar { display: none; }
+  .editor .editor-tool { min-width: 38px; height: 38px; flex: none; }
+  .editor-tools-pop { position: fixed; top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 70vh; }
+}
+
+/* the tools as a bar of their own over the text */
+.editor-bar { background: linear-gradient(var(--bg-soft), color-mix(in srgb, var(--bg-soft) 62%, var(--line))); border-color: color-mix(in srgb, var(--line) 62%, var(--dim));
+  box-shadow: inset 0 -1px 0 var(--line); }
+.editor .editor-tool:hover:not(:disabled), .editor .editor-tool[aria-expanded="true"] { background: var(--bg); border-color: color-mix(in srgb, var(--line) 62%, var(--dim)); box-shadow: 0 1px 0 rgba(15, 23, 42, .06); }

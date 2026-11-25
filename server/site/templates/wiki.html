@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="{{lang}}" dir="{{dir}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}} - {{site}}</title>
+<meta name="description" content="{{description}}">
+<meta property="og:title" content="{{title}}">
+<meta property="og:description" content="{{description}}">
+<meta property="og:type" content="article">
+<link rel="canonical" href="{{canonical}}">
+<meta property="og:url" content="{{canonical}}">
+<script src="/words.js?l={{langcode}}&amp;v={{v}}"></script>
+<script src="/static/words.js?v={{v}}"></script>
+<script src="/static/theme.js?v={{v}}"></script>
+<link rel="stylesheet" href="/static/site.css?v={{v}}">
+<link rel="stylesheet" href="/static/editor.css?v={{v}}">
+<link rel="stylesheet" href="/static/wiki.css?v={{v}}">
+<link rel="icon" href="{{icon32}}">
+<link rel="apple-touch-icon" href="{{icon180}}">
+</head>
+<body class="home wiki sided {{kind}}">
+<a class="skip-link" href="#wiki-content">{{t:Skip to content}}</a>
+<div class="shell">
+<aside class="siteside">
+  <input type="checkbox" id="sidetoggle" class="sidetoggle">
+  <div class="sidehead">
+    <a class="brand" href="/">{{brand}}</a>
+    <button type="button" id="theme" class="iconbtn" title="{{t:Theme: auto}}"></button>
+    <label for="sidetoggle" class="sidemenu">{{t:Menu}}</label>
+  </div>
+  {{search_form}}
+  <div class="sidebody">
+    <nav class="sidenav" aria-label="{{t:Site}}">{{nav}}</nav>
+    <nav class="sidelist" aria-label="{{t:Wiki}}">
+      <div class="group">{{t:Wiki}}</div>
+      <a class="room" href="/wiki/Main_Page">{{t:Main page}}</a>
+      <a class="room" href="/wiki-pages">{{t:All pages}}</a>
+      <a class="room" href="/wiki-changes">{{t:Recent changes}}</a>
+      <a class="room" href="/wiki-random">{{t:Random page}}</a>
+      <a class="room" href="/wiki-contributors">{{t:Contributors}}</a>
+      <a class="room" href="/wiki-help">{{t:Help}}</a>
+      <div class="group">{{t:Contribute}}</div>
+      <a class="room" href="/wiki-new">{{t:New page}}</a>
+      <a class="room" href="/wiki-files">{{t:Images}}</a>
+      <div class="group" data-page-tools hidden>{{t:This page}}</div>
+    </nav>
+    <div id="side-language" hidden><form method="get" action="/wiki-language" class="wiki-language">
+        <input type="hidden" name="return" value="{{return}}">
+        <label>{{t:Language}} <select name="language" aria-label="{{t:Language}}">{{languages}}</select></label>
+        <button type="submit">{{t:Apply}}</button>
+      </form></div>
+    {{powered}}
+    <div id="account" class="account">{{account}}</div>
+  </div>
+</aside>
+<div class="shellmain">
+{{live}}
+<main class="wikipage" id="wiki-content" tabindex="-1">
+{{content}}
+</main>
+</div>
+</div>
+<script src="/static/keys.js?v={{v}}"></script>
+<script src="/static/side.js?v={{v}}"></script>
+<script src="/static/wiki.js?v={{v}}"></script>
+<script src="/static/emoji-names.js?v={{v}}"></script>
+<script src="/static/editor.js?v={{v}}"></script>
+<script src="/static/wiki-edit.js?v={{v}}"></script>
+<script src="/static/live.js?v={{v}}"></script>
+</body>
+</html>

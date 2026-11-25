@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# PROVIDE: exedra
+# REQUIRE: LOGIN NETWORKING
+# KEYWORD: shutdown
+#
+# The FreeBSD service, installed as /usr/local/etc/rc.d/exedra.
+# In /etc/rc.conf:
+#   exedra_enable="YES"
+#   exedra_dir="/usr/local/exedra"    the site's folder, when it is elsewhere
+
+. /etc/rc.subr
+
+name=exedra
+rcvar=exedra_enable
+
+load_rc_config $name
+: ${exedra_enable:=NO}
+: ${exedra_dir:=/usr/local/exedra}
+
+# daemon(8) runs the program as the user exedra, starts it again when it
+# ends, and sends what it prints to syslog.  The pid file is daemon's own.
+pidfile=/var/run/${name}.pid
+command=/usr/sbin/daemon
+command_args="-f -r -R 2 -P ${pidfile} -u exedra -T ${name} ${exedra_dir}/exedra ${exedra_dir}/exedra.ini"
+exedra_chdir=${exedra_dir}
+
+run_rc_command "$1"

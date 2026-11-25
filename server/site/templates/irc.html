@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="{{lang}}" dir="{{dir}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}} - {{site}}</title>
+<script src="/words.js?l={{langcode}}&amp;v={{v}}"></script>
+<script src="/static/words.js?v={{v}}"></script>
+<script src="/static/theme.js?v={{v}}"></script>
+<link rel="stylesheet" href="/static/site.css?v={{v}}">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="{{icon32}}">
+<link rel="apple-touch-icon" href="{{icon180}}">
+<meta name="theme-color" content="#0f1720">
+</head>
+<body class="home guest">
+<header class="topbar">
+  <a class="brand" href="/">{{brand}}</a>
+  <nav>{{nav}}</nav>
+  {{language_form}}
+</header>
+<section class="signin about irc">
+  <h1>{{t:Chat from your IRC client}}</h1>
+  <p>{{t:The channels here are IRC channels too, live both ways.}} {{t:Use HexChat, WeeChat, irssi or any client you like, and the same name and password as on the site.}}</p>
+
+  <table class="ircfacts">
+    <tr><th>{{t:Server}}</th><td><code>{{host}}</code></td></tr>
+    <tr><th>{{t:Port}}</th><td><code>{{port}}</code>{{t:, TLS on}}</td></tr>
+    <tr><th>{{t:Sign in}}</th><td>{{t:SASL PLAIN with your name and password, or a server password}}</td></tr>
+    <tr><th>{{t:Channels}}</th><td>{{channels}}</td></tr>
+  </table>
+
+  <p><a class="button" href="ircs://{{host}}:{{port}}/{{first}}">{{t:Open in my IRC client}}</a></p>
+  <p class="fine">{{irc_identify}}</p>
+
+  <h2>HexChat</h2>
+  <ol>
+    <li>{{irc_network}}</li>
+    <li>{{irc_server}}</li>
+    <li>{{irc_user}}</li>
+    <li>{{irc_login}}</li>
+    <li>{{t:Favorite channels:}} <code>{{joinlist}}</code></li>
+  </ol>
+
+  <h2>WeeChat</h2>
+  <pre class="copy">/server add {{network}} {{host}}/{{port}} -tls
+/set irc.server.{{network}}.nicks "{{name}}"
+/set irc.server.{{network}}.sasl_username "{{name}}"
+/set irc.server.{{network}}.sasl_password "your password"
+/set irc.server.{{network}}.autojoin "{{joinlist}}"
+/connect {{network}}</pre>
+
+  <h2>irssi</h2>
+  <pre class="copy">/network add -nick {{name}} -sasl_mechanism PLAIN -sasl_username {{name}} -sasl_password "your password" {{network}}
+/server add -tls -network {{network}} -auto {{host}} {{port}}
+/channel add -auto {{joinlist}} {{network}}
+/connect {{network}}</pre>
+
+  <h2>{{t:Anything else}}</h2>
+  <p>{{irc_register}}</p>
+
+  <h2>{{t:What IRC shows differently}}</h2>
+  <ul>
+    <li>{{irc_thread}}</li>
+    <li>{{t:Code longer than a few lines comes as a link to the colored copy on the site.}}</li>
+    <li>{{t:Locked private conversations stay on the site.}} {{t:Plain ones reach you as normal private messages.}}</li>
+    <li>{{irc_commands}}</li>
+  </ul>
+</section>
+<script src="/static/keys.js?v={{v}}"></script>
+<script src="/static/home.js?v={{v}}"></script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+; Exedra's config file.  Copy it to exedra.ini beside the program.
+; A line that starts with ; is a comment.  Restart the program after a change.
+; Most other settings (the look, limits, sign-in providers, the modules) are
+; on the admin page; a value saved there wins over one written here.
+
+[site]
+; The site's name, shown at the top of the left column and in mail.
+name=My Community
+; The address people type, without a slash at the end.
+url=http://127.0.0.1:8099
+; 1 when a proxy in front does TLS, so cookies are marked for TLS only.
+https=0
+; The port the program listens on.
+port=8099
+; The address it listens on.  127.0.0.1: only this machine (a proxy in
+; front).  Leave it out to listen on every address.
+address=127.0.0.1
+; Proxies whose X-Forwarded-For header is believed, comma separated.
+proxies=127.0.0.1
+; The folder that holds static/, templates/, lang/ and data/.
+files=/opt/exedra
+
+; The modules, 1 for on and 0 for off.  Also on the admin page: Overview, Community modules.
+; Without these lines the chat and the wiki are on, the forum and the catalog off.
+;chat=1
+;wiki=1
+;forum=1
+;catalog=1
+
+; Virus scanning of uploads is switched on the admin page, Settings, File
+; scanning, and runs clamscan or clamdscan only.  Another scanner with
+; ClamAV's exit codes can be named here, then put first in its command there.
+;scan_program=/usr/local/sbin/my-scanner
+
+[database]
+; --- SQLite: no database server, the whole site in one file.
+server=sqlite
+file=/opt/exedra/data/site.db
+
+; --- MariaDB (remove the two SQLite lines above).
+;host=127.0.0.1
+;port=3306
+;name=exedra
+;user=exedra
+;password=
+; MySQL 8: the same, and
+;client=mysql80
+
+; --- PostgreSQL (remove the two SQLite lines above).
+;server=postgres
+;host=127.0.0.1
+;port=5432
+;name=exedra
+;user=exedra
+;password=
+
+; The client library by name or path, when it is not found on its own.
+;library=
+
+; Mail: address checks, password links, missed messages.  Without a host
+; nothing is sent.  The program signs in to the mailbox over TLS.
+;[mail]
+;host=mail.example.com
+;port=465
+;user=community@example.com
+;password=
+;from=community@example.com
+;name=My Community
+; Where reports from members go.
+;reports_to=you@example.com
+
+; The servers the program connects to (mail, push, sign-in with other
+; sites) must show a certificate the system trusts.  To trust other
+; certificates in their place: a file of PEM certificates, or a folder.
+;[tls]
+;certs=/etc/exedra/trusted.pem
+
+; The chat as an IRC server on the same channels and members.
+;[irc]
+; TLS, with the certificate and its key as PEM files.
+;tls_port=6697
+;cert=/etc/letsencrypt/live/community.example.com/fullchain.pem
+;key=/etc/letsencrypt/live/community.example.com/privkey.pem
+; Plain text, for a proxy that does TLS or a private network.
+;port=6667
+; The port members are told to use on the /irc page.
+;public_port=6697
+; What the server calls itself.
+;name=exedra

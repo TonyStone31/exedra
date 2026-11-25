@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="{{lang}}" dir="{{dir}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<meta name="description" content="{{tagline}}">
+<script src="/words.js?l={{langcode}}&amp;v={{v}}"></script>
+<script src="/static/words.js?v={{v}}"></script>
+<script src="/static/theme.js?v={{v}}"></script>
+<link rel="stylesheet" href="/static/site.css?v={{v}}">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="{{icon32}}">
+<link rel="apple-touch-icon" href="{{icon180}}">
+<meta name="theme-color" content="#0f1720">
+</head>
+<body class="home {{who}}">
+<header class="topbar">
+  <a class="brand" href="/">{{brand}}</a>
+  <nav>{{nav}}</nav>
+  {{search_form}}
+  {{language_form}}
+  <div class="account">{{account}}</div>
+</header>
+<section class="hero">
+  <div class="inner">
+    <h1>{{tagline}}</h1>
+    <p class="online">{{online}}</p>
+    <form class="quickjoin guest-only">
+      <input name="name" placeholder="{{t:Pick a name}}" maxlength="24" autocomplete="username" required>
+      <input name="password" type="password" placeholder="{{t:and a password}}" autocomplete="current-password" required>
+      <button>{{t:Jump in}}</button>
+    </form>
+    <div class="chans">{{channels}}</div>
+  </div>
+</section>
+<section class="band">
+  <div class="home-cards">{{forum_home}}{{wiki_home}}{{catalog_home}}</div>
+  {{best}}
+</section>
+<footer class="foot">{{powered}}</footer>
+<script src="/static/keys.js?v={{v}}"></script>
+<script src="/static/home.js?v={{v}}"></script>
+{{live}}
+<script src="/static/live.js?v={{v}}"></script>
+</body>
+</html>

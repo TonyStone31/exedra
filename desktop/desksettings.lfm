@@ -1,0 +1,299 @@
+object SettingsForm: TSettingsForm
+  Left = 10
+  Height = 620
+  Top = 10
+  Width = 440
+  BorderStyle = bsSizeable
+  Caption = 'Settings'
+  ClientHeight = 620
+  ClientWidth = 440
+  Position = poOwnerFormCenter
+  OnShow = FormShow
+  object Body: TScrollBox
+    Left = 0
+    Top = 0
+    Width = 440
+    Height = 520
+    Align = alClient
+    BorderStyle = bsNone
+    TabOrder = 0
+    object Content: TPanel
+      Left = 0
+      Top = 0
+      Width = 440
+      Height = 520
+      Align = alTop
+      BevelOuter = bvNone
+      Constraints.MinWidth = 440
+      AutoSize = True
+      TabOrder = 0
+      object MailCheck: TCheckBox
+        Left = 16
+        Height = 23
+        Top = 16
+        Width = 408
+        Align = alTop
+        BorderSpacing.Left = 16
+        BorderSpacing.Top = 16
+        BorderSpacing.Right = 16
+        Caption = 'Email me about private messages and mentions I miss'
+        TabOrder = 0
+      end
+      object MailHint: TLabel
+        Left = 40
+        Height = 17
+        Top = 43
+        Width = 384
+        Align = alTop
+        BorderSpacing.Left = 40
+        BorderSpacing.Top = 4
+        BorderSpacing.Right = 16
+        Caption = ''
+        Font.Color = clGrayText
+        ParentFont = False
+        WordWrap = True
+      end
+      object AwayLabel: TLabel
+        Left = 16
+        Height = 17
+        Top = 76
+        Width = 408
+        Align = alTop
+        BorderSpacing.Left = 16
+        BorderSpacing.Top = 16
+        BorderSpacing.Right = 16
+        Caption = 'Show me as away when I have not touched the chat'
+        FocusControl = AwayBox
+      end
+      object AwayBox: TComboBox
+        Left = 16
+        Height = 31
+        Top = 97
+        Width = 408
+        Align = alTop
+        BorderSpacing.Left = 16
+        BorderSpacing.Top = 4
+        BorderSpacing.Right = 16
+        ItemHeight = 0
+        Items.Strings = (
+          'never'
+          'after 5 minutes'
+          'after 10 minutes'
+          'after 15 minutes'
+          'after 30 minutes'
+          'after an hour'
+        )
+        Style = csDropDownList
+        TabOrder = 1
+      end
+      object SizeLabel: TLabel
+        Left = 16
+        Height = 17
+        Top = 144
+        Width = 408
+        Align = alTop
+        BorderSpacing.Left = 16
+        BorderSpacing.Top = 16
+        BorderSpacing.Right = 16
+        Caption = 'Text size in the messages (this computer only)'
+      end
+      object SizeBox: TComboBox
+        Left = 16
+        Height = 31
+        Top = 165
+        Width = 408
+        Align = alTop
+        BorderSpacing.Left = 16
+        BorderSpacing.Top = 4
+        BorderSpacing.Right = 16
+        ItemHeight = 0
+        Items.Strings = (
+          'smaller'
+          'normal'
+          'larger'
+          'largest'
+        )
+        Style = csDropDownList
+        TabOrder = 2
+      end
+      object EmailLabel: TLabel
+        Left = 16
+        Height = 17
+        Top = 220
+        Width = 408
+        Align = alTop
+        BorderSpacing.Left = 16
+        BorderSpacing.Top = 16
+        BorderSpacing.Right = 16
+        Caption = 'Email (you can correct an unconfirmed address)'
+        FocusControl = EmailEdit
+        WordWrap = True
+      end
+      object EmailEdit: TEdit
+        Left = 16
+        Height = 29
+        Top = 240
+        Width = 408
+        Align = alTop
+        BorderSpacing.Left = 16
+        BorderSpacing.Top = 4
+        BorderSpacing.Right = 16
+        TabOrder = 3
+      end
+      object EmailState: TLabel
+        Left = 16
+        Height = 17
+        Top = 280
+        Width = 408
+        Align = alTop
+        BorderSpacing.Left = 16
+        BorderSpacing.Top = 4
+        BorderSpacing.Right = 16
+        Caption = ''
+        WordWrap = True
+      end
+      object AccountButtons: TPanel
+        Left = 16
+        Height = 68
+        Top = 320
+        Width = 408
+        Align = alTop
+        AutoSize = True
+        BevelOuter = bvNone
+        BorderSpacing.Left = 16
+        BorderSpacing.Top = 8
+        BorderSpacing.Right = 16
+        TabOrder = 4
+        object VerifyButton: TButton
+          Left = 0
+          Height = 29
+          Top = 0
+          Width = 408
+          Align = alTop
+          AutoSize = True
+          Caption = 'Send the verification mail again'
+          Hint = 'Send a confirmation link now, using the address above'
+          ShowHint = True
+          OnClick = VerifyButtonClick
+          TabOrder = 0
+        end
+        object RefreshButton: TButton
+          Left = 0
+          Height = 29
+          Top = 40
+          Width = 408
+          Align = alTop
+          AutoSize = True
+          BorderSpacing.Top = 4
+          Caption = 'Check verification state'
+          Hint = 'After opening the link in your mail, check the account again'
+          ShowHint = True
+          OnClick = RefreshButtonClick
+          TabOrder = 1
+        end
+      end
+      object PasswordPanel: TPanel
+        Left = 16
+        Height = 190
+        Top = 400
+        Width = 408
+        Align = alTop
+        AutoSize = True
+        BevelOuter = bvNone
+        BorderSpacing.Left = 16
+        BorderSpacing.Top = 16
+        BorderSpacing.Right = 16
+        TabOrder = 5
+        object PasswordHint: TLabel
+          Left = 0
+          Height = 34
+          Top = 0
+          Width = 408
+          Align = alTop
+          Caption = ''
+          WordWrap = True
+        end
+        object PasswordLabel: TLabel
+          Left = 0
+          Height = 17
+          Top = 40
+          Width = 408
+          Align = alTop
+          BorderSpacing.Top = 8
+          Caption = 'New password (8 characters or more)'
+          FocusControl = PasswordEdit
+        end
+        object PasswordEdit: TEdit
+          Left = 0
+          Height = 29
+          Top = 60
+          Width = 408
+          Align = alTop
+          BorderSpacing.Top = 4
+          PasswordChar = '*'
+          TabOrder = 0
+        end
+        object RepeatLabel: TLabel
+          Left = 0
+          Height = 17
+          Top = 100
+          Width = 408
+          Align = alTop
+          BorderSpacing.Top = 8
+          Caption = 'Password again'
+          FocusControl = RepeatEdit
+        end
+        object RepeatEdit: TEdit
+          Left = 0
+          Height = 29
+          Top = 120
+          Width = 408
+          Align = alTop
+          BorderSpacing.Top = 4
+          PasswordChar = '*'
+          TabOrder = 1
+        end
+        object PasswordButton: TButton
+          Left = 0
+          Height = 29
+          Top = 160
+          Width = 408
+          Align = alTop
+          AutoSize = True
+          BorderSpacing.Top = 8
+          Caption = 'Set a password'
+          Hint = 'Save the password and key now; Cancel does not undo this action'
+          ShowHint = True
+          OnClick = PasswordButtonClick
+          TabOrder = 2
+        end
+      end
+      object AccountStatus: TLabel
+        Left = 16
+        Height = 17
+        Top = 800
+        Width = 408
+        Align = alTop
+        BorderSpacing.Left = 16
+        BorderSpacing.Top = 12
+        BorderSpacing.Right = 16
+        Caption = 'Account buttons take effect immediately; OK saves the preferences above.'
+        WordWrap = True
+      end
+    end
+  end
+  object ButtonPanel1: TButtonPanel
+    Left = 16
+    Height = 36
+    Top = 900
+    Width = 408
+    Align = alBottom
+    BorderSpacing.Left = 16
+    BorderSpacing.Top = 16
+    BorderSpacing.Right = 16
+    BorderSpacing.Bottom = 16
+    ShowButtons = [pbOK, pbCancel]
+    ShowGlyphs = []
+    TabOrder = 6
+  end
+end

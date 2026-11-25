@@ -1,0 +1,176 @@
+object MembersForm: TMembersForm
+  Left = 10
+  Height = 740
+  Top = 10
+  Width = 760
+  Caption = 'Members'
+  ClientHeight = 740
+  ClientWidth = 760
+  Constraints.MinHeight = 640
+  Constraints.MinWidth = 440
+  Position = poMainFormCenter
+  OnDestroy = FormDestroy
+  object FilterPanel: TPanel
+    Height = 78
+    Align = alTop
+    BorderSpacing.Around = 12
+    BevelOuter = bvNone
+    TabOrder = 0
+    object FilterLabel: TLabel
+      Height = 30
+      Align = alTop
+      AutoSize = False
+      Caption = 'Filter by the start of a member name'
+      FocusControl = FilterEdit
+    end
+    object FilterEdit: TEdit
+      Top = 30
+      Height = 36
+      Align = alClient
+      TabOrder = 0
+    end
+    object SearchButton: TButton
+      Width = 96
+      Align = alRight
+      BorderSpacing.Left = 8
+      Caption = 'Search'
+      Default = True
+      OnClick = SearchClick
+      TabOrder = 1
+    end
+  end
+  object Members: TListView
+    Top = 102
+    Align = alClient
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 8
+    Columns = <
+      item
+        Caption = 'Member'
+        Width = 180
+      end
+      item
+        Caption = 'Roles'
+        Width = 280
+      end
+      item
+        Caption = 'Ban status'
+        Width = 120
+      end
+      item
+        Caption = 'Messages'
+        Width = 90
+      end>
+    HideSelection = False
+    ReadOnly = True
+    RowSelect = True
+    TabOrder = 1
+    ViewStyle = vsReport
+    OnSelectItem = SelectionChanged
+  end
+  object Details: TMemo
+    Top = 340
+    Height = 150
+    Align = alBottom
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 8
+    ReadOnly = True
+    ScrollBars = ssAutoBoth
+    TabOrder = 2
+  end
+  object RolePanel: TPanel
+    Top = 500
+    Height = 116
+    Align = alBottom
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 8
+    BevelOuter = bvNone
+    Visible = False
+    TabOrder = 3
+    object RoleLabel: TLabel
+      Height = 24
+      Align = alTop
+      AutoSize = False
+      Caption = 'Assign site roles'
+      FocusControl = Roles
+    end
+    object Roles: TCheckListBox
+      Top = 24
+      Align = alClient
+      TabOrder = 0
+    end
+    object SaveRolesButton: TButton
+      Width = 112
+      Align = alRight
+      BorderSpacing.Left = 8
+      Caption = 'Save roles'
+      OnClick = SaveRolesClick
+      TabOrder = 1
+    end
+  end
+  object Status: TMemo
+    Top = 624
+    Height = 56
+    Align = alBottom
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 8
+    BorderStyle = bsNone
+    Color = clBtnFace
+    ReadOnly = True
+    ScrollBars = ssAutoVertical
+    TabOrder = 4
+  end
+  object Buttons: TPanel
+    Top = 688
+    Height = 40
+    Align = alBottom
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 12
+    BevelOuter = bvNone
+    TabOrder = 5
+    object PreviousButton: TButton
+      Width = 88
+      Align = alLeft
+      Caption = 'Previous'
+      OnClick = PreviousClick
+      TabOrder = 0
+    end
+    object NextButton: TButton
+      Left = 96
+      Width = 88
+      Align = alLeft
+      BorderSpacing.Left = 8
+      Caption = 'Next'
+      OnClick = NextClick
+      TabOrder = 1
+    end
+    object BanButton: TButton
+      Left = 192
+      Width = 112
+      Align = alLeft
+      BorderSpacing.Left = 8
+      Caption = 'Ban...'
+      Visible = False
+      OnClick = BanClick
+      TabOrder = 2
+    end
+    object CloseButton: TButton
+      Width = 88
+      Align = alRight
+      Caption = 'Close'
+      Cancel = True
+      OnClick = CloseClick
+      TabOrder = 3
+    end
+  end
+  object NoticeBar: TInfoBar
+  end
+  object NoticeToast: TToast
+  end
+
+end

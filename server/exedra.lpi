@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <General>
+      <Flags>
+        <MainUnitHasCreateFormStatements Value="False"/>
+        <MainUnitHasTitleStatement Value="False"/>
+        <MainUnitHasScaledStatement Value="False"/>
+      </Flags>
+      <SessionStorage Value="InProjectDir"/>
+      <Title Value="exedra"/>
+      <UseAppBundle Value="False"/>
+    </General>
+    <BuildModes>
+      <Item Name="Server" Default="True"/>
+      <Item Name="CGI">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <Target>
+            <Filename Value="bin/exedra.cgi"/>
+          </Target>
+          <SearchPaths>
+            <OtherUnitFiles Value="src/core;src/chat;src/wiki;src/forum;src/catalog"/>
+            <UnitOutputDirectory Value="lib/cgi/$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <Other>
+            <CustomOptions Value="-dCGI"/>
+          </Other>
+        </CompilerOptions>
+      </Item>
+    </BuildModes>
+    <RequiredPackages>
+      <Item>
+        <PackageName Value="CryptoLib4PascalPackage"/>
+      </Item>
+      <Item>
+        <PackageName Value="HashLib4PascalPackage"/>
+      </Item>
+      <Item>
+        <PackageName Value="TlsLib.Adapter.FclNet"/>
+      </Item>
+    </RequiredPackages>
+    <Units>
+      <Unit>
+        <Filename Value="exedra.lpr"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/core/sitedb.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/core/sitebell.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/core/sitemarkup.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/core/siteusers.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/core/siteroles.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/chat/chatrooms.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/core/sitefiles.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/core/sitescan.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/chat/chatmessages.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/chat/chatcommands.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/chat/chatprivate.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/core/siteadmin.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/core/sitelive.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/core/sitepoll.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src/core/webpages.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <Target>
+      <Filename Value="bin/exedra"/>
+    </Target>
+    <SearchPaths>
+      <OtherUnitFiles Value="src/core;src/chat;src/wiki;src/forum;src/catalog"/>
+      <UnitOutputDirectory Value="lib/server/$(TargetCPU)-$(TargetOS)"/>
+    </SearchPaths>
+    <CodeGeneration>
+      <Optimizations>
+        <OptimizationLevel Value="2"/>
+      </Optimizations>
+    </CodeGeneration>
+  </CompilerOptions>
+</CONFIG>

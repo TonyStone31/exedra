@@ -1,0 +1,270 @@
+object ThreadFrame: TThreadFrame
+  Left = 0
+  Height = 680
+  Top = 0
+  Width = 360
+  Align = alRight
+  ClientHeight = 680
+  ClientWidth = 360
+  Color = clBtnFace
+  Constraints.MinWidth = 240
+  ParentColor = False
+  TabOrder = 0
+  Visible = False
+  object HeadPanel: TPanel
+    Left = 12
+    Height = 32
+    Top = 12
+    Width = 336
+    Align = alTop
+    BorderSpacing.Left = 12
+    BorderSpacing.Top = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 8
+    BevelOuter = bvNone
+    ClientHeight = 32
+    ClientWidth = 336
+    TabOrder = 0
+    object TitleLabel: TLabel
+      Left = 0
+      Height = 28
+      Top = 4
+      Width = 240
+      Align = alTop
+      BorderSpacing.Top = 4
+      BorderSpacing.Right = 96
+      AutoSize = False
+      Caption = 'Thread'
+      Font.Style = [fsBold]
+      ParentFont = False
+    end
+    object CloseButton: TButton
+      Left = 248
+      Height = 32
+      Top = 0
+      Width = 88
+      Anchors = [akTop, akRight]
+      Caption = 'Close'
+      Hint = 'Close the thread'
+      ShowHint = True
+      TabOrder = 0
+      OnClick = CloseButtonClick
+    end
+  end
+  object HeadRule: TShape
+    Left = 12
+    Height = 1
+    Top = 52
+    Width = 336
+    Align = alTop
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 8
+    Brush.Color = clGrayText
+    Pen.Color = clGrayText
+  end
+  object Replies: TInkMemo
+    OnKeyDown = RepliesKeyDown
+    Hint = 'Alt+Down or Alt+Up selects a link preview; Enter opens or closes it. Ctrl+Enter opens the link.'
+    ShowHint = True
+    CodeLineNumbers = True
+    Left = 12
+    Height = 544
+    Top = 52
+    Width = 336
+    Align = alClient
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 8
+    Color = clWindow
+    PopupMenu = MessageMenu
+    TabOrder = 1
+    WordWrap = True
+    OnLinkClick = RepliesLinkClick
+    OnResource = RepliesResource
+    Borders.Left = 10
+    Borders.Top = 3
+    Borders.Right = 10
+    Borders.Bottom = 3
+    StyleSheet.Strings = (
+      'p { margin: 2px 0 }'
+      '.who { margin-top: 6px }'
+      '.at, .edited, .reactions, .replies { color: gray; font-size: smaller }'
+      '.badge { color: gray; font-size: x-small; font-weight: bold }'
+      '.reactions { margin-top: 4px }'
+      '.pill { display: inline-block; border: 1px solid gray; border-radius: 10px; padding: 1px 7px; margin-right: 4px }'
+      '.codebar { display: none }'
+      'img.shot { max-width: 100%; max-height: 320px; border-radius: 6px }'
+      'img.face { width: 22px; height: 22px; vertical-align: middle; border-radius: 11px }'
+      '.k { color: #8f3fb6 } .c { color: #6b7686 } .s { color: #1d7d4f } .n { color: #b65a00 } .d { color: #2c63d6 }'
+      '@media (prefers-color-scheme: dark) {'
+      '  .k { color: #c792ea } .c { color: #6f7d93 } .s { color: #9ccc65 } .n { color: #f7a35c } .d { color: #82aaff }'
+      '}'
+    )
+  end
+  object ReplyPanel: TPanel
+    Left = 12
+    Height = 100
+    Top = 568
+    Width = 336
+    Align = alBottom
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 12
+    BevelOuter = bvNone
+    ClientHeight = 100
+    ClientWidth = 336
+    TabOrder = 2
+    object AttachRow: TInkLabel
+      Left = 0
+      Height = 0
+      Top = 0
+      Width = 336
+      Align = alTop
+      AutoSize = False
+      OnLinkClick = AttachRowLink
+    end
+    object EditLabel: TLabel
+      Left = 0
+      Height = 20
+      Top = 0
+      Width = 336
+      Align = alTop
+      AutoSize = False
+      Caption = 'Editing your message. Esc stops.'
+      Visible = False
+    end
+    object ReplyBox: TMemo
+      Left = 0
+      Height = 64
+      Top = 0
+      Width = 336
+      Align = alClient
+      Color = clWindow
+      ScrollBars = ssAutoVertical
+      TabOrder = 0
+      WantReturns = False
+      OnKeyDown = ReplyBoxKeyDown
+    end
+    object ButtonBox: TPanel
+      Left = 0
+      Height = 32
+      Top = 68
+      Width = 336
+      Align = alBottom
+      BorderSpacing.Top = 4
+      AutoSize = True
+      BevelOuter = bvNone
+      ClientHeight = 32
+      ClientWidth = 336
+      TabOrder = 1
+      object AttachButton: TButton
+        Left = 0
+        Height = 32
+        Top = 0
+        Width = 64
+        Align = alLeft
+        AutoSize = True
+        Caption = 'Attach'
+        Hint = 'Attach files to the reply'
+        ShowHint = True
+        TabOrder = 0
+        OnClick = AttachButtonClick
+      end
+      object ReplyButton: TButton
+        Left = 252
+        Height = 32
+        Top = 0
+        Width = 60
+        Align = alRight
+        AutoSize = True
+        BorderSpacing.Left = 4
+        Caption = 'Reply'
+        Hint = 'Send the reply (Enter); Shift+Enter starts a new line'
+        ShowHint = True
+        TabOrder = 3
+        OnClick = ReplyButtonClick
+      end
+      object CodeButton: TButton
+        Left = 68
+        Height = 32
+        Top = 0
+        Width = 52
+        Align = alLeft
+        AutoSize = True
+        BorderSpacing.Left = 4
+        Caption = 'Code'
+        Hint = 'Add a code block around the selection or at the caret'
+        ShowHint = True
+        TabOrder = 1
+        OnClick = CodeButtonClick
+      end
+      object FileExpiryBox: TComboBox
+        Left = 124
+        Top = 0
+        Width = 116
+        Height = 32
+        Align = alLeft
+        AutoSize = True
+        BorderSpacing.Left = 4
+        ItemIndex = 0
+        Items.Strings = (
+          'Keep files'
+          '1 hour'
+          '1 day'
+          '1 week'
+          '1 download'
+        )
+        Style = csDropDownList
+        Text = 'Keep files'
+        Hint = 'Delete attached files after the selected time or one download'
+        ShowHint = True
+        TabOrder = 2
+      end
+    end
+  end
+  object OpenDialog1: TOpenDialog
+    Options = [ofHideReadOnly, ofAllowMultiSelect, ofFileMustExist, ofEnableSizing, ofViewDetail]
+    Left = 32
+    Top = 80
+  end
+  object MessageMenu: TPopupMenu
+    OnPopup = MessageMenuPopup
+    Left = 64
+    Top = 80
+    object ReactItem: TMenuItem
+      Caption = 'React'
+    end
+    object PinItem: TMenuItem
+      Caption = 'Pin'
+      OnClick = PinItemClick
+    end
+    object CopyItem: TMenuItem
+      Caption = 'Copy'
+      OnClick = CopyItemClick
+    end
+    object CopyLinkItem: TMenuItem
+      Caption = 'Copy message link'
+      OnClick = CopyLinkItemClick
+    end
+    object MenuSeparator: TMenuItem
+      Caption = '-'
+    end
+    object EditItem: TMenuItem
+      Caption = 'Edit'
+      OnClick = EditItemClick
+    end
+    object DeleteItem: TMenuItem
+      Caption = 'Delete'
+      OnClick = DeleteItemClick
+    end
+  end
+  object NoticeBar: TInfoBar
+    Control = Replies
+    OnAnswer = NoticeAnswer
+  end
+  object NoticeToast: TToast
+    Control = Replies
+  end
+
+end

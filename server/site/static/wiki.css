@@ -1,0 +1,448 @@
+/* Wiki pages use the chat's palette and local system fonts. */
+body.wiki { background: var(--bg); }
+.wiki .topbar { gap: 12px 24px; }
+.wikibrand span { color: var(--dim); font-size: 13px; font-weight: 500; }
+.wiki .wikinav { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; }
+.wiki .topbar .wikinav a { font-size: 13px; }
+.wikisearch { display: flex; flex: 1 1 240px; gap: 6px; max-width: 360px; margin: 0; }
+.wikisearch input {
+  width: 100%; min-width: 0; padding: 7px 12px; border: 1.5px solid color-mix(in srgb, var(--ink) 28%, transparent);
+  border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 14px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .06);
+}
+.wikisearch input::placeholder { color: var(--dim); opacity: 1; }
+.wikisearch input:hover { border-color: color-mix(in srgb, var(--ink) 45%, transparent); }
+.wikisearch input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.wikisearch button {
+  border: 1.5px solid color-mix(in srgb, var(--ink) 28%, transparent); border-radius: 8px; padding: 7px 12px;
+  background: var(--bg); color: var(--ink); font-size: 13px; font-weight: 600;
+}
+.wikisearch button:hover { background: var(--hover); color: var(--ink); }
+.wiki-choices { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; max-width: 100%; }
+.skip-link {
+  position: absolute; top: 8px; left: 16px; z-index: 60; transform: translateY(-160%);
+  padding: 10px 16px; background: var(--bg); color: var(--accent); border: 1px solid var(--accent); border-radius: 8px;
+}
+.skip-link:focus { transform: none; }
+.theme-choice { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; white-space: nowrap; }
+.theme-choice select {
+  padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font-size: 13px;
+}
+/* the plain top bar is dark; a site with its own bar styles these itself */
+body.plainbar .topbar .theme-choice, body.plainbar .topbar .wiki-language label { color: var(--side-ink); }
+.wiki-language { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; max-width: 100%; }
+.wiki-language label { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--dim); }
+.wiki-language select { min-width: 0; max-width: 170px; padding: 4px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.wiki-language button { padding: 4px 8px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+
+/* as wide as the header above it: 1240px and the padding (22 Nov 2026) */
+.wikipage {
+  max-width: 1288px; margin: 0 auto; padding: 36px 24px 72px;
+  font-size: 16px; line-height: 1.7; overflow-wrap: anywhere;
+}
+.wikipage > h1 {
+  font-size: clamp(26px, 4vw, 34px); line-height: 1.2; letter-spacing: -.025em;
+  margin: 0 0 24px; font-weight: 700;
+}
+/* Tools are emitted at the foot; keep them beside the title without script. */
+.wikipage:has(> .pagetools) { display: grid; grid-template-columns: minmax(0, 1fr); }
+.wikipage:has(> .pagetools) > * { grid-column: 1; min-width: 0; }
+.wikipage:has(> .pagetools) > h1 { grid-row: 1; margin-bottom: 12px; }
+.wikipage > .pagetools {
+  grid-row: 2; display: flex; flex-wrap: wrap; gap: 8px 20px;
+  margin: 0 0 28px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
+  font-size: 13px; font-weight: 600;
+}
+.pagetools a { text-decoration: none; }
+.pagetools a:hover { text-decoration: underline; }
+.pagetools .pagetool-print {
+  font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer;
+}
+.pagetools .pagetool-print:hover { text-decoration: underline; }
+.pagetools .pagetool-print:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+.wikibody { min-width: 0; }
+.wikibody > :first-child { margin-top: 0; }
+.wikibody h1, .wikibody h2, .wikibody h3, .wikibody h4, .wikibody h5, .wikibody h6 {
+  color: var(--ink); line-height: 1.3; scroll-margin-top: 24px; font-weight: 650;
+}
+.wikibody h1 { font-size: 28px; margin: 40px 0 16px; }
+.wikibody h2, .wikipage > h2, .wikipreview > h2 {
+  font-size: 23px; line-height: 1.3; letter-spacing: -.015em;
+  margin: 36px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+}
+.wikibody h3 { font-size: 19px; margin: 28px 0 10px; }
+.wikibody h4 { font-size: 16px; margin: 24px 0 8px; }
+.wikibody h5, .wikibody h6 { font-size: 14px; margin: 20px 0 8px; }
+.wikibody p, .wikibody ul, .wikibody ol, .wikibody dl { margin: 0 0 18px; }
+.wikibody ul, .wikibody ol { padding-left: 26px; }
+.wikibody li { margin: 5px 0; }
+.wikibody li > ul, .wikibody li > ol { margin: 6px 0; }
+.wikibody dt { font-weight: 600; }
+.wikibody dd { margin: 4px 0 16px 24px; }
+.wikibody blockquote {
+  margin: 20px 0; padding: 4px 0 4px 18px; border-left: 3px solid var(--line); color: var(--dim);
+}
+.wikibody blockquote > :last-child { margin-bottom: 0; }
+.wikibody hr { margin: 28px 0; border: 0; border-top: 1px solid var(--line); }
+.wikibody > hr + p:last-child:has(> em:only-child) { color: var(--dim); font-size: 13px; line-height: 1.6; }
+.wikibody a { text-underline-offset: .15em; }
+.wikibody pre, .wikibody code, .wikibody kbd, .wikibody samp, .wikiedit textarea {
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace;
+}
+.wikibody :not(pre) > code, .wikibody kbd, .wikibody samp {
+  padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--code-bg); font-size: .875em;
+}
+.wikibody pre {
+  max-width: 100%; overflow-x: auto; margin: 20px 0; padding: 16px 18px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg);
+  color: var(--ink); font-size: 13px; line-height: 1.65; tab-size: 2; overflow-wrap: normal;
+}
+.wikibody pre code { font-size: inherit; }
+.wikibody .code { max-width: 100%; margin: 20px 0; }
+.wikibody .code pre { margin: 0; border: 0; border-radius: 0; padding: 16px 18px; }
+.wikibody img, .wikibody video { max-width: 100%; height: auto; }
+.wikibody figure { max-width: 100%; margin: 24px 0; }
+.wikibody figcaption { margin-top: 8px; color: var(--dim); font-size: 13px; }
+/* The table itself scrolls so imported Markdown needs no extra wrapper. */
+.wikibody table, table.revisions {
+  display: block; max-width: 100%; width: fit-content; overflow-x: auto;
+  border-collapse: collapse; margin: 20px 0 24px; font-size: 14px; line-height: 1.55;
+}
+.wikibody th, .wikibody td, .revisions th, .revisions td {
+  padding: 9px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top;
+  /* words stay whole in a table; a wide one scrolls instead of splitting them letter by letter */
+  overflow-wrap: normal; word-break: normal; hyphens: none; min-width: 7ch;
+}
+.wikibody td:last-child { min-width: 22ch; }
+.wikibody td a { overflow-wrap: anywhere; }
+/* on a phone the columns keep a readable width each and the table scrolls sideways as a whole */
+@media (max-width: 700px) {
+  .wikibody td, .wikibody th { min-width: 9ch; max-width: 18ch; }
+  .wikibody td:last-child, .wikibody th:last-child { min-width: 32ch; max-width: 44ch; }
+}
+.wikibody th, .revisions th { background: var(--bg-soft); font-weight: 600; }
+.wikibody tr:nth-child(even) td { background: var(--bg-soft); }
+.wikibody td > :last-child { margin-bottom: 0; }
+/* the wiki's own emoji pictures (WikiEmoji): the size of a letter and a bit */
+.wikibody img.emo, .wikipreview img.emo { width: 1.25em; height: 1.25em; vertical-align: -0.25em; margin: 0 0.05em; border: 0; border-radius: 0; box-shadow: none; background: none; }
+.wikipage .byline, .wikipage .categories, .wikipage .notice, .wikiedit .fine {
+  color: var(--dim); font-size: 13px; line-height: 1.6;
+}
+.wikipage .byline { margin: 16px 0 0; }
+.old-wiki > summary { cursor: pointer; }
+.old-wiki > p { margin: 8px 0; }
+.old-wiki table.revisions { font-size: 13px; }
+.old-wiki .revisions th, .old-wiki .revisions td { padding: 3px 10px; }
+.old-wiki .revisions td:first-child { white-space: nowrap; }
+.wikipage .notice { padding: 0; }
+.wikipage .notice:not(:empty) {
+  padding: 12px 16px; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 6px;
+}
+.wikipage .problem {
+  color: var(--red); background: var(--bg-soft); border-left: 3px solid var(--red);
+  padding: 12px 16px; border-radius: 4px;
+}
+.categories {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 32px;
+  padding-top: 16px; border-top: 1px solid var(--line);
+}
+.categories a { text-decoration: none; }
+.categories a:hover { text-decoration: underline; }
+
+/* editing: the whole width of the window, the text and its preview need the room */
+.wiki.edit .wikipage:has(.wikiedit) { max-width: none; }
+.wikiedit label, .wikiform label { display: block; margin: 18px 0 8px; font-size: 14px; font-weight: 600; }
+.wikiedit input, .wikiedit textarea, .wikiform input {
+  display: block; width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+}
+.wikiedit input, .wikiform input { margin-top: 6px; }
+.wikiform input { max-width: 560px; }
+.wikiedit textarea {
+  height: calc(100vh - 190px); min-height: 320px; resize: vertical; font-size: 14px; line-height: 1.65; tab-size: 2;
+}
+.wikiedit > p:last-child, .wikiform > p:last-child { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.wikiedit button, .wikiform button {
+  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg-soft); color: var(--ink); font-weight: 600;
+}
+.wikiedit button[type="submit"]:not([name]), .wikiform button[type="submit"] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.wikiedit button[name]:hover { background: var(--hover); }
+.wikiedit .fine, .wikiform .fine { margin: 16px 0; }
+/* the page's name beside its label, so the text starts higher on the screen */
+.wikiedit label.wikiedit-title { display: flex; align-items: center; gap: 12px; margin: 14px 0 0; }
+.wikiedit label.wikiedit-title input { flex: 1; margin: 0; padding: 7px 12px; }
+/* what changed, Save and Cancel in one row (wiki-edit.js makes it) */
+.wikiedit .editor-send label { flex: 1 1 320px; display: flex; align-items: center; gap: 12px; margin: 0; white-space: nowrap; }
+.wikiedit .editor-send label input { flex: 1; margin: 0; padding: 8px 12px; }
+/* a member's link to edit one section, beside its heading */
+.wikibody .sectionedit { margin-left: 8px; font-size: 13px; font-weight: 500; letter-spacing: 0; text-decoration: none; color: var(--dim); }
+.wikibody .sectionedit:hover { color: var(--accent); text-decoration: underline; }
+/* a link to a page nobody has written yet */
+.wikibody a.missing, .wikipages a.missing { color: var(--red); }
+.wikipages.wanted .fine { margin-left: 8px; color: var(--dim); font-size: 13px; }
+/* the editor is Exedra's (editor.css); here is what only the wiki's has */
+.editor-view .wikibody { max-width: none; }
+.wikiedit input::placeholder { color: var(--faint); font-weight: 400; }
+/* in the small boxes under a tool: the page finder, the images */
+.wikitools-found { list-style: none; margin: 8px 0 0; padding: 0; max-height: 260px; overflow: auto; }
+.wikiedit .wikitools-found button { display: block; width: 100%; text-align: left; padding: 6px 8px; border: 0; background: transparent; font-weight: 500; }
+.wikiedit .wikitools-found button:hover { background: var(--hover); }
+.wikitools-new button { color: var(--dim); font-style: italic; }
+.wikitools-images { width: min(460px, calc(100vw - 40px)); max-height: 70vh; overflow: auto; }
+.wikiimg-head { display: flex; gap: 8px; }
+.wikiimg-head input { flex: 1; }
+.wikiedit .wikiimg-upload { flex: none; border-color: var(--accent); background: var(--accent); color: var(--accent-ink); padding: 6px 12px; }
+.wikitools-images h3 { margin: 12px 0 6px; font-size: 13px; color: var(--dim); font-weight: 600; }
+.wikiimg-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.wikiimg-list .fine { grid-column: 1 / -1; margin: 0; }
+.wikiedit .wikiimg { display: flex; flex-direction: column; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-soft); font-weight: 400; }
+.wikiedit .wikiimg:hover { border-color: var(--accent); }
+.wikiimg img { width: 100%; height: 70px; object-fit: contain; background: var(--bg); border-radius: 4px; }
+.wikiimg img:not([src]), .wikiimg img[src=""] { visibility: hidden; }
+.wikiimg span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; text-align: left; }
+.wikiimg-tip { margin: 10px 0 4px; }
+.wikiimg-all { font-size: 13px; }
+.wikipreview { border: 1px solid var(--line); border-radius: 12px; padding: 24px; margin-bottom: 32px; }
+.wikipreview > h2 { margin-top: 0; font-size: 19px; }
+.wikipreview .wikibody { max-width: none; }
+.revisions { overflow-wrap: normal; }
+.revisions td { min-width: 8ch; }
+.revisions td:last-child { min-width: 18ch; }
+.revisions form { display: inline; }
+.revisions .small-link { color: var(--accent); font-size: 13px; }
+.revision-pages { display: flex; gap: 12px; margin: 12px 0; }
+.revision-pages a[rel="next"] { margin-left: auto; }
+/* the contributors page: names with a quiet count, two columns where there is room */
+ul.contributors { list-style: none; padding: 0; columns: 2 22em; column-gap: 32px; }
+ul.contributors li { break-inside: avoid; padding: 3px 0; }
+.contributor-count { color: var(--dim); font-size: 13px; }
+.hit { padding: 18px 0; border-bottom: 1px solid var(--line); }
+.hit p { margin: 6px 0 0; color: var(--dim); font-size: 14px; }
+.letters { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 0; border-block: 1px solid var(--line); }
+.letters a { min-width: 28px; padding: 4px; text-align: center; text-decoration: none; border-radius: 6px; }
+.letters a:hover { background: var(--accent-soft); }
+.wikipages { columns: 2 260px; padding-left: 22px; font-size: 14px; }
+.wikipages li { break-inside: avoid; overflow-wrap: anywhere; padding: 4px 0; }
+.wikidiff { width: 100%; border-collapse: collapse; font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace; table-layout: fixed; }
+.wikidiff th, .wikidiff td { text-align: left; vertical-align: top; padding: 4px 8px; }
+.wikidiff th:nth-child(-n+2), .wikidiff .lineno { width: 5ch; color: var(--dim); }
+.wikidiff th:nth-child(3), .wikidiff .mark { width: 3ch; }
+.wikidiff td:last-child { white-space: pre-wrap; overflow-wrap: anywhere; }
+.wikidiff .added { background: color-mix(in srgb, var(--teal) 14%, var(--bg)); }
+.wikidiff .removed { background: color-mix(in srgb, var(--red) 14%, var(--bg)); }
+.wikidiff ins, .wikidiff del { text-decoration: none; }
+.wikidiff .added .mark { color: var(--teal); }
+.wikidiff .removed .mark { color: var(--red); }
+.wikibody a:focus-visible, .pagetools a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+@media (max-width: 700px) {
+  .wiki .topbar { gap: 10px 16px; }
+  .wiki .topbar .wikinav { flex-wrap: nowrap; overflow-x: auto; gap: 16px; scrollbar-width: none; padding-bottom: 2px; }
+  .wiki .topbar .wikinav::-webkit-scrollbar { display: none; }
+  .wiki .topbar .wikinav a { white-space: nowrap; }
+  .wiki .topbar .account { font-size: 13px; }
+  .wiki .wikisearch { order: 3; flex-basis: 100%; max-width: none; }
+  .wiki .topbar .wikinav { order: 4; flex-basis: 100%; }
+  .wikipage { padding: 28px 16px 48px; }
+  .wikibody h2 { font-size: 21px; }
+  .wikibody pre, .wikibody .code pre { padding: 12px; }
+  .wikipreview { padding: 16px; }
+  .wikiedit textarea { min-height: 280px; font-size: 16px; }
+  .wikiedit input, .wikisearch input, .wiki-language select { font-size: 16px; }
+  .wikidiff th, .wikidiff td { padding-inline: 4px; }
+}
+
+/* Recent changes: the time stays whole; on a phone each change is a small card. */
+.changes .revisions td:nth-child(2) { white-space: nowrap; }
+@media (max-width: 700px) {
+  .changes table.revisions, .changes .revisions tbody, .changes .revisions tr, .changes .revisions td { display: block; width: auto; min-width: 0; border: 0; padding: 0; }
+  .changes .revisions tr:first-child { display: none; }
+  .changes .revisions tr { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .changes .revisions td:first-child { font-weight: 600; overflow-wrap: anywhere; }
+  .changes .revisions td:nth-child(2) { color: var(--ink); font-size: 14px; }
+  .changes .revisions td:nth-child(3), .changes .revisions td:nth-child(4) { color: var(--dim); font-size: 13px; }
+}
+
+/* A page's history: when it was saved stays whole; on a phone each revision
+   is a few lines: its number, when and who, then what changed. */
+.page-history td:nth-child(2) { white-space: nowrap; }
+@media (max-width: 700px) {
+  table.page-history, .page-history tbody, .page-history tr { display: block; width: auto; border: 0; }
+  .page-history tr:first-child { display: none; }
+  .page-history tr { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .page-history td { display: inline; min-width: 0; border: 0; padding: 0; }
+  .page-history td:nth-child(-n+2)::after { content: " · "; color: var(--dim); }
+  .page-history td:nth-child(3) { font-weight: 600; }
+  .page-history td:nth-child(n+4) { display: block; margin-top: 3px; }
+  .page-history td:nth-child(4):empty { display: none; }
+  .page-history td:last-child { font-size: 13px; }
+}
+
+/* --------------------------------------------------------------------------
+   The article, dressed (5 Nov 2026): a table of contents beside long pages,
+   code in color with a copy button, languages as pills, pictures framed. */
+.wikipage.has-side { max-width: 1288px; }
+@media (min-width: 1320px) {
+  .wikipage.has-side { grid-template-columns: minmax(0, 1fr) 250px; column-gap: 44px; }
+  .wikipage.has-side > .wiki-side { grid-column: 2; grid-row: 1 / span 40; align-self: start; position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto;
+    display: flex; flex-direction: column; gap: 18px; padding-right: 4px; }
+  .wiki-side .toc { margin: 0; }
+  .wiki-side .page-bench { margin: 0; padding: 14px 16px; }
+  .wiki-side .page-bench h2 { font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .wiki-side .page-bench p { font-size: 13.5px; margin: 6px 0 0; }
+  .wiki-side .bench-glimpse { max-width: none; padding: 8px 10px; }
+  .wiki-side .glimpse-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .wiki-side .page-bench .button { display: inline-block; margin-top: 8px; padding: 6px 12px; font-size: 13px; }
+}
+@media (max-width: 1319px) { .wiki-side:empty { display: none; } .wikipage.has-side > .wiki-side { grid-row: 3; } }
+.toc { font-size: 13.5px; line-height: 1.45; margin: 0 0 24px; }
+.toc summary { cursor: pointer; font-weight: 700; color: var(--dim); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; list-style: none; padding: 6px 0; }
+.toc summary::-webkit-details-marker { display: none; }
+.toc summary::before { content: "\25B8"; display: inline-block; margin-right: 6px; transition: transform .15s; }
+.toc details[open] > summary::before { transform: rotate(90deg); }
+.toc ol { list-style: none; margin: 4px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--line); }
+.toc li { margin: 0; }
+.toc li.sub { padding-left: 12px; }
+.toc a { display: block; padding: 4px 8px; color: var(--dim); text-decoration: none; border-radius: 6px; margin-left: -10px; border-left: 2px solid transparent; }
+.toc a:hover { color: var(--ink); background: var(--bg-soft); }
+.toc a.now { color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+@media (max-width: 1319px) {
+  .toc { border: 1px solid var(--line); border-radius: 10px; padding: 6px 14px; background: var(--bg-soft); }
+  .toc ol { border-left: 0; padding-left: 0; columns: 2 240px; column-gap: 24px; margin-bottom: 8px; }
+  .toc li { break-inside: avoid; }
+  .toc a { margin-left: 0; }
+}
+
+/* the words of code in a block, in the chat's colors (site.css names the rest) */
+.wikibody .strings, .wikibody .characters { color: var(--s); }
+.wikibody .directive { color: var(--d); font-weight: 600; }
+.codebox { position: relative; margin: 20px 0; }
+.codebox pre { margin: 0; }
+.codebox .copybtn { position: absolute; top: 8px; right: 8px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--dim); font-size: 12px; cursor: pointer; opacity: 0; transition: opacity .15s; }
+.codebox:hover .copybtn, .codebox .copybtn:focus-visible, .codebox .copybtn.ok { opacity: 1; }
+.codebox .copybtn.ok { color: var(--teal); border-color: var(--teal); }
+@media (hover: none) { .codebox .copybtn { opacity: 1; } }
+
+/* the page's languages as pills; the one being read is filled in */
+.wikipage .notice.languages { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 12px; border-radius: 10px; font-size: 13px; }
+.languages a, .languages b, .more-languages { display: inline-block; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--dim); text-decoration: none; line-height: 1.5; }
+.languages a:hover { border-color: var(--accent); color: var(--accent); }
+.languages b { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.languages a[hidden] { display: none; }
+.more-languages { cursor: pointer; font: inherit; font-size: 13px; color: var(--accent); }
+
+/* pictures, tables and the rest of the body */
+.wikibody img { border-radius: 6px; }
+.wikibody figure { padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-soft); width: fit-content; max-width: 100%; }
+.wikibody figure img { display: block; margin: 0 auto; }
+.wikibody table { border-radius: 8px; }
+.wikibody th { position: sticky; top: 0; }
+/* a sentence, so no gaps of a row between its words and the period */
+.wikipage .byline { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--line); }
+.wikipage .page-bench { margin-top: 32px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-soft); }
+.wikipage .page-bench h2 { margin: 0 0 8px; font-size: 17px; border: 0; padding: 0; }
+.wikipage .page-bench p:last-child { margin-bottom: 0; }
+
+/* search: the box in one piece, the hits as cards with the words marked */
+.wikipage .wikisearch { max-width: 560px; margin: 0 0 20px; }
+.wikipage .wikisearch input { padding: 11px 14px; font-size: 16px; border-radius: 10px; }
+.wikipage .wikisearch button { white-space: nowrap; padding: 0 16px; border-radius: 10px; }
+.hit { padding: 14px 16px; margin: 0 0 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.hit h2 { margin: 0; font-size: 17px; border: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.hit h2 a { text-decoration: none; }
+.hit h2 a:hover { text-decoration: underline; }
+.hit-lang { font-size: 12px; font-weight: 500; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
+.hit p { margin: 6px 0 0; font-size: 14px; line-height: 1.55; }
+.hit mark, .wikibody mark { background: color-mix(in srgb, var(--amber) 30%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; margin: 0 -2px; }
+
+/* Did this page help?  One question at the foot, three answers, a reason in
+   one more tap; and the line at the top of a page readers found wanting. */
+
+/* The site's bar on top. */
+.wiki .topbar nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+.wiki .topbar nav a[aria-current] { color: var(--ink); font-weight: 600; }
+@media (max-width: 700px) {
+  .wiki .topbar nav { order: 9; flex-wrap: nowrap; width: 100%; overflow-x: auto; gap: 18px; scrollbar-width: none; padding-bottom: 2px; }
+  .wiki .topbar nav::-webkit-scrollbar { display: none; }
+  .wiki .topbar nav a { white-space: nowrap; }
+}
+
+/* Copy, an icon at the top right of a block */
+.wikibody .codebar .copy, .codebox .copybtn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0; }
+.wikibody .codebar .copy svg, .codebox .copybtn svg { width: 16px; height: 16px; }
+.wikibody .codebar .copy.ok, .codebox .copybtn.ok { color: var(--teal); }
+
+/* a long block of code in a box twenty lines tall: it scrolls, its foot
+   drags taller or shorter, and the bar under it shows it whole (wiki.js) */
+.wikibody .scrollbox pre {
+  height: calc(20 * 1.65em + 32px); min-height: calc(5 * 1.65em + 32px);
+  overflow: auto; resize: vertical;
+}
+.wikibody .scrollbox.whole pre { height: auto !important; resize: none; }
+.wikibody .code-boxbar {
+  display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap;
+  padding: 0 14px; border-top: 1px solid var(--line); background: var(--code-bar);
+}
+.wikibody .code-whole {
+  flex: 1 1 auto; margin: 0; padding: 9px 0; border: 0; background: none;
+  color: var(--accent); font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;
+}
+.wikibody .code-whole:hover { text-decoration: underline; }
+.wikibody .code-whole:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.wikibody .codebox .code-boxbar { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 8px 8px; }
+.wikibody .codebox.scrollbox pre { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+
+/* Save as PDF, or print: the page's text alone, in light colors whatever
+   the theme, the way a reader wants it on paper. */
+@media print {
+  :root, :root[data-theme="dark"] {
+    --bg: #fff; --bg-soft: #f6f7fa; --line: #d5dae3; --ink: #111; --dim: #4a5262; --faint: #6b7383;
+    --accent: #1d4fb8; --code-bg: #f5f7fb; --code-bar: #eceff5;
+    --k: #7a2fa0; --c: #5e6878; --s: #1d6e44; --n: #a04f00; --d: #1d4fb8; --sym: #333;
+    color-scheme: light;
+  }
+  @page { margin: 16mm 15mm 18mm; }
+  html, body { background: #fff !important; color: #111; }
+  body { font-size: 11pt; }
+  .skip-link, .topbar, .live-strip, .live-bench, .pagetools, .wiki-side, .page-bench,
+  .notice.languages, .codebar, .copy, .toc, .categories, .code-boxbar, .sectionedit { display: none !important; }
+  .wikibody .scrollbox pre { height: auto !important; overflow: visible !important; resize: none; }
+  .wikipage, .wikipage.has-side, .wikipage:has(> .pagetools) {
+    display: block !important; max-width: none !important; margin: 0 !important; padding: 0 !important;
+  }
+  .wikipage > h1 { font-size: 22pt; margin: 0 0 4mm; }
+  .wikibody h1, .wikibody h2, .wikibody h3, .wikibody h4 { break-after: avoid; page-break-after: avoid; }
+  .wikibody h2 { font-size: 16pt; }
+  .wikibody h3 { font-size: 13pt; }
+  .wikibody p, .wikibody li { orphans: 3; widows: 3; }
+  .wikibody img, .wikibody figure, .wikibody tr { break-inside: avoid; page-break-inside: avoid; }
+  .wikibody img { max-width: 100% !important; height: auto; }
+  .wikibody .code { overflow: visible !important; }
+  .wikibody pre {
+    white-space: pre-wrap !important; overflow-wrap: anywhere; overflow: visible !important;
+    max-height: none !important; border: 1px solid var(--line); box-shadow: none;
+  }
+  .wikibody pre { break-inside: avoid; page-break-inside: avoid; font-size: 9pt; }
+  /* on screen a wide table scrolls; on paper it is a table again, its words free to wrap */
+  .wikibody table { display: table !important; width: auto; max-width: 100%; overflow: visible !important; font-size: 9pt; }
+  .wikibody th, .wikibody td { overflow-wrap: anywhere; }
+  .wikibody thead { display: table-header-group; }
+  .wikibody a { color: var(--accent); text-decoration: none; }
+  /* an outside address written out after its link, since paper cannot be clicked */
+  .wikibody a[href^="http"]::after {
+    content: " (" attr(href) ")"; font-size: 8.5pt; color: var(--dim); overflow-wrap: anywhere;
+  }
+  .byline { margin-top: 8mm; font-size: 9pt; color: var(--dim); }
+}
+
+/* after a reason: what it did, and a line to say more */
+/* with the tools in the site's left column the page is still a grid for its right column */
+.wikipage.has-side { display: grid; grid-template-columns: minmax(0, 1fr); }
+.wikipage.has-side > * { grid-column: 1; min-width: 0; }
+@media (min-width: 1320px) { .wikipage.has-side { grid-template-columns: minmax(0, 1fr) 250px; } .wikipage.has-side > .wiki-side { grid-column: 2; } }
+/* a tool that is a form (Lock, Unlock) looks like the links beside it */
+.pagetools .pagetool-form { display: inline; margin: 0; }
+.pagetools .pagetool-form button { border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+.pagetools .pagetool-form button:hover { text-decoration: underline; }

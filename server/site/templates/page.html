@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="{{lang}}" dir="{{dir}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}} - {{site}}</title>
+<link rel="canonical" href="{{canonical}}">
+<script src="/words.js?l={{langcode}}&amp;v={{v}}"></script>
+<script src="/static/words.js?v={{v}}"></script>
+<script src="/static/theme.js?v={{v}}"></script>
+<link rel="stylesheet" href="/static/site.css?v={{v}}">
+{{styles}}
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="{{icon32}}">
+<link rel="apple-touch-icon" href="{{icon180}}">
+<meta name="theme-color" content="#0f1720">
+</head>
+<body class="{{bodyclass}} sided {{who}}">
+<div class="shell">
+<aside class="siteside">
+  <input type="checkbox" id="sidetoggle" class="sidetoggle">
+  <div class="sidehead">
+    <a class="brand" href="/">{{brand}}</a>
+    <button type="button" id="theme" class="iconbtn" title="{{t:Theme: auto}}"></button>
+    <label for="sidetoggle" class="sidemenu">{{t:Menu}}</label>
+  </div>
+  {{search_form}}
+  <div class="sidebody">
+    <nav class="sidenav" aria-label="{{t:Site}}">{{nav}}</nav>
+    <nav class="sidelist">{{side}}</nav>
+    <div id="side-language" hidden>{{language_form}}</div>
+    {{powered}}
+    <div id="account" class="account">{{account}}</div>
+  </div>
+</aside>
+<div class="shellmain">
+<main class="{{mainclass}}">
+  {{content}}
+</main>
+</div>
+</div>
+<script src="/static/keys.js?v={{v}}"></script>
+<script src="/static/side.js?v={{v}}"></script>
+{{scripts}}
+{{live}}
+<script src="/static/live.js?v={{v}}"></script>
+</body>
+</html>

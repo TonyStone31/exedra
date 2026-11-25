@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="{{lang}}" dir="{{dir}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}} - {{site}}</title>
+<script src="/words.js?l={{langcode}}&amp;v={{v}}"></script>
+<script src="/static/words.js?v={{v}}"></script>
+<script src="/static/theme.js?v={{v}}"></script>
+<link rel="stylesheet" href="/static/site.css?v={{v}}">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="{{icon32}}">
+<link rel="apple-touch-icon" href="{{icon180}}">
+<meta name="theme-color" content="#0f1720">
+</head>
+<body class="home guest">
+<header class="topbar">
+  <a class="brand" href="/">{{brand}}</a>
+  <nav>{{nav}}</nav>
+  {{language_form}}
+</header>
+<section class="signin">
+  <h1>{{t:Sign in or join}}</h1>
+  {{failed}}
+  <p>{{t:One box for both.}} {{t:A new name makes a new account.}} {{t:A name that is already yours signs you in.}}</p>
+  {{note}}
+  <form class="quickjoin stacked">
+    <input name="name" placeholder="{{t:Name}}" maxlength="24" autocomplete="username" required>
+    <input name="password" type="password" placeholder="{{t:Password, 8 characters or more}}" autocomplete="current-password" required>
+    <button>{{t:Go}}</button>
+  </form>
+  {{sso}}
+  <details class="forgotbox">
+    <summary>{{t:Forgot your password?}}</summary>
+    <form class="quickjoin stacked forgot">
+      <input name="who" placeholder="{{t:Your name or email address}}" autocomplete="username" required>
+      <input name="website" hidden tabindex="-1" autocomplete="off" aria-hidden="true">
+      <button>{{t:Mail me a link}}</button>
+    </form>
+  </details>
+  <p class="fine">{{t:Your password never leaves your browser.}} {{t:It signs you in, and it holds the key for private conversations you lock, which nobody running this site can read.}} {{t:If you forget it, a link to set a new one goes to your confirmed address, but locked conversations from before stay closed.}}</p>
+</section>
+<script src="/static/keys.js?v={{v}}"></script>
+<script src="/static/home.js?v={{v}}"></script>
+</body>
+</html>

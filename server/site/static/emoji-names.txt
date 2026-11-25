@@ -1,0 +1,267 @@
+# Emoji a member can type by name: :thumbsup where they write offers 👍.
+# One emoji on each line, then its names with spaces between them: the
+# names people know from other sites.  Add a line to offer another.
+# A line that starts with ## names the group of the lines under it.
+
+## Faces
+😀 grinning
+😃 smiley
+😄 smile happy
+😁 grin
+😆 laughing satisfied
+😅 sweat_smile
+🤣 rofl
+😂 joy laughing_tears
+🙂 slightly_smiling_face slight_smile
+🙃 upside_down_face upside_down
+😉 wink
+😊 blush
+😇 innocent angel
+🥰 smiling_face_with_three_hearts in_love
+😍 heart_eyes
+🤩 star_struck
+😘 kissing_heart kiss
+😋 yum
+😛 stuck_out_tongue tongue
+😜 stuck_out_tongue_winking_eye
+🤪 zany_face crazy
+🤗 hugs hug
+🤭 hand_over_mouth giggle
+🤫 shushing_face shh quiet
+🤔 thinking hmm
+🤐 zipper_mouth_face
+🤨 raised_eyebrow
+😐 neutral_face
+😑 expressionless
+😶 no_mouth
+😏 smirk
+😒 unamused
+🙄 roll_eyes eyeroll
+😬 grimacing
+😌 relieved
+😔 pensive
+😴 sleeping zzz
+😷 mask
+🤒 face_with_thermometer sick
+🤢 nauseated_face
+🤮 vomiting_face
+🥵 hot_face
+🥶 cold_face
+😵 dizzy_face
+😵‍💫 face_with_spiral_eyes dizzy
+🤯 exploding_head mind_blown
+🤠 cowboy_hat_face cowboy
+🥳 partying_face
+😎 sunglasses cool
+🤓 nerd_face nerd
+🧐 monocle_face
+😕 confused
+😟 worried
+🙁 slightly_frowning_face frown
+😮 open_mouth wow
+😲 astonished
+😳 flushed
+🥺 pleading_face
+😨 fearful
+😰 cold_sweat
+😥 disappointed_relieved
+😢 cry sad
+😭 sob
+😱 scream
+😖 confounded
+😞 disappointed
+😓 sweat
+😩 weary
+😫 tired_face
+🥱 yawning_face yawn
+😤 triumph
+😡 rage pout
+😠 angry mad
+🤬 cursing_face
+😈 smiling_imp devil
+💀 skull
+💩 poop hankey
+🤡 clown_face clown
+👻 ghost
+👽 alien
+🤖 robot
+🙈 see_no_evil
+🙉 hear_no_evil
+🙊 speak_no_evil
+
+## Hands and people
+👍 +1 thumbsup
+👎 -1 thumbsdown
+👌 ok_hand
+🤌 pinched_fingers
+✌️ v peace
+🤞 crossed_fingers fingers_crossed
+🤟 love_you_gesture
+🤘 metal
+🤙 call_me_hand
+👈 point_left
+👉 point_right
+👆 point_up_2 point_up
+👇 point_down
+✋ raised_hand hand
+👋 wave hello bye
+👏 clap applause
+🙌 raised_hands hooray
+🤝 handshake deal
+🙏 pray thanks please
+✍️ writing_hand
+💪 muscle strong
+👊 fist_oncoming punch fist_bump
+✊ fist
+🤷 shrug
+🤦 facepalm
+🙋 raising_hand
+🙇 bow
+🧑‍💻 technologist coder
+👀 eyes look
+🧠 brain
+
+## Hearts and marks
+❤️ heart love
+🧡 orange_heart
+💛 yellow_heart
+💚 green_heart
+💙 blue_heart
+💜 purple_heart
+🖤 black_heart
+💔 broken_heart
+💕 two_hearts
+💖 sparkling_heart
+💯 100 hundred
+💥 boom collision
+💫 dizzy_star
+💦 sweat_drops
+💤 zzz_sign
+✨ sparkles
+⭐ star
+🌟 star2 glowing_star
+🔥 fire
+⚡ zap lightning
+🎉 tada party_popper
+🎊 confetti_ball
+🎈 balloon
+🎁 gift present
+🏆 trophy
+🥇 1st_place_medal gold
+🎯 dart target
+✅ white_check_mark check done
+✔️ heavy_check_mark
+❌ x no
+❗ exclamation
+❓ question
+⚠️ warning
+🚫 no_entry_sign forbidden
+⛔ no_entry
+🛑 stop_sign stop
+🆗 ok_sign
+🆕 new
+🔴 red_circle
+🟡 yellow_circle
+🟢 green_circle
+🔵 blue_circle
+➕ heavy_plus_sign plus
+➖ heavy_minus_sign minus
+➡️ arrow_right
+⬅️ arrow_left
+⬆️ arrow_up
+⬇️ arrow_down
+🔁 repeat
+♻️ recycle
+
+## Work
+💻 computer laptop
+🖥️ desktop_computer
+⌨️ keyboard
+🖱️ computer_mouse mouse
+📱 iphone phone
+💾 floppy_disk save
+💿 cd
+📦 package box
+📁 file_folder folder
+📄 page_facing_up file
+📝 memo note pencil
+✏️ pencil2
+📚 books
+📖 book open_book
+📌 pushpin pin
+📎 paperclip
+🔗 link
+🔍 mag search
+🔒 lock
+🔓 unlock
+🔑 key
+🔧 wrench fix
+🔨 hammer build
+🛠️ hammer_and_wrench tools
+⚙️ gear settings
+🧪 test_tube test
+🐛 bug
+💡 bulb idea
+📢 loudspeaker announce
+🔔 bell
+🔕 no_bell
+💬 speech_balloon chat
+💭 thought_balloon
+📧 email mail
+📅 date calendar
+⏰ alarm_clock
+⏳ hourglass_flowing_sand hourglass wait
+⌛ hourglass_done
+📈 chart_with_upwards_trend chart_up
+📉 chart_with_downwards_trend chart_down
+📊 bar_chart
+💰 moneybag money
+🚀 rocket ship launch
+🚧 construction wip
+🚨 rotating_light alert
+🎵 musical_note music
+🎮 video_game game
+📷 camera photo
+🎬 clapper movie
+🏠 house home
+🌍 earth_africa world globe
+🚗 car
+✈️ airplane plane
+
+## Nature and food
+☀️ sunny sun
+🌙 crescent_moon moon
+☁️ cloud
+🌧️ cloud_with_rain rain
+❄️ snowflake snow
+🌈 rainbow
+🌊 ocean wave_water
+🌱 seedling
+🌲 evergreen_tree tree
+🌹 rose
+🍀 four_leaf_clover luck
+🐶 dog
+🐱 cat
+🐧 penguin
+🐢 turtle
+🐍 snake
+🦀 crab
+🐘 elephant
+🦄 unicorn
+🐝 bee
+☕ coffee
+🍵 tea
+🍺 beer
+🍻 beers cheers
+🍷 wine_glass wine
+🥂 clinking_glasses toast
+🍕 pizza
+🍔 hamburger burger
+🍟 fries
+🌮 taco
+🍪 cookie
+🍰 cake
+🎂 birthday
+🍎 apple
+🍌 banana
+🍿 popcorn

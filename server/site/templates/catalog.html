@@ -1,0 +1,33 @@
+<section class="directory catalog">
+  <header class="catalog-hero">
+    <div class="catalog-hero-text">
+      <h1>{{t:Catalog}}</h1>
+      <p class="catalog-count">{{total}}</p>
+      <p class="catalog-lede">{{intro}}</p>
+      <p class="catalog-top-links"><a class="catalog-random" href="/catalog-random">{{t:Random entry}}</a> <a class="catalog-how-link" href="/catalog-how">{{t:How the catalog works}}</a> {{mine_link}}</p>
+    </div>
+  </header>
+  {{types}}
+  <form class="catalog-form" action="/catalog" method="get" role="search" aria-label="{{t:Search the catalog}}">
+    <label>{{t:Search names, summaries and topics}} <input type="search" name="q" value="{{q}}" maxlength="100"></label>
+    <label>{{t:Category}} <select name="category">{{categories}}</select></label>
+    {{mine_field}}
+    <input type="hidden" name="type" value="{{type_value}}">
+    <button type="submit" class="primary catalog-go">{{t:Search}}</button>
+    <details class="catalog-more"{{open}}>
+      <summary>{{t:More filters}}</summary>
+      <div class="catalog-more-fields">
+        {{source_field}}
+        {{kind_field}}
+        {{works_field}}
+        {{status_field}}
+        <label>{{t:Sort by}} <select name="sort">{{sorts}}</select></label>
+        <a href="/catalog">{{t:Clear filters}}</a>
+      </div>
+      {{status_hint}}
+    </details>
+  </form>
+  <p class="catalog-updating" role="status" aria-live="polite" data-busy="{{t:Updating the list}}"></p>
+  <div class="tiles catalog-cards">{{cards}}</div>
+  <nav class="findpages" aria-label="{{t:Result pages}}">{{pages}}</nav>
+</section>

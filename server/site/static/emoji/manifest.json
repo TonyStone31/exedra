@@ -1,0 +1,623 @@
+[
+ {
+  "emoji": "✅",
+  "file": "2705.svg",
+  "name": "yes",
+  "group": "status",
+  "keywords": [
+   "yes",
+   "check",
+   "ok",
+   "done",
+   "works"
+  ]
+ },
+ {
+  "emoji": "❌",
+  "file": "274c.svg",
+  "name": "no",
+  "group": "status",
+  "keywords": [
+   "no",
+   "x",
+   "fail",
+   "broken"
+  ]
+ },
+ {
+  "emoji": "🟡",
+  "file": "1f7e1.svg",
+  "name": "partly",
+  "group": "status",
+  "keywords": [
+   "partly",
+   "partial",
+   "some"
+  ]
+ },
+ {
+  "emoji": "❔",
+  "file": "2754.svg",
+  "name": "unknown",
+  "group": "status",
+  "keywords": [
+   "unknown"
+  ]
+ },
+ {
+  "emoji": "❓",
+  "file": "2753.svg",
+  "name": "question",
+  "group": "status",
+  "keywords": [
+   "question",
+   "help",
+   "ask"
+  ]
+ },
+ {
+  "emoji": "⚠️",
+  "file": "26a0.svg",
+  "name": "warning",
+  "group": "status",
+  "keywords": [
+   "warning",
+   "warn",
+   "caution"
+  ]
+ },
+ {
+  "emoji": "🚧",
+  "file": "1f6a7.svg",
+  "name": "work in progress",
+  "group": "status",
+  "keywords": [
+   "wip",
+   "construction"
+  ]
+ },
+ {
+  "emoji": "🛑",
+  "file": "1f6d1.svg",
+  "name": "stop",
+  "group": "status",
+  "keywords": [
+   "stop",
+   "blocked"
+  ]
+ },
+ {
+  "emoji": "ℹ️",
+  "file": "2139.svg",
+  "name": "info",
+  "group": "status",
+  "keywords": [
+   "info",
+   "note-info"
+  ]
+ },
+ {
+  "emoji": "➖",
+  "file": "2796.svg",
+  "name": "not applicable",
+  "group": "status",
+  "keywords": [
+   "na",
+   "none",
+   "dash"
+  ]
+ },
+ {
+  "emoji": "⏳",
+  "file": "23f3.svg",
+  "name": "pending",
+  "group": "status",
+  "keywords": [
+   "pending",
+   "waiting",
+   "later"
+  ]
+ },
+ {
+  "emoji": "🧪",
+  "file": "1f9ea.svg",
+  "name": "experimental",
+  "group": "status",
+  "keywords": [
+   "experimental",
+   "test",
+   "beta"
+  ]
+ },
+ {
+  "emoji": "⛔",
+  "file": "26d4.svg",
+  "name": "deprecated",
+  "group": "status",
+  "keywords": [
+   "deprecated",
+   "unsupported",
+   "noentry"
+  ]
+ },
+ {
+  "emoji": "✔️",
+  "file": "2714.svg",
+  "name": "tick",
+  "group": "status",
+  "keywords": [
+   "tick",
+   "check-light"
+  ]
+ },
+ {
+  "emoji": "✖️",
+  "file": "2716.svg",
+  "name": "cross",
+  "group": "status",
+  "keywords": [
+   "cross",
+   "x-light"
+  ]
+ },
+ {
+  "emoji": "🟩",
+  "file": "1f7e9.svg",
+  "name": "green square",
+  "group": "color",
+  "keywords": [
+   "green-square"
+  ]
+ },
+ {
+  "emoji": "🟨",
+  "file": "1f7e8.svg",
+  "name": "yellow square",
+  "group": "color",
+  "keywords": [
+   "yellow-square"
+  ]
+ },
+ {
+  "emoji": "🟥",
+  "file": "1f7e5.svg",
+  "name": "red square",
+  "group": "color",
+  "keywords": [
+   "red-square"
+  ]
+ },
+ {
+  "emoji": "🟦",
+  "file": "1f7e6.svg",
+  "name": "blue square",
+  "group": "color",
+  "keywords": [
+   "blue-square"
+  ]
+ },
+ {
+  "emoji": "🟧",
+  "file": "1f7e7.svg",
+  "name": "orange square",
+  "group": "color",
+  "keywords": [
+   "orange-square"
+  ]
+ },
+ {
+  "emoji": "🟪",
+  "file": "1f7ea.svg",
+  "name": "purple square",
+  "group": "color",
+  "keywords": [
+   "purple-square"
+  ]
+ },
+ {
+  "emoji": "⬛",
+  "file": "2b1b.svg",
+  "name": "black square",
+  "group": "color",
+  "keywords": [
+   "black-square"
+  ]
+ },
+ {
+  "emoji": "⬜",
+  "file": "2b1c.svg",
+  "name": "white square",
+  "group": "color",
+  "keywords": [
+   "white-square"
+  ]
+ },
+ {
+  "emoji": "🟢",
+  "file": "1f7e2.svg",
+  "name": "green circle",
+  "group": "color",
+  "keywords": [
+   "green-circle"
+  ]
+ },
+ {
+  "emoji": "🔴",
+  "file": "1f534.svg",
+  "name": "red circle",
+  "group": "color",
+  "keywords": [
+   "red-circle"
+  ]
+ },
+ {
+  "emoji": "🔵",
+  "file": "1f535.svg",
+  "name": "blue circle",
+  "group": "color",
+  "keywords": [
+   "blue-circle"
+  ]
+ },
+ {
+  "emoji": "🟠",
+  "file": "1f7e0.svg",
+  "name": "orange circle",
+  "group": "color",
+  "keywords": [
+   "orange-circle"
+  ]
+ },
+ {
+  "emoji": "🟣",
+  "file": "1f7e3.svg",
+  "name": "purple circle",
+  "group": "color",
+  "keywords": [
+   "purple-circle"
+  ]
+ },
+ {
+  "emoji": "⚪",
+  "file": "26aa.svg",
+  "name": "white circle",
+  "group": "color",
+  "keywords": [
+   "white-circle"
+  ]
+ },
+ {
+  "emoji": "⚫",
+  "file": "26ab.svg",
+  "name": "black circle",
+  "group": "color",
+  "keywords": [
+   "black-circle"
+  ]
+ },
+ {
+  "emoji": "⭐",
+  "file": "2b50.svg",
+  "name": "star",
+  "group": "symbol",
+  "keywords": [
+   "star",
+   "favorite"
+  ]
+ },
+ {
+  "emoji": "👍",
+  "file": "1f44d.svg",
+  "name": "thumbs up",
+  "group": "symbol",
+  "keywords": [
+   "+1",
+   "thumbsup",
+   "like"
+  ]
+ },
+ {
+  "emoji": "👎",
+  "file": "1f44e.svg",
+  "name": "thumbs down",
+  "group": "symbol",
+  "keywords": [
+   "-1",
+   "thumbsdown",
+   "dislike"
+  ]
+ },
+ {
+  "emoji": "🐛",
+  "file": "1f41b.svg",
+  "name": "bug",
+  "group": "symbol",
+  "keywords": [
+   "bug"
+  ]
+ },
+ {
+  "emoji": "🔒",
+  "file": "1f512.svg",
+  "name": "locked",
+  "group": "symbol",
+  "keywords": [
+   "lock",
+   "locked"
+  ]
+ },
+ {
+  "emoji": "🔓",
+  "file": "1f513.svg",
+  "name": "unlocked",
+  "group": "symbol",
+  "keywords": [
+   "unlock",
+   "unlocked"
+  ]
+ },
+ {
+  "emoji": "💡",
+  "file": "1f4a1.svg",
+  "name": "idea",
+  "group": "symbol",
+  "keywords": [
+   "idea",
+   "tip",
+   "bulb"
+  ]
+ },
+ {
+  "emoji": "📌",
+  "file": "1f4cc.svg",
+  "name": "pin",
+  "group": "symbol",
+  "keywords": [
+   "pin",
+   "pinned"
+  ]
+ },
+ {
+  "emoji": "🔗",
+  "file": "1f517.svg",
+  "name": "link",
+  "group": "symbol",
+  "keywords": [
+   "link"
+  ]
+ },
+ {
+  "emoji": "➡️",
+  "file": "27a1.svg",
+  "name": "right",
+  "group": "symbol",
+  "keywords": [
+   "right",
+   "next",
+   "arrow"
+  ]
+ },
+ {
+  "emoji": "⬅️",
+  "file": "2b05.svg",
+  "name": "left",
+  "group": "symbol",
+  "keywords": [
+   "left",
+   "back"
+  ]
+ },
+ {
+  "emoji": "⬆️",
+  "file": "2b06.svg",
+  "name": "up",
+  "group": "symbol",
+  "keywords": [
+   "up"
+  ]
+ },
+ {
+  "emoji": "⬇️",
+  "file": "2b07.svg",
+  "name": "down",
+  "group": "symbol",
+  "keywords": [
+   "down"
+  ]
+ },
+ {
+  "emoji": "🔥",
+  "file": "1f525.svg",
+  "name": "hot",
+  "group": "symbol",
+  "keywords": [
+   "hot",
+   "fire"
+  ]
+ },
+ {
+  "emoji": "🚀",
+  "file": "1f680.svg",
+  "name": "release",
+  "group": "symbol",
+  "keywords": [
+   "release",
+   "rocket",
+   "launch"
+  ]
+ },
+ {
+  "emoji": "🎉",
+  "file": "1f389.svg",
+  "name": "celebrate",
+  "group": "symbol",
+  "keywords": [
+   "tada",
+   "celebrate",
+   "party"
+  ]
+ },
+ {
+  "emoji": "📝",
+  "file": "1f4dd.svg",
+  "name": "note",
+  "group": "symbol",
+  "keywords": [
+   "note",
+   "memo"
+  ]
+ },
+ {
+  "emoji": "📦",
+  "file": "1f4e6.svg",
+  "name": "package",
+  "group": "symbol",
+  "keywords": [
+   "package"
+  ]
+ },
+ {
+  "emoji": "🔧",
+  "file": "1f527.svg",
+  "name": "fix",
+  "group": "symbol",
+  "keywords": [
+   "fix",
+   "wrench"
+  ]
+ },
+ {
+  "emoji": "⚙️",
+  "file": "2699.svg",
+  "name": "settings",
+  "group": "symbol",
+  "keywords": [
+   "settings",
+   "gear",
+   "config"
+  ]
+ },
+ {
+  "emoji": "🐧",
+  "file": "1f427.svg",
+  "name": "linux",
+  "group": "symbol",
+  "keywords": [
+   "linux",
+   "penguin"
+  ]
+ },
+ {
+  "emoji": "🍎",
+  "file": "1f34e.svg",
+  "name": "macos",
+  "group": "symbol",
+  "keywords": [
+   "macos",
+   "apple"
+  ]
+ },
+ {
+  "emoji": "🪟",
+  "file": "1fa9f.svg",
+  "name": "windows",
+  "group": "symbol",
+  "keywords": [
+   "windows",
+   "window"
+  ]
+ },
+ {
+  "emoji": "📱",
+  "file": "1f4f1.svg",
+  "name": "mobile",
+  "group": "symbol",
+  "keywords": [
+   "mobile",
+   "phone",
+   "android",
+   "ios"
+  ]
+ },
+ {
+  "emoji": "💻",
+  "file": "1f4bb.svg",
+  "name": "desktop",
+  "group": "symbol",
+  "keywords": [
+   "desktop",
+   "laptop",
+   "computer"
+  ]
+ },
+ {
+  "emoji": "🏁",
+  "file": "1f3c1.svg",
+  "name": "finish",
+  "group": "symbol",
+  "keywords": [
+   "finish",
+   "flag"
+  ]
+ },
+ {
+  "emoji": "❤️",
+  "file": "2764.svg",
+  "name": "heart",
+  "group": "symbol",
+  "keywords": [
+   "heart",
+   "love"
+  ]
+ },
+ {
+  "emoji": "💬",
+  "file": "1f4ac.svg",
+  "name": "chat",
+  "group": "symbol",
+  "keywords": [
+   "chat",
+   "comment"
+  ]
+ },
+ {
+  "emoji": "🔍",
+  "file": "1f50d.svg",
+  "name": "search",
+  "group": "symbol",
+  "keywords": [
+   "search",
+   "find"
+  ]
+ },
+ {
+  "emoji": "📅",
+  "file": "1f4c5.svg",
+  "name": "date",
+  "group": "symbol",
+  "keywords": [
+   "date",
+   "calendar"
+  ]
+ },
+ {
+  "emoji": "🆕",
+  "file": "1f195.svg",
+  "name": "new",
+  "group": "symbol",
+  "keywords": [
+   "new"
+  ]
+ },
+ {
+  "emoji": "📖",
+  "file": "1f4d6.svg",
+  "name": "docs",
+  "group": "symbol",
+  "keywords": [
+   "docs",
+   "book",
+   "manual"
+  ]
+ }
+]

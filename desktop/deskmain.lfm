@@ -1,0 +1,637 @@
+object MainForm: TMainForm
+  Left = 10
+  Height = 680
+  Top = 10
+  Width = 1000
+  Caption = 'Exedra'
+  ClientHeight = 680
+  ClientWidth = 1000
+  Color = clBtnFace
+  Constraints.MinHeight = 400
+  Constraints.MinWidth = 320
+  Menu = MainMenu1
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  OnShow = FormShow
+  Position = poDefault
+  SessionProperties = 'Left;Top;Width;Height;WindowState;RoomList.Width;MemberList.Width;MemberList.Visible;ActPeople.Checked'
+  OnResize = FormResize
+  object RoomList: TInkListBox
+    Left = 0
+    Height = 680
+    Top = 0
+    Width = 240
+    Align = alLeft
+    BorderStyle = bsNone
+    Constraints.MinWidth = 160
+    EditMode = emNone
+    Images = Icons
+    IntegralHeight = False
+    ItemHeight = 28
+    ParentColor = False
+    TabOrder = 0
+    OnClick = RoomListClick
+    CopyMenu = False
+    Hint = 'Use the arrow or right-click for channel and conversation actions.'
+    ShowHint = True
+    Borders.Left = 12
+    Borders.Top = 12
+    Borders.Right = 12
+  end
+  object Splitter1: TSplitter
+    Left = 240
+    Height = 680
+    Top = 0
+    Width = 6
+    Align = alLeft
+    AutoSnap = False
+    MinSize = 160
+    ResizeStyle = rsUpdate
+  end
+  inline ThreadPane: TThreadFrame
+    Left = 640
+    Height = 680
+    Top = 0
+    Width = 360
+    Align = alRight
+    TabOrder = 2
+    Visible = False
+  end
+  object Splitter3: TSplitter
+    Left = 634
+    Height = 680
+    Top = 0
+    Width = 6
+    Align = alRight
+    ResizeStyle = rsUpdate
+    Visible = False
+  end
+  object RoomPanel: TPanel
+    Left = 246
+    Height = 680
+    Top = 0
+    Width = 754
+    Align = alClient
+    BevelOuter = bvNone
+    ClientHeight = 680
+    ClientWidth = 754
+    TabOrder = 1
+    object RoomHeader: TInkLabel
+      Left = 12
+      Height = 24
+      Top = 12
+      Width = 730
+      Align = alTop
+      OnLinkClick = HeaderLinkClick
+      BorderSpacing.Left = 12
+      BorderSpacing.Top = 12
+      BorderSpacing.Right = 12
+      BorderSpacing.Bottom = 6
+      AutoSize = True
+      Caption = '<b>#room</b> topic'
+      Constraints.MinHeight = 24
+      Images = Icons
+      WordWrap = True
+    end
+    object HeaderRule: TShape
+      Left = 12
+      Height = 1
+      Top = 42
+      Width = 730
+      Align = alTop
+      BorderSpacing.Left = 12
+      BorderSpacing.Right = 12
+      BorderSpacing.Bottom = 8
+      Brush.Color = clGrayText
+      Pen.Color = clGrayText
+    end
+    object MemberList: TInkListBox
+    Hint = 'Green: online. Yellow: away. Gray: not here. A missing dot means status is unavailable.'
+    ShowHint = True
+      Left = 562
+      Height = 532
+      Top = 44
+      Width = 180
+      Align = alRight
+      BorderSpacing.Right = 12
+      BorderSpacing.Bottom = 8
+      BorderStyle = bsNone
+      EditMode = emNone
+      Images = Icons
+      IntegralHeight = False
+      ItemHeight = 28
+      ParentColor = True
+      TabOrder = 2
+      OnClick = MemberListClick
+      Borders.Left = 6
+      Borders.Right = 6
+    end
+    object Splitter2: TSplitter
+      Left = 556
+      Height = 532
+      Top = 44
+      Width = 6
+      Align = alRight
+      ResizeStyle = rsUpdate
+    end
+    object Messages: TInkMemo
+      CodeLineNumbers = True
+      Left = 12
+      Height = 532
+      Top = 44
+      Width = 730
+      Align = alClient
+      BorderSpacing.Left = 12
+      BorderSpacing.Right = 12
+      BorderSpacing.Bottom = 8
+      Color = clWindow
+      TabOrder = 0
+      WordWrap = True
+      OnLinkClick = MessagesLinkClick
+      OnResource = MessagesResource
+      OnScroll = MessagesScroll
+      CopyMenu = False
+      PopupMenu = MessageMenu
+      Borders.Left = 10
+      Borders.Top = 3
+      Borders.Right = 10
+      Borders.Bottom = 3
+      StyleSheet.Strings = (
+        'p { margin: 2px 0 }'
+        '.who { margin-top: 6px }'
+        '.at, .edited, .reactions, .replies { color: gray; font-size: smaller }'
+        '.badge { color: gray; font-size: x-small; font-weight: bold }'
+        '.day, .new { display: flex; align-items: center; gap: 10px; color: gray; font-size: smaller; margin: 12px 0 4px }'
+        '.day::before, .day::after, .new::before, .new::after { content: ""; flex: 1; border-top: 1px solid gray }'
+        '.new { color: #c0392b; font-weight: bold }'
+        '.reactions { margin-top: 4px }'
+        '.pill { display: inline-block; border: 1px solid gray; border-radius: 10px; padding: 1px 7px; margin-right: 4px }'
+        '.empty { color: gray; text-align: center; margin: 48px 0 }'
+        '.codebar { display: none }'
+        'img.shot { max-width: 100%; max-height: 320px; border-radius: 6px }'
+        'img.face { width: 22px; height: 22px; vertical-align: middle; border-radius: 11px }'
+        '.k { color: #8f3fb6 } .c { color: #6b7686 } .s { color: #1d7d4f } .n { color: #b65a00 } .d { color: #2c63d6 }'
+        '@media (prefers-color-scheme: dark) {'
+        '  .new { color: #e57373 }'
+        '  .k { color: #c792ea } .c { color: #6f7d93 } .s { color: #9ccc65 } .n { color: #f7a35c } .d { color: #82aaff }'
+        '}'
+      )
+      OnKeyDown = MessagesKeyDown
+      Hint = 'Alt+Down or Alt+Up selects a link preview; Enter opens or closes it. Ctrl+Enter opens the link.'
+      ShowHint = True
+    end
+    object TypingLabel: TLabel
+      Left = 12
+      Height = 20
+      Top = 584
+      Width = 730
+      Align = alBottom
+      BorderSpacing.Left = 12
+      BorderSpacing.Right = 12
+      AutoSize = False
+      Caption = ''
+      Font.Color = clGrayText
+      ParentFont = False
+    end
+    object ComposerPanel: TPanel
+      Left = 12
+      Height = 104
+      Top = 564
+      Width = 730
+      Align = alBottom
+      BorderSpacing.Left = 12
+      BorderSpacing.Right = 12
+      BorderSpacing.Bottom = 12
+      BevelOuter = bvNone
+      ClientHeight = 104
+      ClientWidth = 730
+      TabOrder = 1
+      object AnswerPanel: TPanel
+        Left = 0
+        Top = 0
+        Width = 730
+        Height = 32
+        Align = alTop
+        BevelOuter = bvNone
+        TabOrder = 2
+        Visible = False
+        object AnswerLabel: TLabel
+          Left = 0
+          Top = 0
+          Width = 638
+          Height = 32
+          Align = alClient
+          AutoSize = False
+          Layout = tlCenter
+          EllipsisPosition = epEndEllipsis
+          ShowAccelChar = False
+          ShowHint = True
+        end
+        object CancelAnswerButton: TButton
+          Left = 646
+          Top = 0
+          Width = 84
+          Height = 32
+          Align = alRight
+          BorderSpacing.Left = 8
+          Caption = 'Cancel'
+          Hint = 'Stop answering this message'
+          ShowHint = True
+          TabOrder = 0
+          OnClick = CancelAnswerClick
+        end
+      end
+      object Composer: TMemo
+        Left = 0
+        Height = 64
+        Top = 0
+        Width = 634
+        Align = alClient
+        Color = clWindow
+        ScrollBars = ssAutoVertical
+        TabOrder = 0
+        WantReturns = False
+        OnChange = ComposerChange
+        OnKeyDown = ComposerKeyDown
+        OnKeyPress = ComposerKeyPress
+      end
+      object ButtonBox: TPanel
+        Left = 0
+        Height = 32
+        Top = 72
+        Width = 730
+        Align = alBottom
+        BorderSpacing.Top = 8
+        AutoSize = True
+        BevelOuter = bvNone
+        ClientHeight = 32
+        ClientWidth = 730
+        TabOrder = 1
+        object CodeButton: TButton
+          Left = 68
+          Height = 32
+          Top = 0
+          Width = 52
+          Align = alLeft
+          AutoSize = True
+          BorderSpacing.Left = 4
+          Caption = 'Code'
+          Hint = 'A code block: ``` fences round the selection, or to type into'
+          ShowHint = True
+          TabOrder = 1
+          OnClick = CodeButtonClick
+        end
+        object AttachButton: TButton
+          Left = 0
+          Height = 32
+          Top = 0
+          Width = 64
+          Align = alLeft
+          AutoSize = True
+          Caption = 'Attach'
+          Hint = 'Send a file or a picture with the next message'
+          ShowHint = True
+          TabOrder = 0
+          OnClick = AttachButtonClick
+        end
+        object SendButton: TButton
+          Left = 646
+          Height = 32
+          Top = 0
+          Width = 60
+          Action = ActSend
+          Align = alRight
+          AutoSize = True
+          BorderSpacing.Left = 4
+          ShowHint = True
+          TabOrder = 3
+        end
+        object FileExpiryBox: TComboBox
+          Left = 124
+          Top = 0
+          Width = 116
+          Height = 32
+          Align = alLeft
+          AutoSize = True
+          BorderSpacing.Left = 4
+          ItemIndex = 0
+          Items.Strings = (
+            'Keep files'
+            '1 hour'
+            '1 day'
+            '1 week'
+            '1 download'
+          )
+          Style = csDropDownList
+          Text = 'Keep files'
+          Hint = 'Delete attached files after the selected time or one download'
+          ShowHint = True
+          TabOrder = 2
+        end
+      end
+    end
+  end
+  object ActionList1: TActionList
+    Left = 288
+    Top = 88
+    object ActSend: TAction
+      Caption = 'Send'
+      Hint = 'Send the message (Enter)'
+      OnExecute = ActSendExecute
+    end
+    object ActSignOut: TAction
+      Caption = 'Sign out'
+      Hint = 'Sign out of the server'
+      OnExecute = ActSignOutExecute
+    end
+    object ActQuit: TAction
+      Caption = 'Quit'
+      Hint = 'Quit Exedra'
+      ShortCut = 16465
+      OnExecute = ActQuitExecute
+    end
+    object ActReload: TAction
+      Caption = 'Reload'
+      Hint = 'Reload rooms and messages (F5)'
+      ShortCut = 116
+      OnExecute = ActReloadExecute
+    end
+    object ActPeople: TAction
+      AutoCheck = True
+      Caption = 'People'
+      Checked = True
+      Hint = 'Show who is here and who runs the channel (F9)'
+      ShortCut = 120
+      OnExecute = ActPeopleExecute
+    end
+    object ActFindHere: TAction
+      Caption = 'Find in the messages shown'
+      Hint = 'Find words in what is on screen (Ctrl+F)'
+      ShortCut = 16454
+      OnExecute = ActFindHereExecute
+    end
+    object ActFind: TAction
+      Caption = 'Search the channel''s history...'
+      Hint = 'Ask the server for every message in this channel with these words (Ctrl+Shift+F)'
+      ShortCut = 24646
+      OnExecute = ActFindExecute
+    end
+    object ActLock: TAction
+      Caption = 'Lock this conversation'
+      Enabled = False
+      Hint = 'End to end: only the two of you can read what is written from now on'
+      OnExecute = ActLockExecute
+    end
+    object ActPins: TAction
+      Caption = 'Pinned messages'
+      Hint = 'What the channel keeps pinned'
+      OnExecute = ActPinsExecute
+    end
+    object ActSettings: TAction
+      Caption = 'Settings...'
+      Hint = 'Mail about missed messages, and when to show as away'
+      OnExecute = ActSettingsExecute
+    end
+    object ActAbout: TAction
+      Caption = 'About'
+      Hint = 'About Exedra'
+      OnExecute = ActAboutExecute
+    end
+  end
+  object MainMenu1: TMainMenu
+    Left = 392
+    Top = 88
+    object FileMenu: TMenuItem
+      Caption = '&File'
+      object ReloadItem: TMenuItem
+        Action = ActReload
+      end
+      object SettingsItem: TMenuItem
+        Action = ActSettings
+      end
+      object ServersMenu: TMenuItem
+        Caption = '&Servers'
+      end
+      object ConnectMenu: TMenuItem
+        Caption = 'Connection files'
+        object OpenConnectItem: TMenuItem
+          Caption = 'Open a connection file...'
+          OnClick = OpenConnectClick
+        end
+        object SaveConnectItem: TMenuItem
+          Caption = 'Save one for this server...'
+          OnClick = SaveConnectClick
+        end
+        object ConnectSeparator: TMenuItem
+          Caption = '-'
+        end
+        object AssocItem: TMenuItem
+          Caption = 'Open .exedra files with Exedra'
+          OnClick = AssocClick
+        end
+        object UnassocItem: TMenuItem
+          Caption = 'Stop opening .exedra files with Exedra'
+          OnClick = UnassocClick
+        end
+      end
+      object FileSeparator: TMenuItem
+        Caption = '-'
+      end
+      object SignOutItem: TMenuItem
+        Action = ActSignOut
+      end
+      object QuitItem: TMenuItem
+        Action = ActQuit
+      end
+    end
+    object RoomMenu: TMenuItem
+      Caption = '&Channel'
+      object FindHereItem: TMenuItem
+        Action = ActFindHere
+      end
+      object FindItem: TMenuItem
+        Action = ActFind
+      end
+      object PinsItem: TMenuItem
+        Action = ActPins
+      end
+      object RoomSeparator: TMenuItem
+        Caption = '-'
+      end
+      object LockItem: TMenuItem
+        Action = ActLock
+      end
+    end
+    object ViewMenu: TMenuItem
+      Caption = '&View'
+      object PeopleItem: TMenuItem
+        Action = ActPeople
+        AutoCheck = True
+      end
+    end
+    object AdminMenu: TMenuItem
+      Caption = '&Admin'
+      Visible = False
+      object MembersItem: TMenuItem
+        Caption = 'Members...'
+        Visible = False
+        OnClick = MembersClick
+      end
+      object ChannelsItem: TMenuItem
+        Caption = 'Public channels...'
+        Visible = False
+        OnClick = ChannelsClick
+      end
+      object PrivateItem: TMenuItem
+        Caption = 'Private channels and conversations...'
+        Visible = False
+        OnClick = PrivateClick
+      end
+    end
+    object HelpMenu: TMenuItem
+      Caption = '&Help'
+      object AboutItem: TMenuItem
+        Action = ActAbout
+      end
+    end
+  end
+  object PingTimer: TTimer
+    Enabled = False
+    Interval = 25000
+    OnTimer = PingTimerTimer
+    Left = 496
+    Top = 88
+  end
+  object PropStorage: TIniPropStorage
+    StoredValues = <>
+    Left = 600
+    Top = 88
+  end
+  object Icons: TImageList
+    Height = 20
+    Width = 20
+    Left = 704
+    Top = 88
+  end
+
+  object MessageMenu: TPopupMenu
+    OnPopup = MessageMenuPopup
+    Left = 288
+    Top = 160
+    object ReactItem: TMenuItem
+      Caption = 'React'
+    end
+    object ThreadItem: TMenuItem
+      Caption = 'Reply in thread'
+      OnClick = ThreadItemClick
+    end
+    object AnswerItem: TMenuItem
+      Caption = 'Answer'
+      OnClick = AnswerClick
+    end
+    object PinItem: TMenuItem
+      Caption = 'Pin'
+      OnClick = PinItemClick
+    end
+    object CopyItem: TMenuItem
+      Caption = 'Copy'
+      OnClick = CopyItemClick
+    end
+    object CopyLinkItem: TMenuItem
+      Caption = 'Copy message link'
+      OnClick = CopyLinkItemClick
+    end
+    object MenuSeparator: TMenuItem
+      Caption = '-'
+    end
+    object EditItem: TMenuItem
+      Caption = 'Edit'
+      OnClick = EditItemClick
+    end
+    object DeleteItem: TMenuItem
+      Caption = 'Delete'
+      OnClick = DeleteItemClick
+    end
+  end
+  object RowMenu: TPopupMenu
+    Left = 288
+    Top = 216
+    object RowSilenceItem: TMenuItem
+      Tag = 3
+      Caption = 'Silence channel'
+      OnClick = RowActionClick
+    end
+    object RowMentionsItem: TMenuItem
+      Tag = 4
+      Caption = 'Mentions only'
+      OnClick = RowActionClick
+    end
+    object RowNotifyAllItem: TMenuItem
+      Tag = 5
+      Caption = 'Notify about everything'
+      OnClick = RowActionClick
+    end
+    object RowLeaveItem: TMenuItem
+      Caption = 'Leave channel'
+      OnClick = RowActionClick
+    end
+    object RowDeleteChannelItem: TMenuItem
+      Tag = 1
+      Caption = 'Delete channel'
+      OnClick = RowActionClick
+    end
+    object RowDeleteDmItem: TMenuItem
+      Tag = 2
+      Caption = 'Delete conversation'
+      OnClick = RowActionClick
+    end
+  end
+  object OpenDialog1: TOpenDialog
+    Title = 'Send a file'
+    Left = 392
+    Top = 160
+  end
+  object SaveDialog1: TSaveDialog
+    Title = 'Save the file'
+    Options = [ofOverwritePrompt, ofEnableSizing, ofViewDetail]
+    Left = 600
+    Top = 160
+  end
+  object Tray: TTrayIcon
+    Hint = 'Exedra'
+    Visible = True
+    OnClick = TrayClick
+    Left = 496
+    Top = 160
+  end
+  object FileAss: TFileAssMan
+    ApplicationID = 'io.github.tonystone31.exedra'
+    ApplicationName = 'Exedra'
+    ApplicationDescription = 'A chat client for Exedra servers'
+    FileTypes = <    
+      item
+        Extension = '.exedra'
+        Description = 'Exedra connection'
+        MimeType = 'application/x-exedra'
+        TypeIdentifier = 'io.github.tonystone31.exedra.connection'
+      end>
+    Left = 700
+    Top = 160
+  end
+  object Instance: TFileAssInstance
+    Mode = fimForwardParameters
+    OnParameters = ParametersGiven
+    Enabled = True
+    FileAssMan = FileAss
+    Left = 800
+    Top = 160
+  end
+  object NoticeBar: TInfoBar
+    Control = Messages
+    OnAnswer = NoticeAnswer
+  end
+  object NoticeToast: TToast
+    Control = Messages
+  end
+
+end

@@ -5,11 +5,6 @@
   </picture>
 </p>
 
-> **Version 0.1.0 is on its way.** This page describes it. The source,
-> the ready-built releases and the install script arrive here very soon.
-> Until then this repository holds only this page, so its links to other
-> files lead nowhere yet.
-
 **A community site in one program: chat, a forum, a wiki and a catalog.**
 They share the same members, sign-in, roles, search and admin page. Each
 one is a module you switch on or off, so a site can run just the chat,
@@ -173,7 +168,7 @@ On Linux a ready-built release installs with one script, no compiler
 needed:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/TonyStone31/Exedra/main/install.sh
+curl -fsSLO https://raw.githubusercontent.com/TonyStone31/exedra/main/install.sh
 sudo sh install.sh
 ```
 
@@ -300,6 +295,12 @@ younger than the server, so take it as a preview for now.
   [SimpleBaseLib4Pascal](https://github.com/Xor-el/SimpleBaseLib4Pascal)
   and [TlsLib4Pascal](https://github.com/Xor-el/TlsLib4Pascal). All four
   are MIT licensed.
+- **About the compiler:** Exedra is built with the development version
+  of Free Pascal (3.3.1, "trunk"). It uses the Markdown, code coloring
+  and WebSocket units that the released 3.2 does not have yet. Trunk
+  changes every day, so a build with a newer trunk than ours can hit a
+  problem we have not seen. The release packages need no compiler. Once
+  Free Pascal ships a release with those units, Exedra will build with it.
 
 ## The name
 

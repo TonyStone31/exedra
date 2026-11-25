@@ -1,0 +1,172 @@
+object ChannelsForm: TChannelsForm
+  Left = 10
+  Height = 620
+  Top = 10
+  Width = 820
+  Caption = 'Public channels'
+  ClientHeight = 620
+  ClientWidth = 820
+  Constraints.MinHeight = 540
+  Constraints.MinWidth = 600
+  Position = poMainFormCenter
+  OnDestroy = FormDestroy
+  object Channels: TListView
+    Align = alClient
+    BorderSpacing.Around = 12
+    Columns = <
+      item
+        Caption = 'Channel'
+        Width = 180
+      end
+      item
+        Caption = 'Topic'
+        Width = 320
+      end
+      item
+        Caption = 'Policy'
+        Width = 130
+      end
+      item
+        Caption = 'Archived'
+        Width = 90
+      end>
+    HideSelection = False
+    ReadOnly = True
+    RowSelect = True
+    TabOrder = 0
+    ViewStyle = vsReport
+    OnSelectItem = SelectionChanged
+  end
+  object Editor: TPanel
+    Top = 300
+    Height = 190
+    Align = alBottom
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 8
+    BevelOuter = bvNone
+    TabOrder = 1
+    Visible = False
+    object Topic: TMemo
+      Height = 80
+      Align = alTop
+      ReadOnly = True
+      ScrollBars = ssAutoVertical
+      TabOrder = 0
+    end
+    object PolicyLabel: TLabel
+      Left = 0
+      Top = 92
+      Caption = 'Posting policy'
+      FocusControl = PolicyBox
+    end
+    object PolicyBox: TComboBox
+      Left = 116
+      Top = 88
+      Width = 340
+      Style = csDropDownList
+      ItemIndex = 0
+      Items.Strings = (
+        'Everyone posts'
+        'Read only: some post, all reply'
+      )
+      TabOrder = 1
+    end
+    object ArchivedBox: TCheckBox
+      Left = 464
+      Top = 90
+      Width = 112
+      Caption = 'Archived'
+      TabOrder = 2
+    end
+    object TopicButton: TButton
+      Left = 0
+      Top = 142
+      Height = 40
+      Width = 140
+      Caption = 'Set the topic...'
+      OnClick = TopicClick
+      TabOrder = 3
+    end
+    object IconButton: TButton
+      Left = 148
+      Top = 142
+      Height = 40
+      Width = 140
+      Caption = 'Change icon...'
+      Hint = 'Choose a PNG, JPEG or WebP picture. The icon is saved immediately.'
+      ShowHint = True
+      OnClick = IconClick
+      TabOrder = 4
+    end
+    object SaveButton: TButton
+      Left = 296
+      Top = 142
+      Height = 40
+      Width = 140
+      Caption = 'Save channel'
+      OnClick = SaveClick
+      TabOrder = 5
+    end
+  end
+  object Status: TMemo
+    Top = 498
+    Height = 56
+    Align = alBottom
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 8
+    BorderStyle = bsNone
+    Color = clBtnFace
+    ReadOnly = True
+    ScrollBars = ssAutoVertical
+    TabOrder = 2
+  end
+  object Buttons: TPanel
+    Top = 568
+    Height = 40
+    Align = alBottom
+    BorderSpacing.Left = 12
+    BorderSpacing.Right = 12
+    BorderSpacing.Bottom = 12
+    BevelOuter = bvNone
+    TabOrder = 3
+    object RefreshButton: TButton
+      Width = 88
+      Align = alLeft
+      Caption = 'Refresh'
+      OnClick = RefreshClick
+      TabOrder = 0
+    end
+    object NewButton: TButton
+      Left = 96
+      Width = 140
+      Align = alLeft
+      BorderSpacing.Left = 8
+      Caption = 'New channel...'
+      Visible = False
+      OnClick = NewClick
+      TabOrder = 1
+    end
+    object CloseButton: TButton
+      Width = 88
+      Align = alRight
+      Caption = 'Close'
+      Cancel = True
+      OnClick = CloseClick
+      TabOrder = 2
+    end
+  end
+  object IconDialog: TOpenDialog
+    Filter = 'Pictures|*.png;*.jpg;*.jpeg;*.webp'
+    Options = [ofFileMustExist, ofEnableSizing]
+    Title = 'Choose a channel icon'
+    Left = 48
+    Top = 140
+  end
+  object NoticeBar: TInfoBar
+  end
+  object NoticeToast: TToast
+  end
+
+end

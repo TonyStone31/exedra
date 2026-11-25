@@ -1,0 +1,20 @@
+# Only explicitly listed project files are candidates for publication.
+**/.*
+**/*.md
+*SPEC*.md
+!/.gitignore
+!/README.md
+!/LICENSE
+
+tests/
+tools/
+lib/
+backup/
+/exedra-desktop
+/exedra-desktop.exe
+*.ppu
+*.o
+*.res
+*.compiled
+*.lps
+*.log
