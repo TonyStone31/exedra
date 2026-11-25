@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1664" height="512" viewBox="0 0 1664 512">
+<title>Exedra — Gathering wordmark, light-on-dark</title>
+<metadata>Author: Tony Stone</metadata>
+<g transform="scale(0.5)">
+<path fill="#3b5b8c" d="M96 448 A416 416 0 0 0 928 448 H784 A272 272 0 0 1 240 448 Z"/>
+<g fill="#d9924a">
+  <circle cx="336" cy="336" r="64"/>
+  <circle cx="512" cy="208" r="64"/>
+  <circle cx="688" cy="336" r="64"/>
+</g>
+</g>
+<g fill="#f6f4ef" fill-rule="evenodd" transform="translate(560 145) scale(1.35)">
+  <path transform="translate(0 0)" d="M0 0 H112 V20 H24 V68 H100 V88 H24 V140 H112 V160 H0 Z"/>
+  <path transform="translate(130 0)" d="M0 48 H24 L54 90 L84 48 H108 L66 104 L108 160 H84 L54 118 L24 160 H0 L42 104 Z"/>
+  <path transform="translate(256 0)" d="M110 110 H24 C26 132 38 144 58 144 C74 144 86 138 96 128 L109 142 C95 156 78 164 56 164 C22 164 2 140 2 106 C2 72 24 46 56 46 C90 46 110 70 110 102 Z M24 92 H88 C85 74 75 66 56 66 C40 66 28 76 24 92 Z"/>
+  <path transform="translate(384 0)" d="M88 0 H110 V160 H90 V146 C80 158 68 164 52 164 C20 164 0 140 0 106 C0 72 22 46 52 46 C68 46 80 52 88 62 Z M88 106 C88 80 76 66 56 66 C34 66 22 82 22 106 C22 130 34 144 56 144 C76 144 88 130 88 106 Z"/>
+  <path transform="translate(512 0)" d="M4 48 H24 V68 C34 52 48 44 70 46 V68 C42 64 26 82 26 112 V160 H4 Z"/>
+  <path transform="translate(604 0)" d="M88 48 H110 V160 H90 V146 C80 158 68 164 52 164 C20 164 0 140 0 106 C0 72 22 46 52 46 C68 46 80 52 88 62 Z M88 106 C88 80 76 66 56 66 C34 66 22 82 22 106 C22 130 34 144 56 144 C76 144 88 130 88 106 Z"/>
+</g>
+</svg>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<title>Exedra — Gathering</title>
+<metadata>Author: Tony Stone</metadata>
+<path fill="#3b5b8c" d="M96 448 A416 416 0 0 0 928 448 H784 A272 272 0 0 1 240 448 Z"/>
+<g fill="#d9924a">
+  <circle cx="336" cy="336" r="64"/>
+  <circle cx="512" cy="208" r="64"/>
+  <circle cx="688" cy="336" r="64"/>
+</g>
+</svg>
