@@ -271,6 +271,29 @@ window.Keys = (function () {
     return pairKeys[other];
   }
 
+  // The server hands out public keys, so it could hand out its own. This
+  // browser remembers the key it saw for each member and says when another
+  // one comes, and both sides can compare a code made from the two keys.
+  async function partner(other) {
+    const pair = await pairKey(other);
+    const spot = 'seen:' + pair.other.toLowerCase();
+    const seen = await keyStore('readonly', function (s) { return s.get(spot); });
+    if (!seen) await keyStore('readwrite', function (s) { return s.put(pair.pub, spot); });
+    const me = await (await fetch('/api/me')).json();
+    const mine = JSON.parse(await (await fetch('/api/key?name=' + encodeURIComponent(me.name))).text());
+    const both = [pair.pub, mine.pub].sort().join('|');
+    const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(both)));
+    let code = '';
+    for (let i = 0; i < 10; i++) code += (i && i % 2 === 0 ? ' ' : '') + hash[i].toString(16).padStart(2, '0');
+    return {code: code, changed: !!seen && seen !== pair.pub};
+  }
+
+  // The member looked at the code: the key seen now is the one to expect.
+  async function trust(other) {
+    const pair = await pairKey(other);
+    await keyStore('readwrite', function (s) { return s.put(pair.pub, 'seen:' + pair.other.toLowerCase()); });
+  }
+
   // Who sent it to whom is sealed in with it, so the server cannot turn a
   // message around.
   const between = function (from, to) { return enc.encode(from.toLowerCase() + '>' + to.toLowerCase()); };
@@ -437,7 +460,7 @@ window.Keys = (function () {
     ready: ready, post: post, join: join, joinFrom: joinFrom, signOut: signOut, bindJoinForms: bindJoinForms, myKey: myKey,
     setupKeys: setupKeys, unlock: unlock, setNewPassword: setNewPassword, changePassword: changePassword,
     passwordProof: passwordProof,
-    seal: seal, open: open, sealFile: sealFile, openFile: openFile,
+    seal: seal, open: open, sealFile: sealFile, openFile: openFile, partner: partner, trust: trust,
     beamSend: beamSend, beamReceive: beamReceive
   };
 })();

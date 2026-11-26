@@ -76,9 +76,12 @@ to syslog (`/var/log/messages`). Where this page says `/opt/exedra` and
 `systemctl`, read `/usr/local/exedra` and `service`.
 
 Read the script first if you like; it is short. It downloads the newest
-release from GitHub, checks it against its checksum, puts it in
+release from GitHub, checks it against its checksum and against the
+signature of Exedra's release key (it needs `openssl` for that), puts it in
 `/opt/exedra`, makes the user `exedra` and the systemd service, and
-writes a first `exedra.ini` from the example. It does not start the
+writes a first `exedra.ini` from the example. The program and its page
+files belong to root; the user `exedra` owns only `data/` and
+`wiki-images/`. It does not start the
 service: look at `/opt/exedra/exedra.ini` first (the site's name, its
 address, the port), then
 
@@ -107,14 +110,14 @@ file you already have:
 
 ```sh
 sh install.sh --dir ~/exedra --no-service
-sh install.sh --dir ~/exedra --no-service --from exedra-0.1.0-linux-x86_64.tar.gz
+sh install.sh --dir ~/exedra --no-service --from exedra-0.1.1-linux-x86_64.tar.gz
 ~/exedra/exedra ~/exedra/exedra.ini
 ```
 
 You start and stop the program yourself then, and after
 `install.sh update --dir ~/exedra --no-service` you start it again
 yourself. A release file given with `--from` is checked against the
-`.sha256` file beside it when there is one.
+`.sha256` and `.sig` files beside it when they are there.
 
 The release files are named for their system:
 `exedra-<version>-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` and
@@ -227,12 +230,17 @@ The folder then looks like this:
                   and the database when it is SQLite
 ```
 
-Give it a user of its own, so the site does not run as root:
+Give it a user of its own, so the site does not run as root. That user
+owns only the folders the program writes in. The program and its page
+files stay root's, so a fault in the site cannot replace them:
 
 ```sh
 sudo useradd --system --home /opt/exedra --shell /usr/sbin/nologin exedra
-sudo chown -R exedra:exedra /opt/exedra
-sudo chmod 600 /opt/exedra/exedra.ini
+sudo mkdir -p /opt/exedra/data /opt/exedra/wiki-images
+sudo chown -R root:root /opt/exedra
+sudo chown -R exedra:exedra /opt/exedra/data /opt/exedra/wiki-images
+sudo chown root:exedra /opt/exedra/exedra.ini
+sudo chmod 640 /opt/exedra/exedra.ini
 ```
 
 ## 3. Write the config file
@@ -712,6 +720,10 @@ The user `exedra` must be able to read the two files. Open the port
 in the firewall. The site's `/irc` page then tells members how to set up
 their client. Without an `[irc]` section there is no IRC side.
 
+An IRC client sends the member's password to the server. Open only the
+TLS port to the internet. The plain `port=` setting is for a proxy that
+does the TLS itself, or for a private network.
+
 ## 11. Backups, moving and upgrading
 
 **Backups.** On the admin page, **Backup** makes one zip with the whole
@@ -762,7 +774,6 @@ and start it again. The program upgrades its own tables at start.
 sudo systemctl stop exedra
 sudo cp exedra/server/bin/exedra /opt/exedra/
 sudo cp -r exedra/server/site/. /opt/exedra/
-sudo chown -R exedra:exedra /opt/exedra
 sudo systemctl start exedra
 ```
 

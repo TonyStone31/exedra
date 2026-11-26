@@ -33,8 +33,8 @@ const
 
 function RenderReadme(const Text: string; const ImageHosts: array of string): string;
 { A folder of the site's own pictures a message or page may show; Prefix
-  starts the address.  NoDots refuses an address with .. in it. }
-procedure RegisterPictureFolder(const Prefix: string; NoDots: boolean = False);
+  starts the address. }
+procedure RegisterPictureFolder(const Prefix: string);
 { HTML made elsewhere by a trusted tool, such as the reference's importer,
   made safe all the same: the README's tags and attributes, plus class names,
   data-lang and links within this site; every tag closed. }
@@ -210,25 +210,38 @@ begin
 end;
 
 var
-  PictureFolders: array of record
-    Prefix: string;
-    NoDots: boolean;
-    end;
+  PictureFolders: array of string;
 
-procedure RegisterPictureFolder(const Prefix: string; NoDots: boolean);
+procedure RegisterPictureFolder(const Prefix: string);
 begin
   SetLength(PictureFolders, Length(PictureFolders) + 1);
-  PictureFolders[High(PictureFolders)].Prefix := Prefix;
-  PictureFolders[High(PictureFolders)].NoDots := NoDots;
+  PictureFolders[High(PictureFolders)] := Prefix;
+end;
+
+{ An address a browser would not rewrite into another path: no .. part,
+  written out or encoded, and no backslash. }
+function PlainPath(const Src: string): boolean;
+begin
+  Result := (Pos('/..', Src) = 0) and (Pos('\', Src) = 0) and (Pos('%2e', LowerCase(Src)) = 0) and (Pos('%2f', LowerCase(Src)) = 0) and (Pos('%5c', LowerCase(Src)) = 0);
+end;
+
+{ A file of the site as its address is made: /f/, 32 hex digits, one name. }
+function OwnFile(const Src: string): boolean;
+var
+  I: integer;
+begin
+  Result := Src.StartsWith('/f/') and (Length(Src) > 36) and (Src[36] = '/') and (Pos('/', Src, 37) = 0) and PlainPath(Src);
+  for I := 4 to 35 do
+    Result := Result and (I <= Length(Src)) and (Src[I] in ['0'..'9', 'a'..'f']);
 end;
 
 function OwnPicture(const Src: string): boolean;
 var
-  I: integer;
+  Prefix: string;
 begin
   Result := False;
-  for I := 0 to High(PictureFolders) do
-    if Src.StartsWith(PictureFolders[I].Prefix) and not (PictureFolders[I].NoDots and (Pos('..', Src) > 0)) then
+  for Prefix in PictureFolders do
+    if Src.StartsWith(Prefix) and PlainPath(Src) then
       Exit(True);
 end;
 
@@ -259,7 +272,7 @@ begin
       Insert(' loading="lazy" referrerpolicy="no-referrer"', Result, P + 4);
       P := PosEx('<img src="', Result, R + 44);
     end
-    else if Src.StartsWith('/f/') or OwnPicture(Src) then
+    else if OwnFile(Src) or OwnPicture(Src) then
       P := PosEx('<img src="', Result, R)
     else if StartsText('https://', Src) or StartsText('http://', Src) then
     begin

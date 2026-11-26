@@ -35,6 +35,9 @@ function BadgeIn(const Roles, Part: string): string;
   anyone whose role may ban or open the admin page. }
 function Shielded(const Roles: string): boolean;
 function HasRole(const Roles, Role: string): boolean;
+{ Whether Me may do everything the role may: the most a member can hand
+  to someone else, or take from them. }
+function HoldsAllOf(const Me: TMember; const Role: string): boolean;
 { For the admin page. }
 function RolesJSON: TJSONArray;
 function PermissionsJSON: TJSONArray;
@@ -192,6 +195,16 @@ end;
 function Can(const Me: TMember; const Perm: string): boolean;
 begin
   Result := IsAdminRole(Me) or AnyRole(HeldRoles(Me), RolesFor(Perm));
+end;
+
+function HoldsAllOf(const Me: TMember; const Role: string): boolean;
+var
+  P: TPermission;
+begin
+  Result := True;
+  for P in Defs do
+    if HasRole(RolesFor(P.Name), Role) and not Can(Me, P.Name) then
+      Exit(False);
 end;
 
 function IsMuted(UserId, RoomId: integer): boolean;

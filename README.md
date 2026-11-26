@@ -102,19 +102,24 @@ The full list is [further down](#what-it-does).
 Free Pascal compiles to native code, and that is most of why Exedra is
 small and quick.
 
-- **No runtime.** There is no interpreter and no garbage collector. The
-  program starts, serves, and that is it.
+- **Nothing else to install.** There is no interpreter, no garbage
+  collector and no separate runtime to set up. What a Free Pascal
+  program needs while it runs is built into the program itself.
 - **One file, only 29 MB.** Everything is linked into a single program:
   the web server, live connections, all four modules, mail, backups and
   the admin page. The whole download is 17 MB.
-- **No OpenSSL, and that is where most of the size goes.** About two
-  thirds of those 29 MB are the cryptography and TLS code, done in
-  Pascal and built into the program. Without it Exedra would be around
-  10 MB, but it would need the system's OpenSSL, and that differs from
-  one system to the next and can be a problem on ARM boards and small
-  installs. This way the same program runs the same everywhere, linked
-  against the system's C library and nothing else. We think that is
-  worth the megabytes.
+- **Cryptography and TLS built in, and that is where most of the size
+  goes.** About two thirds of those 29 MB are the cryptography and TLS
+  code, done in Pascal and built into the program. Without it Exedra
+  would be around 10 MB, but it would need the system's OpenSSL, and
+  that differs from one system to the next and can be a problem on ARM
+  boards and small installs. This way the same program runs the same
+  everywhere, linked against the system's C library and nothing else.
+  This is about an easy install. It is not a claim that these libraries
+  are safer than OpenSSL, which has far more people looking after it. A
+  fix in that code reaches you with a new Exedra release, so keep yours
+  up to date, and put a public site behind a proxy that does the TLS
+  (more on that below).
 - **Mostly what ships with Free Pascal.** The web server, the routing
   and the WebSockets are fcl-web. The databases go through fcl-db's
   SQLDB. JSON, Markdown and syntax coloring are FCL packages too. On top
@@ -233,8 +238,10 @@ and say which. That decides what gets built first.
 
 - Members with their own accounts, or sign-in with GitHub, GitLab,
   Google, Microsoft or Codeberg.
-- The password never leaves the member's device. The browser derives a
-  login secret from it, and the server only stores a hash of that.
+- In the browser and the desktop program the password never leaves the
+  member's device. A login secret is derived from it there, and the
+  server only stores a hash of that. An IRC client is the exception: it
+  sends the password to the server, as IRC does.
 - A member changes their own password and email address, and can close
   their account. What they wrote stays, under their name or as "Former
   member".
@@ -255,7 +262,10 @@ and say which. That decides what gets built first.
 - A message can answer another, which is quoted above it, and its author
   is told.
 - Private conversations encrypted end to end (ECDH P-256, AES-GCM), with
-  read receipts the admin or each member can turn off.
+  read receipts the admin or each member can turn off. Each conversation
+  shows a safety code the two members can compare, and says when the
+  other member's key has changed. [SECURITY.md](SECURITY.md) says what
+  this protects against and what it does not.
 - Files in a private channel or conversation open only for those who may
   read the message.
 - Beams: a file sent straight from one browser to another.

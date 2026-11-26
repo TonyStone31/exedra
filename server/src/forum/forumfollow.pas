@@ -142,7 +142,7 @@ begin
     Log('Forum: no mail about a reply to ' + Who.Name + ', the hour''s mails are sent (forum_follow_mail_hour)');
     Exit;
   end;
-  Result := VarToStr(Value('SELECT email FROM users WHERE id = :u', [Who.Id]));
+  Result := VarToStr(Value('SELECT email FROM users WHERE id = :u AND verified = 1', [Who.Id]));
 end;
 
 function MailReply(const Address, Member, Author, Title, Body, Link, Key: string): boolean;

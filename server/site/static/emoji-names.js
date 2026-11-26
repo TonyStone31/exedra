@@ -31,18 +31,21 @@ window.EmojiNames = (function () {
   }
 
   // The name being typed where the caret is (at), or null: a colon where a
-  // word starts, not in a time or an address, then two letters or more.
-  // whole says its closing colon is there too.  from is where the colon is.
-  function typed(text, at) {
-    const m = /(^|[^A-Za-z0-9:/\\_]):([A-Za-z0-9+_-]{1,30})(:?)$/.exec(text.slice(Math.max(0, at - 34), at));
-    if (!m || (m[2].length < 2 && !m[3]) || inCode(text.slice(0, at))) return null;
+  // word starts, not in a time or an address, then two letters or more
+  // (short: any, even none).  whole says its closing colon is there too.
+  // from is where the colon is.
+  function typed(text, at, short) {
+    const m = /(^|[^A-Za-z0-9:/\\_]):([A-Za-z0-9+_-]{0,30})(:?)$/.exec(text.slice(Math.max(0, at - 34), at));
+    if (!m || (m[3] ? !m[2] : m[2].length < (short ? 0 : 2)) || inCode(text.slice(0, at))) return null;
     return {word: m[2].toLowerCase(), from: at - m[2].length - m[3].length - 1, whole: !!m[3]};
   }
 
   // The emoji that fit a word, each with the keyword that fit (match): the
   // word itself first, then keywords that start with it, the shortest
   // first (heart before heart_eyes), then those and names that hold it.
+  // No word yet: the set as it is.
   function matches(set, word) {
+    if (!word) return set;
     const found = [];
     for (const e of set) {
       const starts = e.keywords.find(function (k) { return k.indexOf(word) === 0; });

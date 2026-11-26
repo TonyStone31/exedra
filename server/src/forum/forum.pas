@@ -1101,7 +1101,7 @@ begin
   Result := TJSONObject.Create(['members', IntValue('SELECT members FROM forum_totals WHERE id = 1', []) - IntValue('SELECT COUNT(*) FROM users WHERE closed = 1', [])]);
   try
     // the newest member who may take part: not an account never confirmed, put out or closed
-    Result.Add('newest', VarToStr(Value('SELECT name FROM users WHERE verified = 1 AND banned = 0 AND closed = 0 ORDER BY id DESC LIMIT 1', [])));
+    Result.Add('newest', VarToStr(Value('SELECT name FROM users WHERE verified > 0 AND banned = 0 AND closed = 0 ORDER BY id DESC LIMIT 1', [])));
     Rows := TJSONArray.Create;
     Result.Add('posts', Rows);
     Q := Query('SELECT p.id, p.topic_id, t.title, a.name, ' + IsoTime('p.created') +

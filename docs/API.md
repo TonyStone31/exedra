@@ -26,7 +26,7 @@ the salt. A rename keeps the previous salt so the password keeps working.
 |---|---|---|
 | `POST /api/signup` | name, auth, pub (the public ECDH P-256 key), wrapped (the private key, wrapped), app | name, token when app was sent |
 | `POST /api/signin` | name, auth, app | name, wrapped, token when app was sent |
-| `GET /api/auth-name?name=` | | name to use in the password salt, unchanged by a member rename |
+| `GET /api/auth-name?name=` | | name to use in the password salt, unchanged by a member rename (so the first name can be found from the new one; an account closed without a name loses it) |
 | `POST /api/signout` | | ok |
 | `GET /api/me` | | name, key_name (the stable identity for locked messages), roles, banned, can (site permissions), avatar, away |
 
@@ -483,12 +483,16 @@ manage-settings.
 
 Safety settings show their stored names on the admin page. The defaults
 are `missing_tries=6` per minute (scanner paths count three),
-`admin_probe_tries=3` per minute and `password_tries=10` in 15 minutes,
-including invalid tokens. Refused admin routes and unknown admin paths
+`admin_probe_tries=3` per minute and `password_tries=10` in 15 minutes.
+A wrong or expired token is held by its own limit (`token_tries`) and is
+not a password try. A request the browser made on its own, a picture or
+anything another site set off, counts for nothing. Refused admin routes and unknown admin paths
 both answer `404 Nothing here.`. `block_strikes=3` makes the third block
 permanent; `block_cache_max=10000` drops the oldest cached addresses
-(hard cap 100,000). Local and `allowed_ips` addresses retain their block
-exemption. IPv6 spellings and mapped IPv4 addresses share counters.
+(hard cap 100,000). This machine's own address and `allowed_ips` are never
+blocked. Other addresses of the house network are, unless one passes on
+visitors' requests without being named under `proxies`: it is left alone
+and the admin page says so. IPv6 spellings and mapped IPv4 addresses share counters.
 
 `signuptry_address=10` caps signup attempts per minute across web, IRC and
 external sign-in; `signups_per_address=10` caps completed accounts per day.

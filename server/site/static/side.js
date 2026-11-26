@@ -197,6 +197,23 @@ window.Side = (function () {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 
+  // Links in what members wrote (inside boxes, a selector) open a new tab,
+  // old messages and new alike: those to another site, and with own those
+  // to this site too, but for the ones stays(a) says the page shows in
+  // place.  Set as the click arrives, so nothing drawn later is missed.
+  function newTabLinks(boxes, own, stays) {
+    document.addEventListener('click', function (e) {
+      const a = e.target.closest('a[href]');
+      if (!a || !a.closest(boxes) || !/^https?:$/.test(a.protocol)) return;
+      if (a.origin === location.origin && (!own || stays(a))) return;
+      a.target = '_blank';
+      a.relList.add('noopener');
+    }, true);
+  }
+  // A forum post, wherever one is shown: its links to this site stay in the
+  // tab, as the reader moves through the forum.
+  newTabLinks('.forum-body, .forum-signature', false);
+
   return {el: el, link: link, hue: hue, avatar: avatar, icons: Icons, icon: icon, iconButton: iconButton,
-    account: account, signOut: signOut};
+    account: account, signOut: signOut, newTabLinks: newTabLinks};
 })();

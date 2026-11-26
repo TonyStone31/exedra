@@ -20,6 +20,8 @@ const
   // a week: scores move slowly, and the free lookups are kept for new addresses
   CHECK_DAYS = 7;
   PER_ROUND = 20;
+  // probes an address makes before it is looked up or reported
+  MIN_HITS = 3;
 
 var
   // set by an answer 429: no call before it
@@ -189,17 +191,18 @@ var
   I, Score, Threshold: integer;
   Parts: TStringArray;
   Ip, Kinds, Paths, Why: string;
+  Lone: boolean;
 begin
   if (Key = '') or (Now < QuietUntil) then
     Exit;
   Rows := TStringList.Create;
   try
     // a minute's quiet first, so a burst of probes is one row and one report
-    with Query('SELECT ip, kinds, detail FROM abuse_queue WHERE last_at < ' + SqlAgo('1', suMinute) + ' ORDER BY first_at LIMIT ' + IntToStr(PER_ROUND), []) do
+    with Query('SELECT ip, kinds, detail, hits FROM abuse_queue WHERE last_at < ' + SqlAgo('1', suMinute) + ' ORDER BY first_at LIMIT ' + IntToStr(PER_ROUND), []) do
     try
       while not EOF do
       begin
-        Rows.Add(Fields[0].AsString + #9 + Fields[1].AsString + #9 + Fields[2].AsString);
+        Rows.Add(Fields[0].AsString + #9 + Fields[1].AsString + #9 + Fields[2].AsString + #9 + Fields[3].AsString);
         Next;
       end;
     finally
@@ -214,7 +217,10 @@ begin
       Ip := Parts[0];
       Kinds := Parts[1];
       Paths := Parts[2];
-      if NeverBlocked(Ip) or KnownCrawler(Ip) then
+      // one or two odd requests can be a link someone was led to click: not
+      // a scanner yet, unless the address was already blocked for more
+      Lone := (StrToIntDef(Parts[3], 1) < MIN_HITS) and (Pos('miss', Kinds) = 0) and (Pos('password', Kinds) = 0);
+      if Lone or NeverBlocked(Ip) or KnownCrawler(Ip) then
       begin
         Exec('DELETE FROM abuse_queue WHERE ip = :i', [Ip]);
         Continue;

@@ -311,7 +311,7 @@ begin
     Expires := NowUTC + 10 / MinsPerDay;
     HttpOnly := True;
     SameSite := ssLax;
-    Secure := Setting('https', '0') = '1';
+    Secure := SecureCookies;
   end;
 end;
 
@@ -326,11 +326,12 @@ var
 begin
   AppWaiting(ARequest, Name, Port, State);
   KeepCookie(AResponse, 'oauthask', NewAppAsk(UserId));
+  // the name is the program's own word, so the page also shows the port the answer goes to
   // the answer's form is sent on to the program's port, which the page's policy has to allow
   AResponse.SetCustomHeader('Content-Security-Policy', SecurityPolicy(ARequest.Host, 'http://127.0.0.1:' + Port));
   SendPage(AResponse, PartPage(ARequest, CurrentMember(ARequest), Say('Sign in a program'), '<section class="signin"><h1>' +
     E(Say('Sign in a program')) + '</h1><p>' + Format(E(Say('The program %s on this computer asks to sign in as %s.')),
-    ['<b>' + E(Name) + '</b>', '<b>' + E(MemberById(UserId).Name) + '</b>']) + '</p><p>' +
+    ['<b>' + E(Name) + '</b> (127.0.0.1:' + E(Port) + ')', '<b>' + E(MemberById(UserId).Name) + '</b>']) + '</p><p>' +
     E(Say('Allow it only if you started this from that program just now. It will be able to do here what you can.')) +
     '</p><form class="appask" method="post" action="/signin-app"><button class="primary" name="answer" value="allow">' + E(Say('Allow')) +
     '</button> <button name="answer" value="cancel">' + E(Say('Cancel')) + '</button></form></section>'));
@@ -502,7 +503,9 @@ begin
   if not Ready(P.Name) or (ARequest.QueryFields.Values['state'] = '') or (ARequest.QueryFields.Values['state'] <> ARequest.CookieFields.Values['oauth']) or
     not WhoIsIt(ARequest, P, Id, Login) then
   begin
-    Strike(ClientIp(ARequest), 'password');
+    // the provider's own no (the member pressed Cancel there) is not a guess
+    if ARequest.QueryFields.Values['error'] = '' then
+      Strike(ClientIp(ARequest), 'password');
     if ForApp then
       AResponse.SendRedirect(AppReturn(ARequest, 'failed=1'))
     else

@@ -331,6 +331,7 @@ begin
   begin
     Answer.Add('members_total', IntValue('SELECT COUNT(*) FROM users WHERE closed = 0', []));
     Answer.Add('version', ExedraVersion);
+    Answer.Add('unlisted_proxies', UnlistedProxies);
     Answer.Add('members', MembersJSON('', 0, '', '', '', Can(Me, 'view-member-addresses')));
   end;
   List := TJSONArray.Create;
@@ -577,6 +578,13 @@ begin
       SendText(AResponse, 403, 'Only an admin makes or unmakes an admin.');
       Exit;
     end;
+    // nobody hands out, or takes away, more than they may do themselves
+    for R in (Clean + ',' + Current).Split([','], TStringSplitOptions.ExcludeEmpty) do
+      if (HasRole(Clean, R) <> HasRole(Current, R)) and not HoldsAllOf(Me, R) then
+      begin
+        SendText(AResponse, 403, 'The role ' + R + ' may do things you may not, so it is not yours to give or take.');
+        Exit;
+      end;
     Exec('UPDATE users SET roles = :r WHERE id = :u', [Clean, Id]);
     Log(Me.Name + ' set the roles of ' + Name + ' to ' + Clean);
   end;
@@ -671,6 +679,11 @@ begin
       SendText(AResponse, 400, 'There is no role called ' + R + '.');
       Exit;
     end;
+  if not Can(Me, Name) then
+  begin
+    SendText(AResponse, 403, 'You can only hand out a permission you hold yourself.');
+    Exit;
+  end;
   SetPermissionRoles(Name, Roles);
   Log(Me.Name + ' gave ' + Name + ' to ' + Roles);
   SendText(AResponse, 200, 'Saved.');
@@ -749,10 +762,10 @@ initialization
   RegisterSetting('scan_seconds', 'Seconds a scan of one file may take', '120', 'number', 'File scanning');
   RegisterPermission('view-admin', 'Open the admin page', 'moderator,admin');
   RegisterPermission('ban', 'Ban members from the whole site', 'moderator,admin');
-  RegisterPermission('manage-members', 'Give members site roles', 'admin');
+  RegisterPermission('manage-members', 'Give members site roles, and make password links for members (as good as an admin over them)', 'admin');
   RegisterPermission('view-member-addresses', 'See the addresses members use', 'admin');
   RegisterPermission('manage-settings', 'Change the site''s settings', 'admin');
-  RegisterPermission('manage-permissions', 'Change roles and permissions', 'admin');
+  RegisterPermission('manage-permissions', 'Change roles and the permissions the holder has', 'admin');
   HTTPRouter.RegisterRoute('/api/admin', rmGet, @ShowAdmin);
   HTTPRouter.RegisterRoute('/api/admin/members', rmGet, @ShowMembers);
   HTTPRouter.RegisterRoute('/api/admin/settings', rmPost, @SaveSettings);

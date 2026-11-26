@@ -24,8 +24,6 @@ procedure RegisterFilePath(const Prefix: string);
 { The crawler or tool a browser string names, as the visitor report counts
   it; '' for what looks like a browser. }
 function BotName(const Agent: string): string;
-{ An address of the house or the machines behind it, not a visitor's. }
-function PrivateAddress(const Ip: string): boolean;
 { The report over the window FromAt to ToAt (days or moments), as the
   admin's tab asks for it (Me and MyAddress: the admin, left out when Hide). }
 function VisitorReport(const FromAt, ToAt, Me, MyAddress, OwnHost: string; Hide: boolean): TJSONObject;
@@ -660,20 +658,6 @@ end;
 function IsPoll(const Path: string): boolean;
 begin
   Result := BrowserProof(Path) = 2;
-end;
-
-{ The house and the machines behind it. }
-function PrivateAddress(const Ip: string): boolean;
-var
-  Second: integer;
-begin
-  Result := StartsStr('127.', Ip) or StartsStr('10.', Ip) or StartsStr('192.168.', Ip) or (Ip = '::1') or StartsStr('fe80:', LowerCase(Ip)) or
-    StartsStr('fc', LowerCase(Ip)) or StartsStr('fd', LowerCase(Ip));
-  if not Result and StartsStr('172.', Ip) then
-  begin
-    Second := StrToIntDef(Copy(Ip, 5, Pos('.', Copy(Ip, 5, 4)) - 1), 0);
-    Result := (Second >= 16) and (Second <= 31);
-  end;
 end;
 
 function HostOf(const Url: string): string;

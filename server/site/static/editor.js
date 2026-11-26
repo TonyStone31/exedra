@@ -362,12 +362,19 @@
       return point;
     }
     let suggest = null, choices = [], chosen = 0, typedFrom = -1;
-    function closeSuggest() { if (suggest) { suggest.remove(); suggest = null; } choices = []; }
+    let eager = false;   // opened by an arrow key: a colon alone is enough
+    let typedAt = -1;    // where the caret was left by typing: arrows open the list only there
+    function closeSuggest() { if (suggest) { suggest.remove(); suggest = null; } choices = []; eager = false; }
     function takeChoice(i) {
       const e = choices[i];
       const at = box.selectionStart;
       closeSuggest();
       if (e && typedFrom >= 0) replace(typedFrom, at, e.emoji);
+    }
+    // The one selected row, for the keys and the pointer alike.
+    function choose(i) {
+      chosen = i;
+      Array.from(suggest.children).forEach(function (row, n) { row.classList.toggle('on', n === i); });
     }
     function showSuggest() {
       if (!suggest) {
@@ -379,25 +386,28 @@
       }
       suggest.replaceChildren();
       choices.forEach(function (e, i) {
-        const row = el('li', i === chosen ? 'on' : '');
+        const row = el('li');
         row.setAttribute('role', 'option');
         const key = e.match || e.keywords[0] || '';
         // a name that only says the keyword again is left out
         row.append(emojiFace(e), el('span', 'editor-suggest-key', ':' + key + ':'), el('span', 'editor-suggest-name', e.name === key ? '' : e.name));
+        row.addEventListener('mousemove', function () { if (chosen !== i) choose(i); });
         row.addEventListener('click', function () { takeChoice(i); });
         suggest.appendChild(row);
       });
+      choose(0);
       const p = caretPoint(typedFrom);
       suggest.style.top = Math.min(p.top + 4, window.innerHeight - suggest.offsetHeight - 8) + 'px';
       suggest.style.left = Math.max(8, Math.min(p.left, window.innerWidth - suggest.offsetWidth - 8)) + 'px';
     }
     if (opts.emoji) {
-      box.addEventListener('input', function (ev) {
+      // ev: the input that brought this, none when an arrow key asks
+      const offer = function (ev) {
         const at = box.selectionStart;
         // the keyword being typed, as every part finds it (emoji-names.js);
         // one finished with its second colon becomes its emoji at once
-        const typing = at === box.selectionEnd && EmojiNames.typed(box.value, at);
-        if (!typing || (typing.whole && ev.data !== ':')) { closeSuggest(); return; }
+        const typing = at === box.selectionEnd && EmojiNames.typed(box.value, at, eager);
+        if (!typing || (typing.whole && !(ev && ev.data === ':'))) { closeSuggest(); return; }
         typedFrom = typing.from;
         emojiSet().then(function (list) {
           if (box.selectionStart !== at) return;
@@ -408,19 +418,25 @@
             return;
           }
           choices = EmojiNames.matches(list, typing.word).slice(0, 8);
-          chosen = 0;
           if (choices.length) showSuggest(); else closeSuggest();
         });
-      });
+      };
+      box.addEventListener('input', function (ev) { offer(ev); typedAt = box.selectionStart; });
       box.addEventListener('keydown', function (e) {
-        if (!suggest || !choices.length) return;
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          chosen = (chosen + (e.key === 'ArrowDown' ? 1 : choices.length - 1)) % choices.length;
-          showSuggest();
+        const arrow = (e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey;
+        if (!suggest || !choices.length) {
+          // an arrow key after a colon, or a colon and one letter, opens the list
+          const short = arrow && box.selectionStart === typedAt && box.selectionEnd === typedAt && EmojiNames.typed(box.value, typedAt, true);
+          if (!short || short.whole || short.word.length > 1) return;
+          eager = true;
+          offer();
+        } else if (arrow) {
+          choose((chosen + (e.key === 'ArrowDown' ? 1 : choices.length - 1)) % choices.length);
         } else if (e.key === 'Enter' || e.key === 'Tab') {
           takeChoice(chosen);
         } else if (e.key === 'Escape') {
           closeSuggest();
+          typedAt = -1;
         } else return;
         e.preventDefault();
         e.stopImmediatePropagation();

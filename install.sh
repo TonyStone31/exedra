@@ -57,6 +57,16 @@ download() { # download <address> <file>
   elif command -v fetch >/dev/null 2>&1; then fetch -q -o "$2" "$1"
   else die "curl or wget is needed to download a release"; fi
 }
+# the key the releases are signed with; its private half never leaves the maintainer
+KEY='-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvIghl8CKp04NwDUaYA0lLMvbNp8t
+twEyFNcqpGj7NFQvgusyrCeQLxcoIje7M1fqrDtZouAi986pFzPZN8/JIg==
+-----END PUBLIC KEY-----'
+signed() { # signed <file> <signature>: whether the maintainer's key signed the file
+  command -v openssl >/dev/null 2>&1 || die "openssl is needed to check the release's signature; install it and run this again"
+  echo "$KEY" > "$TMP/release.pub"
+  openssl dgst -sha256 -verify "$TMP/release.pub" -signature "$2" "$1" >/dev/null 2>&1
+}
 checksum() { # the SHA-256 of a file
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
   else sha256 -q "$1"; fi
@@ -109,6 +119,10 @@ if [ -n "$FROM" ]; then
     have=$(checksum "$TMP/release.tar.gz")
     [ "$want" = "$have" ] || die "$FROM does not match $FROM.sha256; nothing was changed"
   fi
+  # and its signature, the same way
+  if [ -f "$FROM.sig" ]; then
+    signed "$TMP/release.tar.gz" "$FROM.sig" || die "$FROM is not signed by Exedra's release key; nothing was changed"
+  fi
 else
   version=$(newest)
   [ -n "$version" ] || die "no release found: GitHub has none, or cannot be reached"
@@ -123,13 +137,16 @@ else
   want=$(cut -d' ' -f1 "$TMP/release.sha256")
   have=$(checksum "$TMP/release.tar.gz")
   [ "$want" = "$have" ] || die "the download does not match its checksum; nothing was changed"
+  # the checksum comes from the same place as the file; the signature does not
+  download "https://github.com/$REPO/releases/download/v$version/$name.sig" "$TMP/release.sig" || die "the release has no signature; nothing was changed"
+  signed "$TMP/release.tar.gz" "$TMP/release.sig" || die "the download is not signed by Exedra's release key; nothing was changed"
 fi
 
 mkdir "$TMP/new"
 tar -xzf "$TMP/release.tar.gz" -C "$TMP/new" --strip-components=1
 [ -x "$TMP/new/exedra" ] && [ -d "$TMP/new/site/static" ] || die "that file is not an Exedra release"
-# the version, asked of the program; a temporary folder that runs nothing is no reason to stop
-new=$("$TMP/new/exedra" --version 2>/dev/null | sed 's/^Exedra //') || true
+# the version, read from its file: nothing downloaded runs before it is installed
+new=$(cat "$TMP/new/VERSION" 2>/dev/null) || true
 [ -n "$new" ] || new="the new version"
 
 running=0
@@ -160,8 +177,13 @@ if [ "$SERVICE" = 1 ]; then
   if id exedra >/dev/null 2>&1; then :
   elif [ "$OS" = freebsd ]; then pw useradd exedra -d "$DIR" -s /usr/sbin/nologin -c Exedra
   else useradd --system --home "$DIR" --shell /usr/sbin/nologin exedra; fi
-  mkdir -p "$DIR/data"
-  chown -R exedra:exedra "$DIR"
+  # root owns the program and its pages; the service's user owns only what
+  # it writes, and reads the config file through its group
+  mkdir -p "$DIR/data" "$DIR/wiki-images"
+  chown -R 0:0 "$DIR"
+  chown -R exedra:exedra "$DIR/data" "$DIR/wiki-images"
+  chown 0:exedra "$DIR/exedra.ini"
+  chmod 640 "$DIR/exedra.ini"
   if [ "$OS" = freebsd ]; then
     # the rc.d script, switched on in rc.conf
     if [ ! -f /usr/local/etc/rc.d/exedra ]; then

@@ -2003,7 +2003,7 @@ end;
 initialization
   Remade := TStringList.Create;
   InitCriticalSection(JobLock);
-  RegisterPermission('manage-backups', 'Make, download and restore backups of the whole site', 'admin');
+  RegisterPermission('manage-backups', 'Make, download and restore backups of the whole site (as good as an admin: a backup holds everything)', 'admin');
   RegisterAdminSection('backup', 'Backup', 'manage-backups');
   RegisterSetting('backup_keep', 'Backups made on the admin page to keep (the oldest are dropped; uploads stay)', '5', 'number', 'Safety');
   RegisterAdminRoute('/api/admin/backup', 'manage-backups');

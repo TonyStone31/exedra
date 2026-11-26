@@ -670,7 +670,7 @@ initialization
   RegisterFilePath('/catalog-images/');
   RegisterFilePath('/catalog-badge/');
   RegisterFilePath('/catalog-count');
-  RegisterPictureFolder('/catalog-images/', True);
+  RegisterPictureFolder('/catalog-images/');
   RegisterSearchPlace('/catalog', 'catalog');
   RegisterVisitorPart('catalog', '/catalog');
   RegisterVisitorPart('catalog', '/catalog-');

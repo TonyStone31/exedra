@@ -99,10 +99,19 @@ procedure SendText(AResponse: TResponse; Code: integer; const Text: string);
 { Sends and frees Data. }
 procedure SendJSON(AResponse: TResponse; Data: TJSONData);
 function ClientIp(ARequest: TRequest): string;
+{ An address of the house or the machines behind it, not a visitor's. }
+function PrivateAddress(const Ip: string): boolean;
+{ Machines of the house seen passing on other people's requests without
+  being named under proxies in the config file, space separated. }
+function UnlistedProxies: string;
 { A form sent from another site's page: the browser names that page's
   origin, or says the request is cross-site.  Apps and scripts that send
   neither are not refused by it. }
 function FromAnotherSite(ARequest: TRequest): boolean;
+{ The session or program token a request carries, '' when it carries none. }
+function TokenOf(ARequest: TRequest): string;
+{ True when the site is reached over HTTPS, so its cookies must be too. }
+function SecureCookies: boolean;
 { A LIKE pattern for names starting with S, its % and _ taken literally. }
 function LikePrefix(const S: string): string;
 { For `exedra --admin Name`: makes an existing member an admin. }
@@ -124,6 +133,9 @@ function NewSession(UserId: integer; const Kind, Name: string; Days: integer): s
 
 const
   AppSessionDays = 365;
+  { users.verified for a member let in while the site had no mail: they may
+    write, and no mail goes to the address, which nobody confirmed. }
+  UNCHECKED = 2;
   { The name of an account closed without one, before its number. }
   FormerMember = 'Former member';
 
@@ -379,6 +391,8 @@ begin
       Exit;
     // the names they had stay taken, and lead nowhere
     Exec('UPDATE former_names SET hidden = 1 WHERE user_id = :u', [UserId]);
+    // the first name, kept for the password and the keys wiped below, would tell who this was
+    Exec('UPDATE users SET auth_name = name, key_name = name WHERE id = :u', [UserId]);
   end;
   Exec('START TRANSACTION', []);
   try
@@ -537,6 +551,48 @@ begin
   AResponse.SendContent;
 end;
 
+{ The house and the machines behind it. }
+function PrivateAddress(const Ip: string): boolean;
+var
+  Second: integer;
+begin
+  Result := StartsStr('127.', Ip) or StartsStr('10.', Ip) or StartsStr('192.168.', Ip) or (Ip = '::1') or StartsStr('fe80:', LowerCase(Ip)) or
+    StartsStr('fc', LowerCase(Ip)) or StartsStr('fd', LowerCase(Ip));
+  if not Result and StartsStr('172.', Ip) then
+  begin
+    Second := StrToIntDef(Copy(Ip, 5, Pos('.', Copy(Ip, 5, 4)) - 1), 0);
+    Result := (Second >= 16) and (Second <= 31);
+  end;
+end;
+
+var
+  Forwarders: string = '';
+  ForwardLock: TRTLCriticalSection;
+
+{ A proxy the config file does not name: every visitor arrives as its
+  address, so the guard must not block it, and the admin page says so. }
+procedure NoteForwarder(const Ip: string);
+begin
+  EnterCriticalSection(ForwardLock);
+  try
+    if (Pos(' ' + Ip + ' ', ' ' + Forwarders + ' ') = 0) and (Length(Forwarders) < 500) then
+      Forwarders := Trim(Forwarders + ' ' + Ip);
+  finally
+    LeaveCriticalSection(ForwardLock);
+  end;
+end;
+
+function UnlistedProxies: string;
+begin
+  EnterCriticalSection(ForwardLock);
+  try
+    Result := Forwarders;
+    UniqueString(Result);
+  finally
+    LeaveCriticalSection(ForwardLock);
+  end;
+end;
+
 { Behind a proxy the config names ([site] proxies), the proxy names the
   visitor.  Anyone else could write that header, so it counts only from
   there. }
@@ -560,7 +616,11 @@ begin
       if Result = CanonicalIp(Proxy) then
         Trusted := True;
     if not Trusted then
+    begin
+      if (I = High(Addresses)) and PrivateAddress(Result) then
+        NoteForwarder(Result);
       Exit;
+    end;
     Candidate := CanonicalIp(Addresses[I]);
     if Candidate = '' then
       Exit;
@@ -572,17 +632,16 @@ end;
 
 function TokenOf(ARequest: TRequest): string;
 begin
+  // another kind of Authorization (a proxy's own sign-in) is not ours to judge
   Result := ARequest.Authorization;
-  if Result = '' then
+  if not AnsiStartsText('Bearer ', Result) then
     Result := ARequest.CookieFields.Values['sid']
-  else if AnsiStartsText('Bearer ', Result) then
+  else
   begin
     Result := Trim(Copy(Result, 8, MaxInt));
     if Result = '' then
       Result := 'invalid';
-  end
-  else
-    Result := 'invalid';
+  end;
 end;
 
 function LookupMember(ARequest: TRequest): TMember;
@@ -602,7 +661,6 @@ begin
   if not IsHex(Token, 64) then
   begin
     NoteTry(ClientIp(ARequest), 'bad-token');
-    Strike(ClientIp(ARequest), 'password');
     Exit;
   end;
   with Query('SELECT u.id, u.name, u.roles, u.banned, u.verified FROM sessions s JOIN users u ON u.id = s.user_id' +
@@ -614,16 +672,15 @@ begin
       Result.Name := Fields[1].AsString;
       Result.Roles := Fields[2].AsString;
       Result.Banned := Fields[3].AsInteger = 1;
-      Result.Verified := Fields[4].AsInteger = 1;
+      Result.Verified := Fields[4].AsInteger > 0;
     end;
   finally
     Free;
   end;
+  // a token is too long to guess, so a wrong one (revoked, expired) is
+  // slowed by its own limit and never counts as guessing a password
   if Result.Id = 0 then
-  begin
     NoteTry(ClientIp(ARequest), 'bad-token');
-    Strike(ClientIp(ARequest), 'password');
-  end;
 end;
 
 var
@@ -712,7 +769,7 @@ begin
       Result.Name := Fields[1].AsString;
       Result.Roles := Fields[2].AsString;
       Result.Banned := Fields[3].AsInteger = 1;
-      Result.Verified := Fields[4].AsInteger = 1;
+      Result.Verified := Fields[4].AsInteger > 0;
     end;
   finally
     Free;
@@ -784,6 +841,11 @@ begin
     Exec('UPDATE users SET roles = ''admin'', banned = 0 WHERE name = :n', [Name]);
 end;
 
+function SecureCookies: boolean;
+begin
+  Result := (Setting('https', '0') = '1') or StartsText('https://', Setting('url', ''));
+end;
+
 procedure SetSessionCookie(AResponse: TResponse; const Token: string; Days: integer);
 begin
   with AResponse.Cookies.Add do
@@ -794,7 +856,7 @@ begin
     Expires := NowUTC + Days;
     HttpOnly := True;
     SameSite := ssLax;
-    Secure := Setting('https', '0') = '1';
+    Secure := SecureCookies;
   end;
 end;
 
@@ -849,7 +911,7 @@ begin
     if Refused <> '' then
       raise ENameUnavailable.Create(Refused);
     Exec('INSERT INTO users (name, auth_name, key_name, email, verified, auth_hash, public_key, wrapped_key)' + ' VALUES (:n, :a, :k, :e, :v, :h, :p, :w)',
-      [Name, Name, Name, LowerCase(Email), Ord(Verified or not MailReady), Hash, Pub, Wrapped]);
+      [Name, Name, Name, LowerCase(Email), IfThen(Verified, 1, IfThen(MailReady, 0, UNCHECKED)), Hash, Pub, Wrapped]);
     Result := LastId;
     for Hook in NewMemberHooks do
       Hook(Result);
@@ -949,7 +1011,7 @@ begin
   Email := Trim(ARequest.ContentFields.Values['email']);
   if Me.Id = 0 then
     SendText(AResponse, 403, 'Sign in first.')
-  else if Me.Verified then
+  else if IntValue('SELECT verified FROM users WHERE id = :u', [Me.Id]) = 1 then
     SendText(AResponse, 200, 'Your address is confirmed already.')
   else if TooManyTries(ClientIp(ARequest), 'verify', 3, 60) then
     SendText(AResponse, 429, 'Three links an hour is the most. Look in your spam folder too.')
@@ -1009,7 +1071,7 @@ begin
     SendText(AResponse, 409, 'Another account uses that address.')
   else if not OwnPassword(ARequest, AResponse, Me.Id) then
     Exit
-  else if Email = VarToStr(Value('SELECT email FROM users WHERE id = :u', [Me.Id])) then
+  else if IntValue('SELECT COUNT(*) FROM users WHERE id = :u AND email = :e AND verified <> :v', [Me.Id, Email, UNCHECKED]) > 0 then
     SendText(AResponse, 200, 'That is your address already.')
   else if MailReady then
   begin
@@ -1021,7 +1083,8 @@ begin
   end
   else
   begin
-    Exec('UPDATE users SET email = :e WHERE id = :u', [Email, Me.Id]);
+    // nobody confirmed this one: no mail goes to it until a link to it is opened
+    Exec('UPDATE users SET email = :e, verified = :v WHERE id = :u', [Email, UNCHECKED, Me.Id]);
     SendText(AResponse, 200, 'Saved.');
   end;
 end;
@@ -1060,7 +1123,7 @@ begin
       SendText(AResponse, 422, 'That is not an email address.')
     else if MailReady and not ValidEmail(Email) then
       SendText(AResponse, 422, 'A new account needs an email address, to confirm it is a person.')
-    else if MailReady and EmailTaken(Email) then
+    else if (Email <> '') and EmailTaken(Email) then
       SendText(AResponse, 409, 'Another account uses that address.')
     else
     begin
@@ -1725,6 +1788,7 @@ initialization
     '180', 'number', 'Members');
   RegisterChore(@ForgetOldAddresses, 60);
   InitCriticalSection(AddressLock);
+  InitCriticalSection(ForwardLock);
   AddressSeen := TStringList.Create;
   AddressSeen.Sorted := True;
   AddressSeen.Duplicates := dupIgnore;

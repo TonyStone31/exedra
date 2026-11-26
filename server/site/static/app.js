@@ -101,18 +101,28 @@
     return box.scrollHeight - box.scrollTop - box.clientHeight < 160;
   }
 
-  // A list read at its bottom stays there when it gets shorter: a phone's
-  // keyboard opening or the composer growing shrinks it without a scroll
-  // event, and nearBottom would then miss the next message.
+  // A list read at its bottom stays there when it gets shorter (a phone's
+  // keyboard opening, the composer growing) or a message in it gets taller
+  // (a reaction, an edit, a picture arriving): neither sends a scroll
+  // event.  Watched are the list and each message drawn (chat.js).
   const pinWatch = new ResizeObserver(function (entries) {
     for (const e of entries) {
+      const box = 'pinned' in e.target ? e.target : e.target.parentNode;
       if (!e.target.isConnected) pinWatch.unobserve(e.target);
-      else if (e.target.pinned && !e.target.noPin) e.target.scrollTop = e.target.scrollHeight;
+      else if (box.pinned && !box.noPin) {
+        box.scrollTop = box.scrollHeight;
+        box.pinTop = box.scrollTop;
+      }
     }
   });
   function keepPinned(box) {
     box.pinned = true;
-    box.addEventListener('scroll', function () { box.pinned = !box.noPin && nearBottom(box); });
+    // The scroll event of the watch's own move comes a frame late: a list
+    // still where the watch put it has not been left, however far its bottom now is.
+    box.addEventListener('scroll', function () {
+      box.pinned = !box.noPin && (nearBottom(box) || box.scrollTop === box.pinTop);
+      box.pinTop = -1;
+    });
     pinWatch.observe(box);
   }
   keepPinned(stream);
@@ -358,6 +368,10 @@
     body.classList.remove('menu');
     route(SiteBase.strip(a.pathname), fromList ? 'replace' : true);
   });
+
+  // A link in a message opens a new tab and the conversation stays: all
+  // but a picture, shown over the page, and what the router above shows.
+  Side.newTabLinks('.msg', true, function (a) { return a.classList.contains('shot') || isAppPath(SiteBase.strip(a.pathname)); });
 
   // ------------------------------------------------------------ the back key
 
@@ -1139,7 +1153,7 @@
     subTabs: subTabs, facts: facts, chip: chip, waiting: waiting, $: $, stream: stream, Site: Site,
     iconButton: iconButton, sizeText: sizeText, syncNow: syncNow, toggleMenu: toggleMenu,
     locale: locale, clock: clock, shared: shared, loadScript: loadScript, parts: Parts, body: body,
-    panel: panel, avatar: avatar, dayLabel: dayLabel, keepPinned: keepPinned,
+    panel: panel, avatar: avatar, dayLabel: dayLabel, keepPinned: keepPinned, pinWatch: pinWatch,
     nearBottom: nearBottom, may: may, mayHere: mayHere, notify: notify, popMenu: popMenu,
     joinForm: joinForm, confirmBox: confirmBox, layerOpened: layerOpened, layerClosed: layerClosed,
     offerNotifications: offerNotifications, subscribePush: subscribePush};

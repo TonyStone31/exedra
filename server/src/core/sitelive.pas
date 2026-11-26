@@ -284,8 +284,11 @@ begin
         Exit;
       Who := CurrentMember(aRequest);
       Upgrading := Who.Id;
-      if (aRequest.Authorization <> '') or (aRequest.CookieFields.Values['sid'] <> '') then
+      if TokenOf(aRequest) <> '' then
         aAllow := Upgrading > 0;
+      // a page of another site listens as a guest does, whoever is signed in
+      if FromAnotherSite(aRequest) then
+        Upgrading := 0;
       // a banned member listens as a guest does: nothing private comes
       if Who.Banned then
         Upgrading := 0;

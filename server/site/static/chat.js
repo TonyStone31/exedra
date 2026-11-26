@@ -581,6 +581,7 @@
       content.appendChild(t);
     }
     node.appendChild(content);
+    C.pinWatch.observe(node);   // its list keeps the bottom when this gets taller
     return node;
   }
 
@@ -593,12 +594,6 @@
         img.src = f.url;
         img.alt = f.name;
         img.loading = 'lazy';
-        // A picture that arrives after the scroll keeps the stream at the bottom.
-        img.addEventListener('load', function () {
-          const list = img.closest('#stream, .threadlist');
-          if (list && (list.pinned || list.scrollHeight - list.scrollTop - list.clientHeight < img.height + 200))
-            list.scrollTop = list.scrollHeight;
-        });
         a.appendChild(img);
         box.appendChild(a);
       } else {
@@ -1430,10 +1425,18 @@
 
   // --------------------------------------------------------------- composer
 
+  // A box grows with its text, to 300px or to what the list above it can
+  // give up: a phone's keyboard leaves little room, and a box taller than
+  // that would have its last lines under the keyboard.
   function fit(area) {
     area.style.height = 'auto';
-    area.style.height = Math.min(area.scrollHeight, 300) + 'px';
+    const list = area.closest('#main, #panel').querySelector('#stream, .threadlist');
+    area.style.height = Math.max(area.clientHeight, Math.min(area.scrollHeight, 300, area.clientHeight + list.clientHeight - 24)) + 'px';
   }
+  // the keyboard opening, or changing its height, changes that room
+  (window.visualViewport || window).addEventListener('resize', function () {
+    document.querySelectorAll('.composer textarea').forEach(fit);
+  });
 
   // True while the caret sits inside an open ``` block, where Enter makes a new line.
   function inFence(area) {
@@ -1706,6 +1709,11 @@
     let items = [];
     let index = 0;
     let start = 0;
+    let eager = false;   // opened by an arrow key: a colon alone is enough
+    let typedAt = -1;    // where the caret was left by typing: arrows open the list only there
+    let waiting = false; // a lookup is under way
+    let ahead = 0;       // arrow keys pressed meanwhile, down less up
+    let taking = false;  // Enter or Tab pressed after them
 
     const word = function () {
       const before = area.value.slice(0, area.selectionStart);
@@ -1713,82 +1721,123 @@
       if (m && m[1] === '/') return {kind: '/', text: m[2], at: 0};
       if (m) return {kind: m[2], text: m[3], at: before.length - m[3].length - 1};
       // :name for an emoji; the closing colon of :name: makes it the emoji at once
-      const e = EmojiNames.typed(area.value, area.selectionStart);
+      const e = EmojiNames.typed(area.value, area.selectionStart, eager);
       return e && {kind: ':', text: e.word, at: e.from, whole: e.whole};
+    };
+
+    // The one selected row, for the keys and the pointer alike, kept in view.
+    const select = function (i) {
+      index = i;
+      Array.from(box.children).forEach(function (c, n) { c.classList.toggle('on', n === i); });
+      const row = box.children[i];
+      box.scrollTop = Math.min(row.offsetTop, Math.max(box.scrollTop, row.offsetTop + row.offsetHeight - box.clientHeight));
     };
 
     const show = function (list) {
       items = list.slice(0, 8);
-      index = 0;
       box.replaceChildren();
       box.hidden = !items.length;
       items.forEach(function (it, i) {
-        const row = el('div', 'item' + (i === 0 ? ' on' : ''));
+        const row = el('div', 'item');
         row.appendChild(el('b', '', it.label));
         if (it.hint) row.appendChild(el('span', '', it.hint));
+        row.addEventListener('mousemove', function () { if (index !== i) select(i); });
         row.addEventListener('mousedown', function (e) { e.preventDefault(); index = i; pick(); });
         box.appendChild(row);
       });
+      // arrow keys pressed while the list was on its way count from its first row
+      if (items.length) select(((ahead % items.length) + items.length) % items.length);
+      const now = taking;
+      waiting = taking = false;
+      ahead = 0;
+      if (now) pick();
+    };
+
+    const close = function () {
+      box.hidden = true;
+      items = [];
+      eager = waiting = taking = false;
+      ahead = 0;
     };
 
     const pick = function () {
       const it = items[index];
       if (!it) return;
       area.setRangeText(it.insert, start, area.selectionStart, 'end');
-      box.hidden = true;
-      items = [];
+      close();
       area.focus();
     };
 
+    // What fits the word, for every kind alike: label, hint, insert.
+    const found = async function (w, turn) {
+      const low = w.text.toLowerCase();
+      if (w.kind === '@')
+        return (await get('/api/users?q=' + enc(w.text))).map(function (u) { return {label: '@' + u.name, insert: '@' + u.name + ' '}; });
+      if (w.kind === '#') {
+        let all = S.rooms.filter(function (r) { return r.kind !== 'shelf'; }).map(function (r) { return {slug: r.slug, title: r.title}; });
+        for (const more of Extras.rooms) all = all.concat(await more(w.text));
+        const seen = {};
+        return all.filter(function (r) {
+          if (seen[r.slug] || !r.slug.startsWith(low)) return false;
+          seen[r.slug] = true;
+          return true;
+        }).map(function (r) { return {label: '#' + r.slug, hint: r.title, insert: '#' + r.slug + ' '}; });
+      }
+      if (w.kind === ':') {
+        const set = await emojiSet();
+        if (!w.whole) return EmojiNames.matches(set, w.text).map(function (e) { return {label: e.emoji, hint: e.match || e.keywords[0], insert: e.emoji + ' '}; });
+        const named = EmojiNames.named(set, w.text);
+        if (named && turn === asked && area.selectionStart === typedAt) area.setRangeText(named.emoji, start, typedAt, 'end');
+        return [];
+      }
+      if (!S.commands) S.commands = await get('/api/commands');
+      return S.commands.filter(function (c) { return commands(c) && c.name.startsWith(low); })
+        .map(function (c) { return {label: '/' + c.name, hint: c.usage, insert: '/' + c.name + ' '}; });
+    };
+
     let timer = 0;
+    let asked = 0;   // counts the lookups: an answer that is not the latest is dropped
     const update = function () {
-      const w = word();
+      const at = typedAt = area.selectionStart;
+      const w = word(), turn = ++asked;
       clearTimeout(timer);
-      if (!w) { box.hidden = true; items = []; return; }
+      if (!w) { close(); return; }
       start = w.at;
+      waiting = true;
       timer = setTimeout(async function () {
-        try {
-          if (w.kind === '@') {
-            const list = await get('/api/users?q=' + enc(w.text));
-            show(list.map(function (u) { return {label: '@' + u.name, insert: '@' + u.name + ' '}; }));
-          } else if (w.kind === '#') {
-            let all = S.rooms.filter(function (r) { return r.kind !== 'shelf'; }).map(function (r) { return {slug: r.slug, title: r.title}; });
-            for (const more of Extras.rooms) all = all.concat(await more(w.text));
-            const seen = {};
-            show(all.filter(function (r) {
-              if (seen[r.slug] || !r.slug.startsWith(w.text.toLowerCase())) return false;
-              seen[r.slug] = true;
-              return true;
-            }).map(function (r) { return {label: '#' + r.slug, hint: r.title, insert: '#' + r.slug + ' '}; }));
-          } else if (w.kind === ':') {
-            const set = await emojiSet();
-            const now = word();
-            if (!now || now.kind !== ':' || now.text !== w.text) return;
-            const named = w.whole && EmojiNames.named(set, w.text);
-            if (named) area.setRangeText(named.emoji, start, area.selectionStart, 'end');
-            show(w.whole ? [] : EmojiNames.matches(set, w.text).map(function (e) { return {label: e.emoji, hint: e.match, insert: e.emoji + ' '}; }));
-          } else {
-            if (!S.commands) S.commands = await get('/api/commands');
-            show(S.commands.filter(function (c) { return commands(c) && c.name.startsWith(w.text.toLowerCase()); })
-              .map(function (c) { return {label: '/' + c.name, hint: c.usage, insert: '/' + c.name + ' '}; }));
-          }
-        } catch (err) { box.hidden = true; }
+        let list = [];
+        try { list = await found(w, turn); } catch (err) { }
+        // the caret has left meanwhile: nothing to offer there
+        if (turn === asked) show(area.selectionStart === at ? list : []);
       }, w.kind === '@' ? 150 : 0);
     };
 
     const handle = function (e) {
-      if (box.hidden || !items.length) return false;
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const arrow = (e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey;
+      const step = e.key === 'ArrowDown' ? 1 : -1, take = e.key === 'Enter' || e.key === 'Tab';
+      if (box.hidden || !items.length) {
+        // the list is on its way: arrow keys are kept for it and the caret
+        // stays, and Enter or Tab after them takes the row they lead to
+        if (waiting && (arrow || (take && ahead))) {
+          if (arrow) ahead += step; else taking = true;
+          e.preventDefault();
+          return true;
+        }
+        if (!arrow) return false;
+        // an arrow key after a colon, or a colon and one letter, opens the list
+        eager = area.selectionStart === typedAt && area.selectionEnd === typedAt;
+        const w = eager && word();
+        if (!w || w.kind !== ':' || w.whole || w.text.length > 1) { eager = false; return false; }
         e.preventDefault();
-        index = (index + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
-        Array.from(box.children).forEach(function (c, i) { c.classList.toggle('on', i === index); });
+        update();
         return true;
       }
-      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(); return true; }
-      if (e.key === 'Escape') { box.hidden = true; return true; }
+      if (arrow) { e.preventDefault(); select((index + step + items.length) % items.length); return true; }
+      if (take) { e.preventDefault(); pick(); return true; }
+      if (e.key === 'Escape') { close(); typedAt = -1; return true; }
       return false;
     };
-    area.addEventListener('blur', function () { setTimeout(function () { box.hidden = true; }, 150); });
+    area.addEventListener('blur', function () { setTimeout(close, 150); });
     return {update: update, handle: handle};
   }
 
@@ -1841,6 +1890,18 @@
       lock.appendChild(flip);
     }
     titles.appendChild(lock);
+    if (S.dmLocked && Me.name) Keys.partner(who.name).then(function (p) {
+      const code = el('p', 'topic', t('Safety code: %s', p.code));
+      code.title = t('The same code shows on their side. Compare it another way (a call, in person) to be sure nobody sits between you.');
+      titles.appendChild(code);
+      if (!p.changed) return;
+      const warn = el('p', 'topic problem', t('%s has a new key since you last wrote here. That happens after a password reset. If you did not expect it, compare the safety code with them before you write anything private.', who.name) + ' ');
+      const ok = el('button', 'small-link', t('I checked'));
+      ok.type = 'button';
+      ok.addEventListener('click', function () { Keys.trust(who.name).then(function () { warn.remove(); }).catch(failed); });
+      warn.appendChild(ok);
+      titles.appendChild(warn);
+    }).catch(function () { });
     head.append(menu, titles);
     if (Me.name) {
       // The same as the arrow on its row in the room list, where a phone

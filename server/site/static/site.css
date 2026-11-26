@@ -6,7 +6,7 @@
   --side: #0e1420; --side-2: #151d2b; --side-ink: #cfd6e3; --side-dim: #7d899e; --side-active: #233250;
   --side-line: #1d2636;
   --accent: #2c63d6; --accent-ink: #ffffff; --accent-soft: #e9f0ff; --teal: #0f9d8f; --amber: #c27a06;
-  --red: #d64545; --mention: #fff5dc; --shadow: 0 6px 24px rgba(15, 21, 32, .12);
+  --red: #d64545; --mention: #fff5dc; --shadow: 0 6px 24px rgba(15, 21, 32, .16); --pop-line: #c3cad6;
   --code-bg: #f5f7fb; --code-bar: #eceff5;
   --k: #8f3fb6; --c: #6b7686; --s: #1d7d4f; --n: #b65a00; --d: #2c63d6; --sym: #3c4656;
   color-scheme: light;
@@ -16,7 +16,7 @@
   --dim: #9ba7bb; --faint: #6c788c;
   --side: #070a10; --side-2: #0d121b; --side-active: #1b2840; --side-line: #161e2b;
   --accent: #5b8cff; --accent-soft: #15213a; --teal: #3fd1c0; --amber: #f2b042; --red: #ff6b6b;
-  --mention: #2a2312; --shadow: 0 8px 28px rgba(0, 0, 0, .45);
+  --mention: #2a2312; --shadow: 0 8px 28px rgba(0, 0, 0, .45); --pop-line: #2f3b50;
   --code-bg: #0a0e15; --code-bar: #111827;
   --k: #c792ea; --c: #6f7d93; --s: #9ccc65; --n: #f7a35c; --d: #82aaff; --sym: #a9b4c6;
   color-scheme: dark;
@@ -27,7 +27,7 @@
     --dim: #9ba7bb; --faint: #6c788c;
     --side: #070a10; --side-2: #0d121b; --side-active: #1b2840; --side-line: #161e2b;
     --accent: #5b8cff; --accent-soft: #15213a; --teal: #3fd1c0; --amber: #f2b042; --red: #ff6b6b;
-    --mention: #2a2312; --shadow: 0 8px 28px rgba(0, 0, 0, .45);
+    --mention: #2a2312; --shadow: 0 8px 28px rgba(0, 0, 0, .45); --pop-line: #2f3b50;
     --code-bg: #0a0e15; --code-bar: #111827;
     --k: #c792ea; --c: #6f7d93; --s: #9ccc65; --n: #f7a35c; --d: #82aaff; --sym: #a9b4c6;
     color-scheme: dark;
@@ -49,11 +49,25 @@ body.guest .member-only, body.member .guest-only { display: none !important; }
 
 .icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8;
   stroke-linecap: round; stroke-linejoin: round; flex: none; }
+/* The grid alone centers the icon: no padding (a button's own would leave a
+   small one less room than its icon) and no line box, so no font moves it. */
 .iconbtn {
-  display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px;
+  display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; line-height: 0; border-radius: 8px;
   border: 0; background: none; color: var(--dim);
 }
 .iconbtn:hover { background: var(--hover); color: var(--ink); }
+.iconbtn .icon { display: block; }
+/* The small round arrow buttons, on a message and on a sidebar row.  The
+   arrow is a mask the size of the button, so the screen places it with the
+   button's own edge: an svg inside is placed apart, and sits half a pixel
+   off wherever the button lands between pixels. */
+.msg .more, .room .rowmenu { width: 20px; height: 20px; border-radius: 50%; }
+.msg .more .icon, .room .rowmenu .icon { display: none; }
+.msg .more::after, .room .rowmenu::after {
+  content: ""; width: 20px; height: 20px; background: currentColor;
+  --arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  -webkit-mask: var(--arrow) center / 20px 20px no-repeat; mask: var(--arrow) center / 20px 20px no-repeat;
+}
 .primary, a.primary {
   background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 6px 14px;
   font-weight: 600; text-decoration: none; display: inline-block;
@@ -113,9 +127,11 @@ body.withpanel #layout { grid-template-columns: 264px minmax(0, 1fr) 400px; }
 .room.unread { color: #fff; font-weight: 700; }
 .room .sigil { width: 14px; text-align: center; opacity: .6; }
 .room .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.room .rowmenu { width: 22px; height: 22px; color: var(--side-dim); opacity: 0; }
+.room .rowmenu { color: var(--side-dim); opacity: 0; }
 .room.quiet .name { opacity: .55; }
 .room:hover .rowmenu, .room.active .rowmenu, .room .rowmenu:focus { opacity: 1; }
+/* the sidebar is dark in both themes, and so is the circle under its arrow */
+.room .rowmenu:hover, .room .rowmenu:focus-visible { background: rgba(255, 255, 255, .14); color: #fff; }
 @media (pointer: coarse) { .room .rowmenu { opacity: 1; } }
 .popmenu { position: fixed; z-index: 50; display: grid; min-width: 180px; padding: 6px; background: var(--side-2);
   border: 1px solid var(--side-line); border-radius: 10px; box-shadow: var(--shadow); }
@@ -164,6 +180,7 @@ body.withpanel #layout { grid-template-columns: 264px minmax(0, 1fr) 400px; }
 .topic.editable:hover { color: var(--ink); }
 .topic.secure { display: flex; align-items: center; gap: 4px; color: var(--teal); }
 .topic.secure .icon { width: 14px; height: 14px; }
+.topic.problem { color: var(--red); white-space: normal; }
 .here { display: flex; align-items: center; background: none; border: 0; padding: 2px 4px; border-radius: 8px;
   cursor: pointer; color: inherit; font: inherit; }
 .here:hover { background: var(--hover); }
@@ -184,26 +201,26 @@ body.withpanel #layout { grid-template-columns: 264px minmax(0, 1fr) 400px; }
 /* The stream */
 #stream { flex: 1; overflow-y: auto; padding: 8px 0 12px; min-height: 0; }
 .msg {
-  position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 12px;
+  position: relative; display: grid; grid-template-columns: 60px minmax(0, 1fr); column-gap: 6px;
   padding: 6px 20px 4px; margin-top: 6px;
 }
 /* the whole message shades, so it is clear which one the arrow and the menu belong to */
 .msg:hover, .msg.held { background: var(--msg-hover); }
 .msg.cont { margin-top: 0; padding-top: 1px; }
 .msg.cont .gutter .face, .msg.cont .gutter .avatar, .msg.cont header { display: none; }
-/* The arrow that opens a message's menu: on the corner of the avatar, and
-   in the same place on a message that follows, which shows no avatar.  It
-   is out of the flow, so nothing moves when it shows. */
+/* The arrow that opens a message's menu: in the gutter's own room right of
+   the avatar, level with the name, and in the same place on a message that
+   follows, which shows no avatar.  Always shown, dim until pointed at, so a
+   touch screen has it too.  Its ring is a shadow: a border would take
+   from the room around the icon. */
 .msg .gutter { position: relative; }
 .msg .more {
-  position: absolute; inset-inline-start: 20px; top: 20px; width: 22px; height: 22px; border-radius: 50%;
-  border: 1px solid var(--line); background: var(--bg); box-shadow: 0 1px 2px rgba(15, 21, 32, .12); opacity: 0;
+  position: absolute; inset-inline-start: 39px; top: 0; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); opacity: .5;
 }
 .msg.cont .more { top: 2px; }
 .msg .more::before { content: ""; position: absolute; inset: -5px; }
-.msg .more .icon { width: 14px; height: 14px; }
 .msg:hover .more, .msg.held .more, .msg .more:focus-visible { opacity: 1; }
-.msg .more:hover, .msg.held .more { background: var(--bg); color: var(--ink); border-color: var(--faint); }
+.msg .more:hover, .msg.held .more { background: var(--bg); color: var(--ink); box-shadow: inset 0 0 0 1px var(--faint); }
 .msg.mention { background: var(--mention); box-shadow: inset 3px 0 var(--amber); }
 .msg.system .who { color: var(--dim); }
 .msg.deleted .body { color: var(--faint); font-style: italic; }
@@ -335,7 +352,7 @@ pre code .warning { color: var(--amber); }
 /* Who gave a reaction: a small box over the page, put in place by the script */
 .reactwho {
   position: fixed; z-index: 50; box-sizing: border-box; max-width: min(260px, calc(100vw - 16px)); padding: 5px 9px;
-  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); color: var(--ink);
+  background: var(--bg); border: 1px solid var(--pop-line); border-radius: 6px; box-shadow: var(--shadow); color: var(--ink);
   font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; pointer-events: none;
 }
 .reactwho .more { color: var(--faint); }
@@ -350,7 +367,7 @@ pre code .warning { color: var(--amber); }
 /* A message's menu: over the page, put in place by the script */
 .msgmenu {
   position: fixed; z-index: 50; box-sizing: border-box; max-height: calc(100vh - 16px); overflow-y: auto; padding: 4px;
-  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); font-size: 14px;
+  background: var(--bg); border: 1px solid var(--pop-line); border-radius: 6px; box-shadow: var(--shadow); font-size: 14px;
 }
 .msgmenu:focus { outline: 0; }
 .msgmenu button { border: 0; border-radius: 4px; background: none; color: var(--ink); }
@@ -419,11 +436,14 @@ pre code .warning { color: var(--amber); }
 .chip button { border: 0; background: none; color: inherit; font-size: 16px; line-height: 1; padding: 0 4px; }
 .complete {
   position: absolute; bottom: calc(100% + 4px); left: 0; right: 0; max-width: 520px; background: var(--bg);
-  border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; z-index: 5;
+  border: 1px solid var(--pop-line); border-radius: 10px; box-shadow: var(--shadow); z-index: 5;
+  max-height: calc(var(--shown-height, 100dvh) * .45); overflow-y: auto;
 }
 .complete .item { display: flex; gap: 10px; padding: 6px 12px; cursor: pointer; align-items: baseline; }
 .complete .item span { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.complete .item.on { background: var(--accent-soft); }
+/* one row is selected, by the keys or the pointer: plain to see in both themes */
+.complete .item.on { background: var(--accent); color: var(--accent-ink); }
+.complete .item.on span { color: inherit; }
 
 .quickjoin {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px; border: 1px solid var(--line);
@@ -552,6 +572,7 @@ pre code .warning { color: var(--amber); }
 .admin > .part > input[type=search] { width: 100%; max-width: 360px; padding: 7px 12px; margin-bottom: 10px;
   border: 1px solid var(--line); border-radius: 8px; background: var(--bg-soft); }
 .admin .hint { color: var(--faint); font-size: 13px; margin: 0 0 12px; }
+.admin .problem { color: var(--red); border-left: 3px solid var(--red); padding-left: 10px; }
 .admin .small-link { color: var(--accent); font-size: 13px; }
 .admin .small-link.bad { color: var(--red); }
 .rolechecks { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }

@@ -44,7 +44,7 @@ var
 
 procedure RegisterAdminRoute(const Path, Permission: string);
 function AdminRoutePermission(const Path: string): string;
-{ An address never blocked or limited: the house's own, or one in allowed_ips. }
+{ An address never blocked or limited: this machine, or one in allowed_ips. }
 function NeverBlocked(const Ip: string): boolean;
 { Everything the guard knows about one address, as the admin's address
   panel shows it: its name, whether it is a search engine's crawler,
@@ -287,10 +287,24 @@ begin
   end;
 end;
 
+{ A request the browser made on its own: a picture or another part of a
+  page, or anything another site set off.  A page can make any visitor's
+  browser send these, so they say nothing about the visitor. }
+function BrowsersOwn(ARequest: TRequest): boolean;
+var
+  Dest: string;
+begin
+  Dest := LowerCase(ARequest.GetFieldByName('Sec-Fetch-Dest'));
+  Result := SameText(ARequest.GetFieldByName('Sec-Fetch-Site'), 'cross-site') or ((Dest <> '') and (Dest <> 'document') and (Dest <> 'empty'));
+end;
+
 procedure RefuseAdmin(ARequest: TRequest; AResponse: TResponse);
 begin
-  NoteHostile(ClientIp(ARequest), 'admin', ARequest.PathInfo);
-  Strike(ClientIp(ARequest), 'admin');
+  if not BrowsersOwn(ARequest) then
+  begin
+    NoteHostile(ClientIp(ARequest), 'admin', ARequest.PathInfo);
+    Strike(ClientIp(ARequest), 'admin');
+  end;
   SendText(AResponse, 404, 'Nothing here.');
 end;
 
@@ -306,8 +320,11 @@ begin
   end
   else if not SafeRequestPath(ARequest.PathInfo) then
   begin
-    NoteHostile(ClientIp(ARequest), 'probe', ARequest.PathInfo);
-    Strike(ClientIp(ARequest), 'miss', 3);
+    if not BrowsersOwn(ARequest) then
+    begin
+      NoteHostile(ClientIp(ARequest), 'probe', ARequest.PathInfo);
+      Strike(ClientIp(ARequest), 'miss', 3);
+    end;
     SendText(AResponse, 404, 'Nothing here.');
   end
   else if ARequest.GetHeader(hhTransferEncoding) <> '' then
@@ -335,12 +352,13 @@ begin
   Result := Address;
 end;
 
-{ The house's own network, and the addresses an admin vouched for. }
+{ This machine, the addresses an admin vouched for, and a proxy of the
+  house that the config file does not name (all its visitors share it). }
 function NeverBlocked(const Ip: string): boolean;
 var
   Allowed: string;
 begin
-  Result := Ip.StartsWith('127.') or Ip.StartsWith('10.') or Ip.StartsWith('192.168.') or (Ip = '::1');
+  Result := Ip.StartsWith('127.') or (Ip = '::1') or (Pos(' ' + Ip + ' ', ' ' + UnlistedProxies + ' ') > 0);
   for Allowed in Setting('allowed_ips', '').Split([',', ' '], TStringSplitOptions.ExcludeEmpty) do
     if Ip = CanonicalIp(Allowed) then
       Result := True;
@@ -636,7 +654,7 @@ begin
       // what a blocked address still asks for counts: a scanner's telling
       // paths (/.env, /cgi-bin/...) often come after its first misses have
       // blocked it for the hour, and would otherwise never be seen
-      if not OldLink(ARequest.PathInfo) then
+      if not OldLink(ARequest.PathInfo) and not BrowsersOwn(ARequest) then
         if Probing(ARequest.PathInfo) then
           NoteHostile(ClientIp(ARequest), 'probe', ARequest.PathInfo)
         else if AdminPath(ARequest.PathInfo) then
@@ -688,7 +706,7 @@ begin
         Exit;
       end;
     end;
-    if (ARequest.Authorization <> '') or (ARequest.CookieFields.Values['sid'] <> '') then
+    if TokenOf(ARequest) <> '' then
     begin
       CheckConnection;
       if TooManyTries(ClientIp(ARequest), 'bad-token', SettingInt('token_tries', 30), 1) then
@@ -771,7 +789,7 @@ begin
   Count := 1;
   // a page that is not here under an address that had pages once is an
   // old link or a crawler following one, not probing (RegisterOldLink)
-  if OldLink(ARequest.PathInfo) then
+  if OldLink(ARequest.PathInfo) or BrowsersOwn(ARequest) then
     Count := 0
   else if Probing(ARequest.PathInfo) then
   begin
@@ -981,7 +999,7 @@ initialization
   RegisterStartup(@NormalizeBlocks);
   RegisterStartup(@LoadBlocks);
   RegisterChore(@ForgetOldBlocks, 60);
-  RegisterSetting('allowed_ips', 'Addresses never blocked or limited per address (comma separated; this network always is)', '', 'longtext',
+  RegisterSetting('allowed_ips', 'Addresses never blocked or limited per address (comma separated; this machine always is)', '', 'longtext',
     'Safety');
   RegisterSetting('block_strikes', 'Automatic blocks before an address is blocked for block_days', '3', 'number', 'Safety');
   RegisterSetting('block_days', 'Days an address stays blocked after that many; only an admin blocks for good', '30', 'number', 'Safety');

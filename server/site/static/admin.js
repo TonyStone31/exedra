@@ -1912,6 +1912,8 @@
   function adminOverview(box, data, can) {
     const on = String(data.parts || '').split(' ');
     const switches = (data.settings || []).filter(function (s) { return s.group === 'Parts'; });
+    if (data.unlisted_proxies)
+      box.appendChild(el('p', 'problem', t('Requests arrive through %s, which the config file does not name under proxies. Until it does, every visitor looks like that one address and the guard cannot tell them apart.', data.unlisted_proxies)));
     box.appendChild(el('h2', '', t('Community modules')));
     box.appendChild(el('p', 'hint', t('Each module can be on or off. A module that is off has no pages and no entries here; what it holds is kept.')));
     const cards = el('div', 'part-cards');
