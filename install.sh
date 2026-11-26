@@ -80,6 +80,15 @@ service_do() { # start or stop; on FreeBSD also one started by hand, not switche
   if [ "$OS" = freebsd ]; then service exedra "one$1" >/dev/null; else systemctl "$1" exedra; fi
 }
 [ "$OS" = freebsd ] && START="service exedra start" || START="systemctl start exedra"
+# root owns the program and its pages; the service's user owns only what
+# it writes, and reads the config file through its group
+owners() {
+  mkdir -p "$DIR/data" "$DIR/wiki-images"
+  chown -R 0:0 "$DIR"
+  chown -R exedra:exedra "$DIR/data" "$DIR/wiki-images"
+  chown 0:exedra "$DIR/exedra.ini"
+  chmod 640 "$DIR/exedra.ini"
+}
 
 here=
 [ -x "$DIR/exedra" ] && here=$("$DIR/exedra" --version 2>/dev/null | sed 's/^Exedra //') || true
@@ -127,6 +136,8 @@ else
   version=$(newest)
   [ -n "$version" ] || die "no release found: GitHub has none, or cannot be reached"
   if [ "$WHAT" = update ] && [ "$version" = "$here" ]; then
+    # an install made by an older installer still gets today's owners
+    [ "$SERVICE" = 1 ] && id exedra >/dev/null 2>&1 && owners
     say "$here is the newest release; nothing to do"
     exit 0
   fi
@@ -163,7 +174,8 @@ for part in static templates lang; do
   mkdir -p "$DIR/$part"
   cp -r "$TMP/new/site/$part/." "$DIR/$part/"
 done
-cp "$TMP/new/install.sh" "$DIR/install.sh" 2>/dev/null || true
+# moved into place: the copy that may be running this update is left whole
+cp "$TMP/new/install.sh" "$DIR/install.sh.new" 2>/dev/null && mv "$DIR/install.sh.new" "$DIR/install.sh" || true
 [ -f "$TMP/new/exedra.ini.example" ] && cp "$TMP/new/exedra.ini.example" "$DIR/exedra.ini.example"
 first=0
 if [ ! -f "$DIR/exedra.ini" ]; then
@@ -177,13 +189,7 @@ if [ "$SERVICE" = 1 ]; then
   if id exedra >/dev/null 2>&1; then :
   elif [ "$OS" = freebsd ]; then pw useradd exedra -d "$DIR" -s /usr/sbin/nologin -c Exedra
   else useradd --system --home "$DIR" --shell /usr/sbin/nologin exedra; fi
-  # root owns the program and its pages; the service's user owns only what
-  # it writes, and reads the config file through its group
-  mkdir -p "$DIR/data" "$DIR/wiki-images"
-  chown -R 0:0 "$DIR"
-  chown -R exedra:exedra "$DIR/data" "$DIR/wiki-images"
-  chown 0:exedra "$DIR/exedra.ini"
-  chmod 640 "$DIR/exedra.ini"
+  owners
   if [ "$OS" = freebsd ]; then
     # the rc.d script, switched on in rc.conf
     if [ ! -f /usr/local/etc/rc.d/exedra ]; then
