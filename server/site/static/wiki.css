@@ -34,6 +34,8 @@ body.plainbar .topbar .theme-choice, body.plainbar .topbar .wiki-language label 
 .wiki-language button { padding: 4px 8px; }
 
 /* as wide as the header above it: 1240px and the padding (22 Nov 2026) */
+/* the wiki's search box, in the same column as the page under it */
+.wiki .partbar { padding: 16px max(24px, calc((100% - 1240px) / 2)) 0; }
 .wikipage {
   max-width: 1288px; margin: 0 auto; padding: 36px 24px 72px;
   font-size: 16px; line-height: 1.7; overflow-wrap: anywhere;
@@ -237,6 +239,7 @@ ul.contributors li { break-inside: avoid; padding: 3px 0; }
   .wiki .wikisearch { order: 3; flex-basis: 100%; max-width: none; }
   .wiki .topbar .wikinav { order: 4; flex-basis: 100%; }
   .wikipage { padding: 28px 16px 48px; }
+  .wiki .partbar { padding: 12px 16px 0; }
   .wikibody h2 { font-size: 21px; }
   .wikibody pre, .wikibody .code pre { padding: 12px; }
   .wikipreview { padding: 16px; }

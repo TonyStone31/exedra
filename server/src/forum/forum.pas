@@ -313,12 +313,12 @@ begin
     [Ord(NewTopic), Ord(NewTopic), PostId, AuthorId, TopicId, BecameReadable, BoardId]);
 end;
 
-{$push}{$warn 5024 off}
-function NoName(const Name: string): boolean;
+{ #name in a post links to the chat's public channel of that name, on a
+  site where the chat is built in and on. }
+function ChannelNamed(const Name: string): boolean;
 begin
-  Result := False;
+  Result := Assigned(ChannelExists) and ChannelExists(Name);
 end;
-{$pop}
 
 function PostHtml(const Body: string): string;
 var
@@ -327,7 +327,7 @@ begin
   Members := TStringList.Create;
   Rooms := TStringList.Create;
   try
-    Result := RenderText(Body, @NoName, @NoName, Members, Rooms);
+    Result := RenderText(Body, @MemberExists, @ChannelNamed, Members, Rooms);
   finally
     Rooms.Free;
     Members.Free;
@@ -458,7 +458,7 @@ begin
     Q.FieldByName('reply_count').AsLargeInt, 'view_count', Q.FieldByName('view_count').AsLargeInt, 'pinned', Q.FieldByName('pinned').AsInteger <>
     0, 'locked', Q.FieldByName('locked').AsInteger <> 0, 'hidden', Q.FieldByName('hidden').AsInteger <> 0, 'moved_from',
     Q.FieldByName('moved_from').AsInteger, 'first_post_id', Q.FieldByName('first_post_id').AsInteger, 'last_post_id', Q.FieldByName('last_post_id').AsInteger,
-    'unread', Q.FieldByName('is_unread').AsInteger <> 0, 'display_count', Q.FieldByName('display_count').AsInteger]);
+    'unread', Q.FieldByName('is_unread').AsInteger <> 0, 'display_count', Q.FieldByName('display_count').AsInteger, 'solved_post', Q.FieldByName('solved_post').AsInteger]);
   if ShowHidden then
   begin
     Result.Add('post_count', Q.FieldByName('post_count').AsInteger);
@@ -633,6 +633,8 @@ begin
       Q.Free;
     end;
     Result.Objects['topic'].Add('other_posts', OtherPosts(Topic.Id, Topic.FirstPostId));
+    // who asked, and a moderator, say which reply solved it
+    Result.Objects['topic'].Add('may_solve', Writable(Me) and not Topic.Hidden and ((Topic.AuthorId = Me.Id) or Moderate(Me)));
     if Me.Id > 0 then
     begin
       Result.Objects['topic'].Add('following', Follows(Me.Id, Topic.Id));
@@ -733,6 +735,7 @@ begin
   Exec('UPDATE forum_topics SET first_post_id = :p WHERE id = :t', [PostId, TopicId]);
   KeepPostFiles(PostId, Me.Id, Body);
   NotePost(TopicId, BoardId, Me.Id, PostId, True);
+  NoteMentions(Me, TopicId, PostId, Body);
   FollowOnPost(Me, TopicId);
   TopicChanged(TopicId);
   Result := TJSONObject.Create(['topic_id', TopicId, 'post_id', PostId]);
@@ -755,6 +758,7 @@ begin
   KeepPostFiles(PostId, Me.Id, Body);
   NotePost(Topic.Id, Topic.BoardId, Me.Id, PostId, False);
   NoteReply(Topic.Id, PostId, Me.Id);
+  NoteMentions(Me, Topic.Id, PostId, Body);
   FollowOnPost(Me, Topic.Id);
   TopicChanged(Topic.Id);
   Result := TJSONObject.Create(['topic_id', Topic.Id, 'post_id', PostId, 'page', (IntValue('SELECT p.' + ForumPositionColumn(Moderate(Me)) +
@@ -847,6 +851,9 @@ begin
       CheckText(Title, 200, True);
       Exec('UPDATE forum_topics SET title = :s WHERE id = :t', [Title, Topic.Id]);
     end;
+    // only who the change names anew is told
+    if not Hidden and not Topic.Hidden then
+      NoteMentions(Me, Topic.Id, Id, Body, VarToStr(Value('SELECT body FROM forum_posts WHERE id = :p', [Id])));
     Exec('UPDATE forum_posts SET body = :b, edited = NOW(6), editor_id = :u WHERE id = :p', [Body, Me.Id, Id]);
     KeepPostFiles(Id, Me.Id, Body, True);
   end
@@ -889,7 +896,10 @@ begin
         Refuse(403, 'You cannot change this post.');
     end;
     if Action <> fdTopic then
+    begin
+      Exec('UPDATE forum_topics SET solved_post = 0 WHERE id = :t AND solved_post = :p', [Topic.Id, Id]);
       RefreshTopic(Topic.Id);
+    end;
     RefreshPositions(Topic.Id);
     RefreshMember(AuthorId);
     RefreshBoard(Topic.BoardId);
@@ -967,12 +977,40 @@ begin
     CheckText(Reason, 500, True);
   Exec('UPDATE forum_posts SET hidden = :v, hidden_by = :u, hidden_reason = :r, hidden_at = NOW(6) WHERE id = :p',
     [Ord(Action = 'hide'), Me.Id, Copy(Reason, 1, 500), Id]);
+  if Action = 'hide' then
+    Exec('UPDATE forum_topics SET solved_post = 0 WHERE id = :t AND solved_post = :p', [Topic.Id, Id]);
   RefreshTopic(Topic.Id);
   RefreshPositions(Topic.Id);
   RefreshTopicMembers(Topic.Id);
   RefreshBoard(Topic.BoardId);
   TopicChanged(Topic.Id);
   Result := TJSONObject.Create(['ok', True]);
+end;
+
+{ POST /api/forum/solved  post, on (1 or 0): the reply that solved the topic,
+  said by who started it or by a moderator.  One reply a topic: marking
+  another moves the mark, on=0 takes it off. }
+function Solve(R: TRequest; const Me: TMember): TJSONObject;
+var
+  Topic: TForumTopic;
+  Id, Mark: integer;
+begin
+  NeedWrite(Me);
+  Id := Number(Field(R, 'post'));
+  Topic := LockTopic(Me, IntValue('SELECT topic_id FROM forum_posts WHERE id = :p', [Id]));
+  if (Topic.AuthorId <> Me.Id) and not Moderate(Me) then
+    Refuse(403, 'Only who started the topic says what solved it.');
+  if Topic.Hidden or (Id = Topic.FirstPostId) or (IntValue('SELECT COUNT(*) FROM forum_posts WHERE id = :p AND topic_id = :t AND hidden = 0', [Id, Topic.Id]) = 0) then
+    Refuse(400, 'That post cannot be the one that solved it.');
+  Mark := 0;
+  if Field(R, 'on') <> '0' then
+    Mark := Id;
+  // taking the mark off another reply than the marked one changes nothing
+  if Mark > 0 then
+    Exec('UPDATE forum_topics SET solved_post = :p WHERE id = :t', [Mark, Topic.Id])
+  else
+    Exec('UPDATE forum_topics SET solved_post = 0 WHERE id = :t AND solved_post = :p', [Topic.Id, Id]);
+  Result := TJSONObject.Create(['ok', True, 'solved_post', IntValue('SELECT solved_post FROM forum_topics WHERE id = :t', [Topic.Id])]);
 end;
 
 { The topics whose title or posts hold the words, best first, among those
@@ -1304,6 +1342,7 @@ begin
         '/api/forum/post/delete': Data := ChangePost(R, Me, True);
         '/api/forum/topic/moderate': Data := ModerateTopic(R, Me);
         '/api/forum/post/moderate': Data := ModeratePost(R, Me);
+        '/api/forum/solved': Data := Solve(R, Me);
         '/api/forum/admin/board': Data := SaveBoard(R);
         '/api/forum/admin/order': Data := OrderBoards(R);
         '/api/forum/admin/remove': Data := RemoveBoard(R);
@@ -1315,6 +1354,7 @@ begin
       EndFileDeletes(True);
       FreeFileLock;
       TellFollowersSoon;
+      TellMentioned;
     end
     else
       case Path of
@@ -1351,6 +1391,7 @@ begin
     on E: Exception do
     begin
       Data.Free;
+      ForgetMentions;
       if Transaction then
         Exec('ROLLBACK', []);
       EndFileDeletes(False);
@@ -1395,6 +1436,7 @@ initialization
   RegisterTable('CREATE TABLE IF NOT EXISTS forum_categories (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL, position INT NOT NULL DEFAULT 0, old_id BIGINT NULL UNIQUE) ENGINE=InnoDB CHARACTER SET utf8mb4');
   RegisterTable('CREATE TABLE IF NOT EXISTS forum_members (user_id INT PRIMARY KEY, post_count BIGINT NOT NULL DEFAULT 0,' +
     ' signature VARCHAR(500) NOT NULL DEFAULT '''') ENGINE=InnoDB CHARACTER SET utf8mb4');
+  RegisterUpgrade('forum-topic-solved', 'ALTER TABLE forum_topics ADD COLUMN solved_post INT NOT NULL DEFAULT 0');
   RegisterUpgrade('forum-member-signature', 'ALTER TABLE forum_members ADD COLUMN IF NOT EXISTS signature VARCHAR(500) NOT NULL DEFAULT ''''');
   RegisterTable('CREATE TABLE IF NOT EXISTS forum_totals (id INT PRIMARY KEY, members BIGINT NOT NULL DEFAULT 0) ENGINE=InnoDB');
   RegisterTable('CREATE TABLE IF NOT EXISTS forum_board_reads (user_id INT NOT NULL, board_id INT NOT NULL, read_at DATETIME(6) NOT NULL, unread_count BIGINT NOT NULL DEFAULT 0, PRIMARY KEY(user_id, board_id), INDEX(board_id, user_id)) ENGINE=InnoDB');
@@ -1480,6 +1522,7 @@ initialization
   AddRoute('post/delete', rmPost);
   AddRoute('topic/moderate', rmPost);
   AddRoute('post/moderate', rmPost);
+  AddRoute('solved', rmPost);
   AddRoute('admin/boards', rmGet, True);
   AddRoute('admin/board', rmPost, True);
   AddRoute('admin/order', rmPost, True);

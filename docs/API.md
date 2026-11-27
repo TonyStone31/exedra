@@ -93,7 +93,7 @@ when a newer `rev` arrives. `read` marks the channel read up to a message id.
 | Request | Notes |
 |---|---|
 | `GET /api/rooms` | the member's followed channels (public channels for guests) |
-| `GET /api/room?slug=` | one channel: kind, topic, owner, private, following, can_start, why_not, can (what this member may do there), and whatever units added on top put there; opening a channel makes it the one `/` brings the member back to |
+| `GET /api/room?slug=` | one channel: kind, topic, owner, private, following, policy (`all`, `readonly`: some start messages and anyone replies, `closed`: only they write at all, or `owner`), can_start, can_reply, why_not, as_sent (true where nobody changes or deletes a message once it is sent), can (what this member may do there), and whatever units added on top put there; opening a channel makes it the one `/` brings the member back to |
 | `GET /api/room/members?room=` | a private channel's members, or who holds a role in a public one: name, avatar, roles, owner, `away`, and `online` (seen on some page in the last two minutes) |
 | `POST /api/room/create` | slug, topic, private (1 or 0) |
 | `POST /api/follow` | room, on (1 or 0); off is leaving the channel |
@@ -270,6 +270,23 @@ pictures. `GET /wiki-emoji/<file>` serves a picture. Saving needs
 `wiki-emoji`: `POST /api/wiki/emoji/save` takes `chars`, `name`, `keywords`,
 `drawn`, `svg`, `plain` (restore the default picture) and `add=1` for a
 new entry. SVG pictures are checked for executable or external content.
+
+## The reply that solved a topic, and names in forum posts
+
+`POST /api/forum/solved` takes `post` and `on` (1 or 0). Who started the
+topic, or a forum moderator, marks the reply that solved it. A topic has
+one such reply: marking another moves the mark, `on=0` takes it off. The
+first post cannot be marked. `GET /api/forum/topic?id=` gives the topic's
+`solved_post` (0 for none) and `may_solve` for the member asking, and the
+topic lists carry `solved_post` too. Hiding or deleting the marked reply
+takes the mark off.
+
+`@name` in a post links to that member, and the member gets a notice
+(`GET /api/notices`, kind `forum-mention`, with a link to the post) when
+they may read the post. One notice stands for a topic, the newest, and
+reading the topic marks it seen. A post tells ten members at most, and a
+changed post tells only who it names anew. `#name` links to the chat's
+public channel of that name on a site with the chat on.
 
 ## Reactions on forum posts
 

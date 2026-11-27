@@ -33,6 +33,13 @@ procedure FollowOnPost(const Me: TMember; TopicId: integer);
 procedure NoteReply(TopicId, PostId, AuthorId: integer);
 { Once that transaction is committed: tells them, off the request. }
 procedure TellFollowersSoon;
+{ The members a post names with @ get a notice that they were named, if
+  they may read the post: noted while it is written (Before is the text it
+  had, so a change tells only who it names anew), sent by TellMentioned
+  once the request is committed, dropped by ForgetMentions when it is not. }
+procedure NoteMentions(const Me: TMember; TopicId, PostId: integer; const Body: string; const Before: string = '');
+procedure TellMentioned;
+procedure ForgetMentions;
 { The member opened the topic: the notice about it has done its work. }
 procedure FollowedTopicRead(UserId, TopicId: integer);
 procedure StopFollow(UserId, TopicId: integer);
@@ -47,9 +54,15 @@ implementation
 uses
   Classes, Variants, SiteDb, SiteSql, SiteRoles, SiteMail, SiteMarkup, SiteNotices, ForumSwitch, ForumRules, ForumRequest, Forum;
 
+const
+  { One post tells this many members at most that it named them. }
+  MentionsAPost = 10;
+
 threadvar
   { This request's reply left followers waiting. }
   Waiting: boolean;
+  { Whom this request's post named, until it is committed: member, topic, post and author, one group a line. }
+  Mentioned: string;
 
 function Follows(UserId, TopicId: integer): boolean;
 begin
@@ -75,9 +88,109 @@ begin
     Waiting := True;
 end;
 
+function MentionKey(TopicId: integer): string;
+begin
+  Result := 'forum-mention-' + IntToStr(TopicId);
+end;
+
 procedure FollowedTopicRead(UserId, TopicId: integer);
 begin
   MarkNoticeKeySeen(UserId, NoticeKey(TopicId));
+  MarkNoticeKeySeen(UserId, MentionKey(TopicId));
+end;
+
+{$push}{$warn 5024 off}
+function NoChannel(const Name: string): boolean;
+begin
+  Result := False;
+end;
+{$pop}
+
+{ The members a text names with @, each once. }
+function NamedIn(const Text: string): TStringList;
+var
+  Rooms: TStringList;
+begin
+  Result := TStringList.Create;
+  if Text = '' then
+    Exit;
+  Rooms := TStringList.Create;
+  try
+    RenderText(Text, @MemberExists, @NoChannel, Result, Rooms);
+  finally
+    Rooms.Free;
+  end;
+end;
+
+procedure NoteMentions(const Me: TMember; TopicId, PostId: integer; const Body: string; const Before: string);
+var
+  Names, Old: TStringList;
+  Name: string;
+  Who: TMember;
+  Told: integer;
+begin
+  Names := NamedIn(Body);
+  Old := NamedIn(Before);
+  try
+    Told := 0;
+    for Name in Names do
+    begin
+      if Told >= MentionsAPost then
+        Break;
+      if Old.IndexOf(Name) >= 0 then
+        Continue;
+      Who := MemberById(MemberId(Name));
+      if (Who.Id = 0) or (Who.Id = Me.Id) or Who.Banned or not Can(Who, 'forum-read') then
+        Continue;
+      // someone who ignores the writer hears nothing of them
+      if Pos(',' + IntToStr(Me.Id) + ',', ',' + IgnoredIds(Who.Id) + ',') > 0 then
+        Continue;
+      // the board, as it stands for the member named
+      try
+        NeedReadablePost(Who, PostId);
+      except
+        on EForumRequest do
+          Continue;
+      end;
+      Mentioned := Mentioned + Format('%d,%d,%d,%d', [Who.Id, TopicId, PostId, Me.Id]) + LineEnding;
+      Inc(Told);
+    end;
+  finally
+    Old.Free;
+    Names.Free;
+  end;
+end;
+
+procedure ForgetMentions;
+begin
+  Mentioned := '';
+end;
+
+procedure TellMentioned;
+var
+  Lines: TStringList;
+  Line: string;
+  Part: TStringArray;
+begin
+  if Mentioned = '' then
+    Exit;
+  Lines := TStringList.Create;
+  try
+    Lines.Text := Mentioned;
+    Mentioned := '';
+    for Line in Lines do
+    begin
+      Part := Line.Split([',']);
+      if Length(Part) <> 4 then
+        Continue;
+      // the newest one of a topic stands for it, and reading the topic marks it seen
+      ReplaceNotice(StrToInt(Part[0]), 'forum-mention', MentionKey(StrToInt(Part[1])),
+        VarToStr(Value('SELECT name FROM users WHERE id = :u', [StrToInt(Part[3])])) + ' mentioned you in "' +
+        VarToStr(Value('SELECT title FROM forum_topics WHERE id = :t', [StrToInt(Part[1])])) + '"', ForumPostUrl(StrToInt(Part[1]), StrToInt(Part[2])));
+    end;
+  finally
+    Lines.Free;
+  end;
 end;
 
 procedure StopFollow(UserId, TopicId: integer);

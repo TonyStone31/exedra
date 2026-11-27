@@ -182,14 +182,39 @@
       chooser.accept = typeof accept === 'string' ? accept : (opts.pictures ? opts.pictures.accept : '');
       chooser.click();
     }
-    // camera photos go up smaller unless this is ticked
-    const full = el('input');
-    full.type = 'checkbox';
+    // A camera photo that can go up smaller: a row over the foot asks which,
+    // with both sizes.  One the part would refuse as it is goes smaller unasked.
+    const askRow = el('div', 'editor-ask');
+    function whichSize(f, small) {
+      if (opts.pictures.refuses && opts.pictures.refuses(f)) return Promise.resolve(small);
+      return new Promise(function (done) {
+        const mb = function (file) { return (file.size / 1048576).toFixed(1) + ' MB'; };
+        const row = el('p', '', f.name || t('picture'));
+        const less = el('button', '', t('Smaller') + ' · ' + mb(small));
+        const all = el('button', '', t('Full size') + ' · ' + mb(f));
+        less.type = all.type = 'button';
+        less.addEventListener('click', function () { row.remove(); done(small); });
+        all.addEventListener('click', function () { row.remove(); done(f); });
+        row.append(less, all);
+        askRow.appendChild(row);
+      });
+    }
 
     let pending = 0;
     async function upload(list) {
       if (!opts.pictures) return;
-      if (!full.checked && window.Keys) list = await Promise.all(list.map(Keys.smaller));
+      if (window.Keys) {
+        // counted as on its way while it asks, so the form is not sent without it
+        pending++;
+        try {
+          list = await Promise.all(list.map(async function (f) {
+            const small = await Keys.smaller(f);
+            return small === f ? f : whichSize(f, small);
+          }));
+        } finally {
+          pending--;
+        }
+      }
       for (const f of list) {
         // the part says what it takes; left to itself the editor takes pictures
         const refusal = opts.pictures.refuses ? opts.pictures.refuses(f)
@@ -485,10 +510,6 @@
         gallery.addEventListener('click', function () { choose(opts.pictures.gallery); });
         hint.append(document.createTextNode(' · '), gallery);
       }
-      const fullLabel = el('label', 'editor-full', '');
-      fullLabel.append(full, ' ' + t('Photos at full size'));
-      fullLabel.title = t('A camera photo is made smaller before it is sent, which is much quicker on a phone. Tick this to send it as it is.');
-      hint.append(document.createTextNode(' '), fullLabel);
     }
     const helpButton = el('button', 'editor-link', t('Formatting help'));
     helpButton.type = 'button';
@@ -504,7 +525,7 @@
       label.htmlFor = box.id;
       label.after(shell);
     } else box.before(shell);
-    shell.append(bar, panes, foot, help);
+    shell.append(bar, panes, askRow, foot, help);
     panes.append(box, view);
     // the form's own parts the part wants under the editor: full screen
     // takes the row along, so the text can be sent without leaving it

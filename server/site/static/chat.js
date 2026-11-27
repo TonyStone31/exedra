@@ -767,12 +767,14 @@
     items.push({icon: 'link', title: t('Copy a link to this'), run: function () {
       navigator.clipboard.writeText(location.origin + SiteBase.url('/m/' + m.id)).then(function () { toast(t('Link copied.')); });
     }});
-    if (m.name === Me.name && m.uid && may('edit-own'))
+    // where messages stay as sent there is nothing to change or delete
+    const asSent = S.info && S.info.as_sent;
+    if (m.name === Me.name && m.uid && may('edit-own') && !asSent)
       items.push({icon: 'edit', title: t('Edit'), run: function () { startEdit(m); }});
     if (mayHere('pin') && !m.parent) items.push({icon: 'pin', title: m.pinned ? t('Unpin') : t('Pin to the channel'), run: async function () {
       try { await post('/api/pin', {id: m.id}); syncNow(); } catch (err) { failed(err); }
     }});
-    if ((m.name === Me.name && m.uid && may('delete-own')) || mayHere('delete-any')) items.push({icon: 'trash', title: t('Delete'), bad: true, run: async function () {
+    if (!asSent && ((m.name === Me.name && m.uid && may('delete-own')) || mayHere('delete-any'))) items.push({icon: 'trash', title: t('Delete'), bad: true, run: async function () {
       if (!confirm(t('Delete this message?'))) return;
       try { await post('/api/delete', {id: m.id}); syncNow(); } catch (err) { failed(err); }
     }});
@@ -1536,7 +1538,7 @@
       area.appendChild(confirmBox());
       return;
     }
-    if (!parent && !dm && S.info && !S.info.can_start) {
+    if (!dm && S.info && (parent ? S.info.can_reply === false : !S.info.can_start)) {
       area.appendChild(el('p', 'notice', S.info.why_not));
       return;
     }
@@ -1582,13 +1584,6 @@
       expire.appendChild(opt);
     });
     options.appendChild(expire);
-    // photos go up smaller unless this is ticked
-    const whole = el('input');
-    whole.type = 'checkbox';
-    const wholeLabel = el('label', 'whole', '');
-    wholeLabel.append(whole, ' ' + t('Photos at full size'));
-    wholeLabel.title = t('A camera photo is made smaller before it is sent, which is much quicker on a phone. Tick this to send it as it is.');
-    options.appendChild(wholeLabel);
     options.appendChild(el('span', 'hints', t('Enter sends · Shift+Enter new line · ``` for code · / for commands')));
     form.append(answering, files, row, options, filePick, beamPick);
     area.appendChild(form);
@@ -1599,6 +1594,29 @@
 
     // the uploads still on their way: Send waits for them
     const busy = new Set();
+
+    // A camera photo that can go up smaller: its chip asks which, with both
+    // sizes.  Send without an answer takes the smaller one.
+    const asking = new Set();
+    const whichSize = function (chip, file, small) {
+      return new Promise(function (done) {
+        const ask = el('span', 'sizes');
+        const choose = function (picked) {
+          asking.delete(smaller);
+          ask.remove();
+          done(picked);
+        };
+        const smaller = function () { choose(small); };
+        const less = el('button', '', t('Smaller') + ' · ' + sizeText(small.size));
+        const all = el('button', '', t('Full size') + ' · ' + sizeText(file.size));
+        less.type = all.type = 'button';
+        less.addEventListener('click', smaller);
+        all.addEventListener('click', function () { choose(file); });
+        ask.append(less, all);
+        chip.appendChild(ask);
+        asking.add(smaller);
+      });
+    };
 
     const add = function (list) {
       const run = (async function () {
@@ -1612,11 +1630,21 @@
           while (waiting.length) {
             const next = waiting.shift(), file = next.file, chip = next.chip;
             const share = el('span', 'share', '');
-            chip.appendChild(share);
             try {
-              const done = await upload(whole.checked ? file : await Keys.smaller(file), expire.value, dm && S.dmLocked ? dm : '', function (part) {
-                share.textContent = Math.round(part * 100) + '%';
-                chip.style.setProperty('--up', Math.round(part * 100) + '%');
+              const small = await Keys.smaller(file);
+              const sent = small === file ? file : await whichSize(chip, file, small);
+              chip.appendChild(share);
+              const goes = function (which) {
+                return upload(which, expire.value, dm && S.dmLocked ? dm : '', function (part) {
+                  share.textContent = Math.round(part * 100) + '%';
+                  chip.style.setProperty('--up', Math.round(part * 100) + '%');
+                });
+              };
+              // a photo too big for this site as it is still goes, smaller
+              const done = await goes(sent).catch(function (err) {
+                if (sent === small) throw err;
+                toast(t('That photo did not go up at full size. Sending it smaller.'));
+                return goes(small);
               });
               share.remove();
               chip.style.removeProperty('--up');
@@ -1686,6 +1714,7 @@
         sending = true;
         send.disabled = true;
         toast(t('Sending when the files are up'));
+        Array.from(asking).forEach(function (smaller) { smaller(); });
         while (busy.size) await Promise.all(Array.from(busy));
         sending = false;
         send.disabled = false;

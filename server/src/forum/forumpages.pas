@@ -232,6 +232,9 @@ begin
     Result := Result + ' ' + StatusIcon(Say('Hot topic'), 'hot', False);
   if Item.Get('hidden', False) then
     Result := Result + ' <span class="forum-mark">' + W('Hidden') + '</span>';
+  // to the reply that solved it
+  if Item.Get('solved_post', 0) > 0 then
+    Result := Result + ' <a class="forum-mark forum-solved" href="' + E(ForumPostUrl(Item.Get('id', 0), Item.Get('solved_post', 0))) + '">&#10003; ' + W('Solved') + '</a>';
 end;
 
 function FollowForm(const Fields, Caption, Hint: string; Pressed: boolean): string;
@@ -507,6 +510,27 @@ begin
   Result := '<div id="forum-reactions" data-shown="' + E(string.Join(' ', Shown)) + '" data-more="' + E(string.Join(' ', More)) + '" hidden></div>';
 end;
 
+{ In a reply's header: the mark on the one that solved the topic, and for
+  who started the topic (and a moderator) the box that says which did. }
+function SolvedHtml(Topic, Item: TJSONObject): string;
+var
+  Id: integer;
+  Solved: boolean;
+begin
+  Result := '';
+  Id := Item.Get('id', 0);
+  Solved := Id = Topic.Get('solved_post', 0);
+  if Topic.Get('may_solve', False) and (Id <> Topic.Get('first_post_id', 0)) and not Item.Get('hidden', False) then
+  begin
+    Result := '<label class="forum-solve"><input type="checkbox" data-forum-solve="' + IntToStr(Id) + '"';
+    if Solved then
+      Result := Result + ' checked';
+    Result := Result + '> ' + W('This solved it') + '</label>';
+  end
+  else if Solved then
+    Result := '<span class="forum-mark forum-solved">&#10003; ' + W('Solution') + '</span>';
+end;
+
 function ForumPostsHtml(Data: TJSONObject; const Me: TMember): string;
 var
   Topic, Item: TJSONObject;
@@ -542,8 +566,8 @@ begin
     else
       Result := Result + '<span>' + E(SayCount(Item.Get('post_count', 0), '%d post', '%d posts')) + '</span><span>' + W('Joined') + ' ' +
         DateTag(Item.Get('joined', ''), False) + '</span>';
-    Result := Result + '</aside><div class="forum-post-content"><header><h3>' + E(Subject) + '</h3>' + DateTag(Item.Get('created', ''), True) +
-      ' · ' + Link(ForumPostUrl(Topic.Get('id', 0), Item.Get('id', 0)), '#' + IntToStr(Item.Get('number', I + 1))) + '</header>';
+    Result := Result + '</aside><div class="forum-post-content"><header><h3>' + E(Subject) + '</h3>' + SolvedHtml(Topic, Item) +
+      DateTag(Item.Get('created', ''), True) + ' · ' + Link(ForumPostUrl(Topic.Get('id', 0), Item.Get('id', 0)), '#' + IntToStr(Item.Get('number', I + 1))) + '</header>';
     if Item.Get('hidden', False) then
       Result := Result + '<p class="forum-hidden">' + W('This post is hidden.') + '</p>';
     // Only the shared renderer supplies post HTML; all metadata is escaped.
@@ -905,8 +929,8 @@ begin
           Content := Content + '<p class="forum-guest forum-hidden">' + W('A moderator has stopped you posting in the forum.') + '</p>';
         if Writable(Me) and not Topic.Get('hidden', False) and (not Topic.Get('locked', False) or Moderate(Me)) then
           Content := Content + '<section id="quick-reply" data-forum-tools hidden><h2>' + W('Quick reply') + '</h2><p class="forum-quote-hint">' +
-            W('To quote part of a post, select the words in it and press Quote selection.') + '</p>' + Form('reply',
-            HiddenField('topic_id', IntToStr(Topic.Get('id', 0))) + Editor('', ForumUploadAttributes(Me)), Say('Post reply')) + '</section>';
+            W('To quote part of a post, select the words in it and press Quote selection.') + '</p>' +
+            Form('reply', HiddenField('topic_id', IntToStr(Topic.Get('id', 0))) + Editor('', ForumUploadAttributes(Me)), Say('Post reply')) + '</section>';
       end
       else if Path.StartsWith('/forum/') then
       begin

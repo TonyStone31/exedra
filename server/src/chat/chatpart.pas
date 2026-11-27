@@ -15,7 +15,7 @@ uses
   Classes, SysUtils, Variants, fpjson, httpdefs, httproute, SiteDb, SiteSql, SiteParts, SiteUsers, SiteRoles, SiteGuard, SiteGuardRules,
   SiteAdmin, WebPages, ChatRooms, ChatMessages, ChatCommands, ChatPrivate, ChatPreviews, ChatOversight, ChatBenches,
   {$ifndef CGI} ChatIrc, {$endif}
-  SiteBell, SiteWords;
+  SiteBell, SiteWords, SiteMarkup;
 
 // The first public channel's name, escaped for a page: {{first}} in a template.
 function FirstChannel: string;
@@ -27,6 +27,12 @@ end;
 function ChatIsOn: boolean;
 begin
   Result := PartOn('chat');
+end;
+
+{ For SiteMarkup.ChannelExists: #name written in the forum links here. }
+function LinkableChannel(const Name: string): boolean;
+begin
+  Result := ChatIsOn and RoomExists(Name);
 end;
 
 function OnlineNow: string;
@@ -266,13 +272,13 @@ begin
   if not (PartOn('chat') and Can(Me, 'manage-channels')) then
     Exit;
   List := TJSONArray.Create;
-  with Query('SELECT slug, title, topic, post_policy, archived, avatar, kind FROM rooms WHERE kind IN (''channel'', ''bench'') AND private = 0 ORDER BY kind <> ''channel'', id',
+  with Query('SELECT slug, title, topic, post_policy, archived, avatar, kind, as_sent FROM rooms WHERE kind IN (''channel'', ''bench'') AND private = 0 ORDER BY kind <> ''channel'', id',
       []) do
   try
     while not EOF do
     begin
       List.Add(TJSONObject.Create(['slug', Fields[0].AsString, 'title', Fields[1].AsString, 'topic', Fields[2].AsString, 'policy',
-        Fields[3].AsString, 'archived', Fields[4].AsInteger = 1, 'avatar', AvatarUrl(Fields[5].AsString), 'kind', Fields[6].AsString]));
+        Fields[3].AsString, 'archived', Fields[4].AsInteger = 1, 'avatar', AvatarUrl(Fields[5].AsString), 'kind', Fields[6].AsString, 'as_sent', Fields[7].AsInteger = 1]));
       Next;
     end;
   finally
@@ -281,7 +287,7 @@ begin
   Answer.Add('channels', List);
 end;
 
-{ POST /api/admin/channel  slug, topic, policy, archived }
+{ POST /api/admin/channel  slug, topic, policy (all, readonly or closed), archived, as_sent }
 procedure SaveChannel(ARequest: TRequest; AResponse: TResponse);
 var
   Me: TMember;
@@ -294,7 +300,7 @@ begin
   begin
     Slug := LowerCase(Trim(Values['slug']));
     Policy := Values['policy'];
-    if Policy <> 'readonly' then
+    if (Policy <> 'readonly') and (Policy <> 'closed') then
       Policy := 'all';
     if not ValidSlug(Slug) then
     begin
@@ -305,6 +311,7 @@ begin
     if Room.Id = 0 then
     begin
       CreateRoom(Slug, 'channel', Slug, Values['topic'], 0, Policy);
+      Exec('UPDATE rooms SET as_sent = :k WHERE slug = :s', [Ord(Values['as_sent'] = '1'), Slug]);
       // Everyone follows a new channel; they can leave it.
       Exec(SqlInsertIgnoreSelect('follows', 'user_id, room_id, last_read_id', 'SELECT u.id, r.id, 0' + ' FROM users u, rooms r WHERE r.slug = :s'),
         [Slug]);
@@ -316,14 +323,15 @@ begin
       Exit;
     end
     else
-      Exec('UPDATE rooms SET topic = :t, post_policy = :p, archived = :a WHERE id = :r',
-        [Copy(Values['topic'], 1, 500), Policy, Ord(Values['archived'] = '1'), Room.Id]);
+      Exec('UPDATE rooms SET topic = :t, post_policy = :p, archived = :a, as_sent = :k WHERE id = :r',
+        [Copy(Values['topic'], 1, 500), Policy, Ord(Values['archived'] = '1'), Ord(Values['as_sent'] = '1'), Room.Id]);
   end;
   SendText(AResponse, 200, 'Saved.');
 end;
 
 initialization
   LiveOn := @ChatIsOn;
+  ChannelExists := @LinkableChannel;
   RegisterOldLink('/p/');
   RegisterSetting('start_room', 'New members and visitors land in this channel; a member comes back to the channel they were last in (empty: the home page)', '', 'text', 'Chat');
   RegisterSetting('ice_servers', 'Servers browsers use to find each other for a beam (space separated)',

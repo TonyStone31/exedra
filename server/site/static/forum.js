@@ -328,6 +328,23 @@
   window.addEventListener('pageshow', function (e) {
     if (e.persisted && document.querySelector('.forum-topics, .forum-boards')) location.reload();
   });
+  // Who started the topic ticks the reply that solved it: the page comes
+  // again with the mark on it and on the topic.
+  document.querySelectorAll('input[data-forum-solve]').forEach(function (box) {
+    box.addEventListener('change', async function () {
+      box.disabled = true;
+      try {
+        const response = await fetch('/api/forum/solved', {method: 'POST', credentials: 'same-origin',
+          body: new URLSearchParams({post: box.dataset.forumSolve, on: box.checked ? '1' : '0'})});
+        if (!response.ok) throw new Error((await response.text()).trim().slice(0, 200));
+        location.reload();
+      } catch (e) {
+        box.checked = !box.checked;
+        box.disabled = false;
+        alert(e.message);
+      }
+    });
+  });
   document.querySelectorAll('.forum-editor').forEach(editor);
   codeButtons(document);
   document.querySelectorAll('[data-forum-tools]').forEach(function (tools) { tools.hidden = false; });

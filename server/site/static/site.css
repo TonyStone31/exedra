@@ -479,8 +479,10 @@ pre code .warning { color: var(--amber); }
 /* a file on its way up: the chip fills from the left, with the share beside the name */
 .chip.busy { background: linear-gradient(to right, var(--accent-soft) var(--up, 0%), transparent var(--up, 0%)); box-shadow: inset 0 0 0 1px var(--accent-soft); opacity: 1; }
 .chip .share { font-weight: 400; font-variant-numeric: tabular-nums; }
-.options .whole { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--dim); white-space: nowrap; }
-.options .whole input { width: auto; margin: 0; }
+/* a camera photo's chip asks: smaller, or as it is */
+.chip .sizes { display: inline-flex; gap: 6px; margin-left: 8px; }
+.chip .sizes button { padding: 2px 9px; border: 1px solid var(--field-line); border-radius: 999px; background: var(--bg); color: var(--ink); font-size: 12px; font-weight: 600; line-height: 1.4; cursor: pointer; }
+.chip .sizes button:hover { border-color: var(--accent); }
 .chip button { border: 0; background: none; color: inherit; font-size: 16px; line-height: 1; padding: 0 4px; }
 .complete {
   position: absolute; bottom: calc(100% + 4px); left: 0; right: 0; max-width: 520px; background: var(--bg);
@@ -773,6 +775,7 @@ body.home { background: var(--bg-soft); }
   .msg .seen .icon { width: 12px; height: 12px; }
 }
 .grid input[type=checkbox] { width: auto; padding: 0; margin: 0 4px 0 0; vertical-align: -2px; }
+.grid .aslabel { white-space: nowrap; font-size: 13px; color: var(--dim); }
 .rolechecks label { display: inline-flex; align-items: center; }
 
 /* Report a problem */
@@ -1171,12 +1174,14 @@ form.site-search button { flex: 0 0 auto; font-weight: 600; cursor: pointer; }
 .site-search input:focus, .site-search select:focus, .site-search button:focus-visible { border-color: var(--accent); }
 .site-search input::placeholder { color: var(--side-dim); opacity: 1; }
 .topbar .site-search { flex: 0 1 26rem; flex-wrap: nowrap; min-width: 0; padding: 0; }
-.partbar { padding: 10px 20px; background: var(--bg-soft); border-bottom: 1px solid var(--line); }
-.partbar .site-search, .found-main .site-search { flex-wrap: nowrap; max-width: 36rem; padding: 0; }
-/* inside the forum's own frame the box needs no band of its own */
-.forum-main > .partbar { padding: 0 0 12px; background: none; border: 0; }
+/* a part's own box sits in the page's column and is as wide as what is under it */
+.partbar { padding: 12px 20px 0; }
+.partbar .site-search, .found-main .site-search { flex-wrap: nowrap; padding: 0; }
+.found-main .site-search { max-width: 36rem; }
+.forum-main > .partbar { padding: 12px 0 0; }
 .found-main .site-search { margin: 0 0 14px; }
 .partbar .site-search .complete, .found-main .site-search .complete { left: 0; }
+.partbar .site-search .complete { max-width: 36rem; }
 .topbar .site-search input, .topbar .site-search select { flex-basis: 5rem; }
 /* in a bar across the top the box takes the page's colors, light or dark, not the dark column's */
 :is(.topbar, .partbar, .found-main) form.site-search input, :is(.topbar, .partbar, .found-main) form.site-search select,

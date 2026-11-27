@@ -17,6 +17,14 @@ body.forum { background: var(--bg-soft); }
 .forum h3 { font-size: 1rem; margin: 0 0 .2rem; overflow-wrap: anywhere; }
 .forum-description { white-space: pre-wrap; overflow-wrap: anywhere; }
 .forum-mark { display: inline-block; border: 1px solid var(--line); border-radius: .2rem; padding: 0 .3rem; font-size: .75rem; }
+/* the topic that has its answer, the reply that is it, and the box that says so */
+.forum-solved, a.forum-solved { border-color: color-mix(in srgb, #16a34a 55%, transparent); background: color-mix(in srgb, #16a34a 12%, transparent); color: #15803d; font-weight: 600; text-decoration: none; white-space: nowrap; }
+:root[data-theme=dark] .forum-solved { color: #4ade80; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .forum-solved { color: #4ade80; } }
+a.forum-solved:hover { text-decoration: underline; }
+.forum-post-content > header .forum-solve { display: inline-flex; align-items: center; gap: .3rem; margin: 0 .5rem 0 0; font-size: .8rem; font-weight: 500; color: var(--ink); white-space: nowrap; cursor: pointer; }
+.forum-post-content > header .forum-solve input { display: inline-block; width: auto; margin: 0; padding: 0; }
+.forum-post-content > header .forum-solved { margin-inline-end: .5rem; }
 .forum-hidden, .forum-error { color: var(--red); }
 .forum-error:empty { display: none; }
 .forum [hidden] { display: none !important; }

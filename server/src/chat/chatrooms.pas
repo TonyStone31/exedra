@@ -20,9 +20,12 @@ type
     Title: string;
     Topic: string;
     OwnerId: integer;
-    Policy: string;      // who starts messages: all, readonly (post-readonly) or owner
+    // who starts messages: all, readonly (post-readonly; anyone replies),
+    // closed (post-readonly, for replies too) or owner
+    Policy: string;
     Archived: boolean;
     Private: boolean;
+    AsSent: boolean;     // nobody changes or deletes a message here once it is sent
   end;
 
   { Adds what a module knows about a room to its info. }
@@ -78,7 +81,7 @@ begin
 end;
 
 const
-  RoomColumns = 'SELECT id, slug, kind, title, topic, owner_id, post_policy, archived, private FROM rooms ';
+  RoomColumns = 'SELECT id, slug, kind, title, topic, owner_id, post_policy, archived, private, as_sent FROM rooms ';
 
 function ReadRoom(const Where: string; const Values: array of variant): TRoom;
 begin
@@ -91,6 +94,7 @@ begin
   Result.Policy := 'all';
   Result.Archived := False;
   Result.Private := False;
+  Result.AsSent := False;
   with Query(RoomColumns + Where, Values) do
   try
     if EOF then
@@ -104,6 +108,7 @@ begin
     Result.Policy := Fields[6].AsString;
     Result.Archived := Fields[7].AsInteger = 1;
     Result.Private := Fields[8].AsInteger = 1;
+    Result.AsSent := Fields[9].AsInteger = 1;
   finally
     Free;
   end;
@@ -171,6 +176,8 @@ begin
     Result := Say('You are muted in this channel for now.')
   else if not RoomCan(Me, 'post', Room) then
     Result := Say('Posting is not open to you here.')
+  else if (Room.Policy = 'closed') and not RoomCan(Me, 'post-readonly', Room) then
+    Result := Say('Only some members write in this channel.')
   else if (Room.Policy = 'readonly') and not RoomCan(Me, 'post-readonly', Room) then
     Result := Say('This channel is read only. Reply in a thread instead.')
   else if (Room.Policy = 'owner') and (Room.OwnerId <> Me.Id) then
@@ -354,7 +361,8 @@ begin
   Info := TJSONObject.Create(['avatar', AvatarUrl(VarToStr(Value('SELECT avatar FROM rooms WHERE id = :r', [Room.Id]))), 'id', Room.Id,
     'slug', Room.Slug, 'kind', Room.Kind, 'title', Room.Title, 'topic', Room.Topic, 'policy', Room.Policy, 'archived', Room.Archived,
     'private', Room.Private, 'owner', VarToStr(Value('SELECT name FROM users WHERE id = :u', [Room.OwnerId])), 'following',
-    IsFollower(Me.Id, Room.Id), 'can_start', Why = '', 'why_not', Why, 'can', RoomPermissions(Me, Room)]);
+    IsFollower(Me.Id, Room.Id), 'can_start', Why = '', 'why_not', Why, 'can_reply', (Room.Policy <> 'closed') or (Why = ''), 'as_sent',
+    Room.AsSent, 'can', RoomPermissions(Me, Room)]);
   for Hook in InfoHooks do
     Hook(Room, Me, Info);
   SendJSON(AResponse, Info);
@@ -616,6 +624,7 @@ initialization
   // being in it.
   // A room's own picture: a file token, as a member's avatar is.
   RegisterUpgrade('rooms-avatar', 'ALTER TABLE rooms ADD COLUMN avatar VARCHAR(40) NOT NULL DEFAULT ''''');
+  RegisterUpgrade('rooms-as-sent', 'ALTER TABLE rooms ADD COLUMN as_sent TINYINT NOT NULL DEFAULT 0');
   // The channel each member opened last: where / takes them next time.
   RegisterUpgrade('users-last-room', 'ALTER TABLE users ADD COLUMN last_room VARCHAR(60) NOT NULL DEFAULT ''''');
   RegisterUpgrade('follows-notify', 'ALTER TABLE follows ADD COLUMN notify TINYINT NOT NULL DEFAULT 0');

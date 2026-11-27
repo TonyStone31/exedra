@@ -877,7 +877,10 @@ begin
     else if Room.Archived then
       Why := SiteWords.Say('This channel is archived.')
     else if not RoomCan(Me, 'post', Room) then
-      Why := SiteWords.Say('Posting is not open to you here.');
+      Why := SiteWords.Say('Posting is not open to you here.')
+    // a closed channel: replies are for who may start a message there
+    else if Room.Policy = 'closed' then
+      Why := CanStart(Me, Room);
   end
   else
     Why := CanStart(Me, Room);
@@ -975,6 +978,11 @@ begin
     SendText(AResponse, 403, 'This message cannot be changed now.');
     Exit;
   end;
+  if Room.AsSent then
+  begin
+    SendText(AResponse, 403, 'Messages in this channel stay as they were sent.');
+    Exit;
+  end;
   if (Body = '') or (Length(Body) > MaxBody) then
   begin
     SendText(AResponse, 400, 'An edited message cannot be empty or too long. Delete it instead.');
@@ -1013,6 +1021,12 @@ begin
   if not ((Author = Me.Id) and Can(Me, 'delete-own')) and not (CanRead(Me, Room) and RoomCan(Me, 'delete-any', Room)) then
   begin
     SendText(AResponse, 403, 'That is not yours to delete.');
+    Exit;
+  end;
+  // nobody's to delete there, a moderator's neither: the channel's setting is turned off first
+  if Room.AsSent then
+  begin
+    SendText(AResponse, 403, 'Messages in this channel stay as they were sent.');
     Exit;
   end;
   Exec('UPDATE messages SET body = '''', html = '''', deleted = 1, pinned = 0 WHERE id = :m', [Id]);

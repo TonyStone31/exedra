@@ -17,6 +17,12 @@ type
 
 { Renders Text.  Members and Rooms receive the names that were linked. }
 function RenderText(const Text: string; MemberExists, RoomExists: TExistsFunc; Members, Rooms: TStrings): string;
+
+var
+  { Whether a public chat channel goes by a name: set by the chat when it is
+    built in, so text written in another module links #name through it. }
+  ChannelExists: TExistsFunc = nil;
+
 { As RenderText, parsed by a parser of the caller's with its options added
   to GitHub's: a unit that knows more syntax than the chat (wiki links). }
 function RenderTextWith(const Text: string; MemberExists, RoomExists: TExistsFunc; Members, Rooms: TStrings; ParserClass: TMarkdownParserClass;

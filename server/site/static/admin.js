@@ -2236,16 +2236,25 @@
       topic.value = c.topic || '';
       topic.placeholder = t('What it is for');
       const policy = el('select');
-      [['all', t('everyone posts')], ['readonly', t('read only: some post, all reply')]].forEach(function (p) {
+      [['all', t('everyone posts')], ['readonly', t('read only: some post, all reply')], ['closed', t('closed: only some post or reply')]].forEach(function (p) {
         const o = el('option', '', p[1]);
         o.value = p[0];
         policy.appendChild(o);
       });
-      policy.value = c.policy === 'readonly' ? 'readonly' : 'all';
+      policy.value = c.policy === 'readonly' || c.policy === 'closed' ? c.policy : 'all';
+      // nobody changes or deletes a message there once it is sent
+      const asSent = el('input');
+      asSent.type = 'checkbox';
+      asSent.checked = !!c.as_sent;
+      const asSentLabel = el('label', 'aslabel', '');
+      asSentLabel.append(asSent, ' ' + t('as sent'));
+      asSentLabel.title = t('Messages stay as they were sent: nobody changes or deletes one, a moderator neither.');
+      const archivedLabel = el('label', 'aslabel', '');
       const archived = el('input');
       archived.type = 'checkbox';
       archived.checked = !!c.archived;
       archived.title = t('Archived');
+      archivedLabel.append(archived, ' ' + t('archived'));
       // The channel's icon: a click on it picks a new picture.
       const iconCell = el('label', 'chanicon');
       if (c.slug) {
@@ -2275,11 +2284,11 @@
       save.addEventListener('click', async function () {
         try {
           toast(await post('/api/admin/channel', {slug: slug.value, topic: topic.value, policy: policy.value,
-            archived: archived.checked ? '1' : '0'}));
+            archived: archived.checked ? '1' : '0', as_sent: asSent.checked ? '1' : '0'}));
           if (!c.slug) route('/admin', false);
         } catch (err) { failed(err); }
       });
-      [iconCell, slug, topic, policy, archived, save].forEach(function (x) { const td = el('td'); td.appendChild(x); tr.appendChild(td); });
+      [iconCell, slug, topic, policy, asSentLabel, archivedLabel, save].forEach(function (x) { const td = el('td'); td.appendChild(x); tr.appendChild(td); });
       table.appendChild(tr);
     };
     data.channels.forEach(addRow);
