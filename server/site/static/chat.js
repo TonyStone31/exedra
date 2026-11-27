@@ -19,6 +19,14 @@
 
   // ---------------------------------------------------------------- sidebar
 
+  // The left column's button that searches every channel, in the main area.
+  const findAll = document.getElementById('findall');
+  if (findAll) {
+    findAll.hidden = false;
+    findAll.prepend(Side.icon('search'));
+    findAll.addEventListener('click', function () { document.body.classList.remove('menu'); route('/chat-search', true); });
+  }
+
   // The member's unseen notices from the site (SiteNotices), the newest few.
   let Notices = {unseen: 0, items: []};
 
@@ -1356,6 +1364,53 @@
     });
   }
 
+  // Every channel the reader may read, searched in the main area.  The
+  // words stay while the reader looks at a hit and comes back.
+  let allWords = '';
+  function openSearchAll() {
+    S.view = 'search';
+    S.title = t('Search all chats');
+    const head = $('#roomhead');
+    const menu = iconButton('menu', t('Channels'), 'menubtn');
+    menu.addEventListener('click', toggleMenu);
+    head.append(menu, el('div', 'titles'));
+    $('.titles', head).appendChild(el('h1', '', S.title));
+    stream.className = 'findall-view';
+    stream.noPin = true;
+    const input = el('input');
+    input.type = 'search';
+    input.placeholder = t('Words to find');
+    input.value = allWords;
+    const results = el('div', 'findall-hits');
+    stream.append(input, el('p', 'notice', t('Looks in every channel you can read. A private conversation is searched from inside it.')), results);
+    let timer = 0, asked = 0;
+    const run = async function () {
+      const q = allWords = input.value.trim(), turn = ++asked;
+      if (q.length < 2) { results.replaceChildren(); return; }
+      try {
+        const list = await get('/api/search?q=' + enc(q));
+        if (turn !== asked || !results.isConnected) return;
+        results.replaceChildren();
+        if (!list.length) results.appendChild(el('p', 'notice', t('Nothing found.')));
+        for (const m of list) {
+          const node = renderMessage(m, true);
+          node.classList.add('result');
+          // which channel it was said in
+          const header = node.querySelector('header');
+          if (header) header.appendChild(el('span', 'where', '#' + m.room));
+          node.addEventListener('click', function (e) {
+            if (e.target.closest('a, button')) return;
+            route('/m/' + m.id, true);
+          });
+          results.appendChild(node);
+        }
+      } catch (err) { failed(err); }
+    };
+    input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(run, 300); });
+    input.focus();
+    if (allWords) run();
+  }
+
   function openSearch() {
     const box = openPanel(t('Search'), 'search');
     const input = el('input');
@@ -1441,25 +1496,6 @@
   // True while the caret sits inside an open ``` block, where Enter makes a new line.
   function inFence(area) {
     return (area.value.slice(0, area.selectionStart).match(/```/g) || []).length % 2 === 1;
-  }
-
-  // A camera photo made smaller before it goes up: 2560 on its long side
-  // shows as much on a screen and is a fraction of the bytes.  Anything
-  // else, and a photo that would not get smaller, goes as it is.
-  async function smaller(file) {
-    if (file.type !== 'image/jpeg' || file.size < 1500000 || !window.createImageBitmap) return file;
-    try {
-      const picture = await createImageBitmap(file, {imageOrientation: 'from-image'});
-      const scale = Math.min(1, 2560 / Math.max(picture.width, picture.height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(picture.width * scale);
-      canvas.height = Math.round(picture.height * scale);
-      canvas.getContext('2d').drawImage(picture, 0, 0, canvas.width, canvas.height);
-      const made = await new Promise(function (done) { canvas.toBlob(done, 'image/jpeg', 0.85); });
-      return made && made.size < file.size ? new File([made], file.name, {type: 'image/jpeg'}) : file;
-    } catch (e) {
-      return file;
-    }
   }
 
   // Sends one file; told(share) hears how much of it has gone up, 0 to 1.
@@ -1578,7 +1614,7 @@
             const share = el('span', 'share', '');
             chip.appendChild(share);
             try {
-              const done = await upload(whole.checked ? file : await smaller(file), expire.value, dm && S.dmLocked ? dm : '', function (part) {
+              const done = await upload(whole.checked ? file : await Keys.smaller(file), expire.value, dm && S.dmLocked ? dm : '', function (part) {
                 share.textContent = Math.round(part * 100) + '%';
                 chip.style.setProperty('--up', Math.round(part * 100) + '%');
               });
@@ -2432,6 +2468,7 @@
     view: async function (view, target, thread) {
       if (view === 'room') await openRoom(target, thread);
       else if (view === 'dm') await openDm(target);
+      else if (view === 'search') openSearchAll();
       else return false;
       return true;
     },
@@ -2443,6 +2480,7 @@
         const root = list[0].parent ? list[0].parent : list[0].id;
         await openRoom(list[0].room, root);
       } else if (parts[1] === 'dm') await openDm(parts[2]);
+      else if (parts[1] === 'chat-search') openSearchAll();
       else return false;
       return true;
     },

@@ -358,7 +358,7 @@
 
   // ----------------------------------------------------------------- router
 
-  function isAppPath(path) { return /^\/(p|m|u|dm)\/|^\/admin$/.test(path); }
+  function isAppPath(path) { return /^\/(p|m|u|dm)\/|^\/(admin|chat-search)$/.test(path); }
 
   document.addEventListener('click', function (e) {
     const a = e.target.closest('a[href]');

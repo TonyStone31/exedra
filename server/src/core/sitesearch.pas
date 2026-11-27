@@ -279,10 +279,26 @@ begin
     SetLength(Result, Pos('/', Result) - 1);
 end;
 
-{ The box on every page, for a template that has search_form in double
-  braces: the words, and which module to look in when there are several.
-  It starts on the module whose page the reader is on.  A plain form, so
-  it works without scripts. }
+{ The script that offers pages and words while the reader types, for a
+  template that has search_offers in double braces after a search form of
+  its own: empty where the index does not answer this reader. }
+function SearchOffers: string;
+var
+  Request: TRequest;
+begin
+  Result := '';
+  Request := PageRequest;
+  if Request = nil then
+    Exit;
+  CheckConnection;
+  if EngineOf(Request, CurrentMember(Request)) = 'index' then
+    Result := '<script src="/static/search.js?v=' + StaticVersion + '" defer></script>';
+end;
+
+{ The box that looks in every module, for a template that has search_form
+  in double braces and on the page of what was found: the words, and which
+  module to look in when there are several.  It starts on the module whose
+  page the reader is on.  A plain form, so it works without scripts. }
 function SearchForm: string;
 var
   Me: TMember;
@@ -330,10 +346,7 @@ begin
       Result := Result + ' selected';
     Result := Result + '>' + E(Say('Everything')) + '</option></select>';
   end;
-  Result := Result + '<button>' + E(Say('Search')) + '</button></form>';
-  // suggestions while typing, where the index answers this reader
-  if EngineOf(Request, Me) = 'index' then
-    Result := Result + '<script src="/static/search.js?v=' + StaticVersion + '" defer></script>';
+  Result := Result + '<button>' + E(Say('Search')) + '</button></form>' + SearchOffers;
 end;
 
 function HitHtml(const Hit: TSearchHit; const Words, TitleHtml, ExcerptHtml: string): string;
@@ -398,10 +411,10 @@ begin
   Words := Trim(ARequest.QueryFields.Values['q']);
   Scope := ScopeOf(ARequest.QueryFields.Values['in'], Me);
   Page := PageOf(ARequest);
-  Html := '<h1>' + E(Say('Search')) + '</h1>';
+  Html := '<h1>' + E(Say('Search')) + '</h1>' + SearchForm;
   Problem := SearchWordsProblem(Words);
   if Words = '' then
-    Html := Html + '<p class="notice">' + E(Say('Type the words to look for in the search box.')) + '</p>'
+    Html := Html + '<p class="notice">' + E(Say('Type the words to look for.')) + '</p>'
   else if Problem <> '' then
     Html := Html + '<p class="notice">' + E(Problem) + '</p>'
   else
@@ -559,6 +572,7 @@ end;
 
 initialization
   RegisterPageValue('search_form', @SearchForm);
+  RegisterPageValue('search_offers', @SearchOffers);
   RegisterRequestLimit('suggest', 'Search suggestions while typing', 120, 240, 1);
   LimitRoute('suggest', '/api/site-suggest', 'GET');
   HTTPRouter.RegisterRoute('/api/site-suggest', rmGet, @ApiSuggest);

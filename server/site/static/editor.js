@@ -177,11 +177,19 @@
     chooser.hidden = true;
     if (form) form.appendChild(chooser);
     chooser.addEventListener('change', function () { upload(Array.from(chooser.files)); chooser.value = ''; });
-    function choose() { chooser.click(); }
+    // the kinds asked for are read when the chooser opens, so one input serves both links
+    function choose(accept) {
+      chooser.accept = typeof accept === 'string' ? accept : (opts.pictures ? opts.pictures.accept : '');
+      chooser.click();
+    }
+    // camera photos go up smaller unless this is ticked
+    const full = el('input');
+    full.type = 'checkbox';
 
     let pending = 0;
-    function upload(list) {
+    async function upload(list) {
       if (!opts.pictures) return;
+      if (!full.checked && window.Keys) list = await Promise.all(list.map(Keys.smaller));
       for (const f of list) {
         // the part says what it takes; left to itself the editor takes pictures
         const refusal = opts.pictures.refuses ? opts.pictures.refuses(f)
@@ -372,7 +380,7 @@
       if (e && typedFrom >= 0) replace(typedFrom, at, e.emoji);
     }
     // The one selected row, for the keys and the pointer alike.
-    function choose(i) {
+    function mark(i) {
       chosen = i;
       Array.from(suggest.children).forEach(function (row, n) { row.classList.toggle('on', n === i); });
     }
@@ -391,11 +399,11 @@
         const key = e.match || e.keywords[0] || '';
         // a name that only says the keyword again is left out
         row.append(emojiFace(e), el('span', 'editor-suggest-key', ':' + key + ':'), el('span', 'editor-suggest-name', e.name === key ? '' : e.name));
-        row.addEventListener('mousemove', function () { if (chosen !== i) choose(i); });
+        row.addEventListener('mousemove', function () { if (chosen !== i) mark(i); });
         row.addEventListener('click', function () { takeChoice(i); });
         suggest.appendChild(row);
       });
-      choose(0);
+      mark(0);
       const p = caretPoint(typedFrom);
       suggest.style.top = Math.min(p.top + 4, window.innerHeight - suggest.offsetHeight - 8) + 'px';
       suggest.style.left = Math.max(8, Math.min(p.left, window.innerWidth - suggest.offsetWidth - 8)) + 'px';
@@ -431,7 +439,7 @@
           eager = true;
           offer();
         } else if (arrow) {
-          choose((chosen + (e.key === 'ArrowDown' ? 1 : choices.length - 1)) % choices.length);
+          mark((chosen + (e.key === 'ArrowDown' ? 1 : choices.length - 1)) % choices.length);
         } else if (e.key === 'Enter' || e.key === 'Tab') {
           takeChoice(chosen);
         } else if (e.key === 'Escape') {
@@ -467,7 +475,21 @@
     attach.type = 'button';
     attach.addEventListener('click', choose);
     hint.append(document.createTextNode(opts.hint || t('Markdown.')));
-    if (opts.pictures) hint.append(document.createTextNode(' '), attach);
+    if (opts.pictures) {
+      hint.append(document.createTextNode(' '), attach);
+      // Android's chooser has the camera and the file browser but no gallery,
+      // unless pictures alone are asked for: a second link asks for those
+      if (opts.pictures.gallery && /Android/.test(navigator.userAgent)) {
+        const gallery = el('button', 'editor-link', /video/.test(opts.pictures.gallery) ? t('Photos and videos') : t('Photos'));
+        gallery.type = 'button';
+        gallery.addEventListener('click', function () { choose(opts.pictures.gallery); });
+        hint.append(document.createTextNode(' · '), gallery);
+      }
+      const fullLabel = el('label', 'editor-full', '');
+      fullLabel.append(full, ' ' + t('Photos at full size'));
+      fullLabel.title = t('A camera photo is made smaller before it is sent, which is much quicker on a phone. Tick this to send it as it is.');
+      hint.append(document.createTextNode(' '), fullLabel);
+    }
     const helpButton = el('button', 'editor-link', t('Formatting help'));
     helpButton.type = 'button';
     helpButton.setAttribute('aria-expanded', 'false');

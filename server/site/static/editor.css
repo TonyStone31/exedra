@@ -52,6 +52,8 @@
 .editor-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 7px 10px; border: 1px solid var(--line); border-top: 0;
   border-radius: 0 0 8px 8px; background: var(--bg-soft); font-size: 13px; color: var(--dim); }
 .editor-hint { flex: 1 1 auto; min-width: 0; }
+.editor .editor-foot label.editor-full { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 0 8px; font: inherit; font-weight: 400; white-space: nowrap; vertical-align: bottom; }
+.editor .editor-foot label.editor-full input[type=checkbox] { display: inline-block; flex: none; width: auto; min-height: 0; margin: 0; padding: 0; }
 .editor-news { color: var(--ink); font-weight: 600; }
 .editor-news.bad { color: var(--red, #c0392b); }
 .editor .editor-link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }

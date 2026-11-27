@@ -457,11 +457,10 @@ begin
       NoteTry(Ip, 'signup');
       Me := MemberById(MemberId(Name));
       AuthAt := VarToStr(Value('SELECT auth_hash FROM users WHERE id = :u', [Me.Id]));
-      if MailReady then
-      begin
-        SendAddressCheck(Me.Id);
-        ServiceNotice('Welcome, ' + Name + '. Open the link mailed to ' + Words[2] + ' and you can talk.');
-      end
+      if MailReady and SendAddressCheck(Me.Id) then
+        ServiceNotice('Welcome, ' + Name + '. Open the link mailed to ' + Words[2] + ' and you can talk.')
+      else if MailReady then
+        ServiceNotice('Welcome, ' + Name + '. That address has had its links for this hour: ask for one on the site later, and you can talk.')
       else
         ServiceNotice('Welcome, ' + Name + '.');
       ServiceNotice('The same name and password sign you in at ' + SiteUrl + '.');

@@ -122,7 +122,9 @@ function ValidName(const S: string): boolean;
 function AddMember(const Name, Email, Auth, Pub, Wrapped: string; Verified: boolean): integer;
 { Mails the member a link that confirms their address.  With NewEmail the
   link goes there, and opening it makes that the account's address. }
-procedure SendAddressCheck(UserId: integer; const NewEmail: string = '');
+{ False when that address has had its three such mails this hour, whoever
+  asked for them: nobody fills a stranger's mailbox through this site. }
+function SendAddressCheck(UserId: integer; const NewEmail: string = ''): boolean;
 function ValidEmail(const S: string): boolean;
 { Whether an account other than ExceptUser has the address. }
 function EmailTaken(const Email: string; ExceptUser: integer = 0): boolean;
@@ -955,10 +957,11 @@ begin
   Result := IntValue('SELECT COUNT(*) FROM users WHERE email = :e AND id <> :u AND verified = 1', [LowerCase(Email), ExceptUser]) > 0;
 end;
 
-procedure SendAddressCheck(UserId: integer; const NewEmail: string);
+function SendAddressCheck(UserId: integer; const NewEmail: string): boolean;
 var
   Token, Who, Email, Link: string;
 begin
+  Result := False;
   // Not inside "with Query": Name there is the query's own.
   Who := VarToStr(Value('SELECT name FROM users WHERE id = :u', [UserId]));
   Email := NewEmail;
@@ -966,6 +969,10 @@ begin
     Email := VarToStr(Value('SELECT email FROM users WHERE id = :u', [UserId]));
   if Email = '' then
     Exit;
+  // the counter's name has to fit the column of addresses it is kept in
+  if not AllowAttempt('mail ' + Copy(Sha256Hex(LowerCase(Email)), 1, 32), 'mailcheck', 3, 60) then
+    Exit;
+  Result := True;
   Token := RandomHex(32);
   Exec('INSERT INTO email_checks (token_hash, user_id, email, expires) VALUES (:t, :u, :e, ' + SqlAhead('2', suDay) + ')',
     [Sha256Hex(Token), UserId, NewEmail]);
@@ -1059,8 +1066,10 @@ begin
       Exec('DELETE FROM email_checks WHERE user_id = :u', [Me.Id]);
     end;
     NoteTry(ClientIp(ARequest), 'verify');
-    SendAddressCheck(Me.Id);
-    SendText(AResponse, 200, 'Sent. Open the link in it to confirm.');
+    if SendAddressCheck(Me.Id) then
+      SendText(AResponse, 200, 'Sent. Open the link in it to confirm.')
+    else
+      SendText(AResponse, 429, 'Three links an hour is the most. Look in your spam folder too.');
   end;
 end;
 
@@ -1116,8 +1125,10 @@ begin
     // one change waits at a time: a link to an address given before is no use now
     Exec('DELETE FROM email_checks WHERE user_id = :u', [Me.Id]);
     NoteTry(ClientIp(ARequest), 'verify');
-    SendAddressCheck(Me.Id, Email);
-    SendText(AResponse, 200, 'Sent. Open the link in it, and your account uses the new address.');
+    if SendAddressCheck(Me.Id, Email) then
+      SendText(AResponse, 200, 'Sent. Open the link in it, and your account uses the new address.')
+    else
+      SendText(AResponse, 429, 'Three links an hour is the most. Look in your spam folder too.');
   end
   else
   begin

@@ -29,7 +29,6 @@
     <button type="button" id="theme" class="iconbtn" title="{{t:Theme: auto}}"></button>
     <label for="sidetoggle" class="sidemenu">{{t:Menu}}</label>
   </div>
-  {{search_form}}
   <div class="sidebody">
     <nav class="sidenav" aria-label="{{t:Site}}">{{nav}}</nav>
     <nav class="sidelist" aria-label="{{t:Wiki}}">
@@ -56,6 +55,7 @@
 </aside>
 <div class="shellmain">
 {{live}}
+<div class="partbar"><form class="site-search" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" required placeholder="{{t:Search the wiki}}" aria-label="{{t:Search the wiki}}"><input type="hidden" name="in" value="wiki"><button>{{t:Search}}</button></form></div>{{search_offers}}
 <main class="wikipage" id="wiki-content" tabindex="-1">
 {{content}}
 </main>

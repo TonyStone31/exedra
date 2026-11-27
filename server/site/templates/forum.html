@@ -25,7 +25,6 @@
     <button type="button" id="theme" class="iconbtn" title="{{t:Theme: auto}}"></button>
     <label for="sidetoggle" class="sidemenu">{{t:Menu}}</label>
   </div>
-  {{search_form}}
   <div class="sidebody">
     <nav class="sidenav" aria-label="{{t:Site}}">{{nav}}</nav>
     <nav class="sidelist" aria-label="{{t:Forum}}">
@@ -44,6 +43,7 @@
 </aside>
 <div class="shellmain">
 <main class="forum-main" id="forum-top">
+  <div class="partbar"><form class="site-search" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" required placeholder="{{t:Search the forum}}" aria-label="{{t:Search the forum}}"><input type="hidden" name="in" value="forum"><button>{{t:Search}}</button></form></div>{{search_offers}}
   {{heading}}
   {{content}}
   <noscript><p>{{t:JavaScript is needed to post or change the forum.}}</p></noscript>

@@ -77,6 +77,7 @@
     if (!kinds.length || !most) return null;
     return {
       accept: kinds.map(function (k) { return '.' + k; }).join(','),
+      gallery: 'image/*' + (kinds.some(function (k) { return /^(mp4|webm|mov|m4v)$/.test(k); }) ? ',video/*' : ''),
       label: t('add files'),
       refuses: function (file) {
         const kind = (/\.([A-Za-z0-9]+)$/.exec(file.name || '') || ['', ''])[1].toLowerCase();

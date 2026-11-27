@@ -18,6 +18,7 @@ type
   TFerretParsedQuery = record
     Clauses: TFerretClauses;
     Branches: integer;
+    Titles: TFerretStrings;
   end;
 
 function ParseQuery(const Text: string; PrefixLast: boolean): TFerretParsedQuery;
@@ -73,6 +74,7 @@ var
 begin
   Result.Clauses := nil;
   Result.Branches := 0;
+  Result.Titles := nil;
   I := 1;
   Branch := 0;
   Last := -1;

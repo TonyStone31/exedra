@@ -363,6 +363,25 @@ window.Keys = (function () {
     return {t: 'text', text: plain};
   }
 
+  // A camera photo made smaller before it goes up: 2560 on its long side
+  // shows as much on a screen and is a fraction of the bytes.  Anything
+  // else, and a photo that would not get smaller, goes as it is.
+  async function smaller(file) {
+    if (file.type !== 'image/jpeg' || file.size < 1500000 || !window.createImageBitmap) return file;
+    try {
+      const picture = await createImageBitmap(file, {imageOrientation: 'from-image'});
+      const scale = Math.min(1, 2560 / Math.max(picture.width, picture.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(picture.width * scale);
+      canvas.height = Math.round(picture.height * scale);
+      canvas.getContext('2d').drawImage(picture, 0, 0, canvas.width, canvas.height);
+      const made = await new Promise(function (done) { canvas.toBlob(done, 'image/jpeg', 0.85); });
+      return made && made.size < file.size ? new File([made], file.name, {type: 'image/jpeg'}) : file;
+    } catch (e) {
+      return file;
+    }
+  }
+
   // A file for a private conversation: encrypted here, then uploaded.
   // A JPEG or PNG without what the camera wrote beside the picture (where
   // and when, the device, comments).  The server does this for a plain
@@ -545,6 +564,6 @@ window.Keys = (function () {
     setupKeys: setupKeys, unlock: unlock, setNewPassword: setNewPassword, changePassword: changePassword,
     passwordProof: passwordProof,
     seal: seal, open: open, sealFile: sealFile, openFile: openFile, partner: partner, trust: trust,
-    beamSend: beamSend, beamReceive: beamReceive
+    beamSend: beamSend, beamReceive: beamReceive, smaller: smaller
   };
 })();

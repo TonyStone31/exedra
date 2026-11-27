@@ -199,6 +199,13 @@ begin
       '<h1>' + E(Room.Title) + '</h1><p>' + E(Room.Topic) + '</p>' + PlainMessages(Room), 0);
 end;
 
+{ GET /chat-search  the page's own search of every channel the reader may read }
+procedure ShowChatSearch(ARequest: TRequest; AResponse: TResponse);
+begin
+  CheckConnection;
+  SendApp(ARequest, AResponse, 'search', '', Say('Search all chats'), '<h1>' + E(Say('Search all chats')) + '</h1>', 0);
+end;
+
 procedure ShowThreadPage(ARequest: TRequest; AResponse: TResponse);
 var
   Id: integer;
@@ -345,6 +352,7 @@ initialization
   HTTPRouter.RegisterRoute('/connect.exedra', rmGet, @ShowConnect);
   HTTPRouter.RegisterRoute('/p/:slug', rmGet, @ShowRoom);
   HTTPRouter.RegisterRoute('/m/:id', rmGet, @ShowThreadPage);
+  HTTPRouter.RegisterRoute('/chat-search', rmGet, @ShowChatSearch);
   HTTPRouter.RegisterRoute('/dm/:name', rmGet, @ShowDmPage);
   HTTPRouter.RegisterRoute('/api/admin/channel', rmPost, @SaveChannel);
 end.

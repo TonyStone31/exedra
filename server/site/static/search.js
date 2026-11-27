@@ -7,7 +7,7 @@
     if (!input || input.dataset.offers) return;
     input.dataset.offers = '1';
     input.autocomplete = 'off';
-    const scope = form.querySelector('select[name=in]');
+    const scope = form.querySelector('[name=in]');
     const box = document.createElement('div');
     box.className = 'complete';
     box.hidden = true;

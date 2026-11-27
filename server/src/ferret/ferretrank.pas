@@ -29,6 +29,7 @@ implementation
 
 const
   LengthNormalization = 0.6;
+  WholeTitleBoost = 1.2;
 
 function ComparePrefix(List: TStringList; A, B: integer): integer;
 begin
@@ -339,6 +340,17 @@ begin
   if Best < MaxInt then Result := 0.2 / (1 + Best);
 end;
 
+function TitleFactor(Query: TFerretQuery; const Parsed: TFerretParsedQuery; BranchNumber: integer; Doc: TFerretDocument): double;
+var
+  I: integer;
+begin
+  Result := 1;
+  if not Query.IncludesField('title') then Exit;
+  if Parsed.Titles[BranchNumber] = '' then Exit;
+  for I := 0 to High(Doc.Fields) do
+    if (Doc.Fields[I].Name = 'title') and (FoldText(Trim(Doc.Fields[I].Text)) = Parsed.Titles[BranchNumber]) then Exit(WholeTitleBoost);
+end;
+
 function ScoreDocument(Store: TFerretStore; Query: TFerretQuery; const Parsed: TFerretParsedQuery; const Matches: TAllMatches; Number: integer;
   out Hit: TFerretRankedHit; Supplied: TFerretDocument = nil; CheckAllow: boolean = True; WantParts: boolean = False): boolean;
 var
@@ -403,6 +415,7 @@ begin
         Previous := I;
         if WantParts then Hit.Parts[I] := Local[I];
       end;
+    Score := Score * TitleFactor(Query, Parsed, B, Doc);
     if (Tier < Hit.Tier) or ((Tier = Hit.Tier) and (Score > Hit.Score)) then
     begin
       Hit.Score := Score;
@@ -890,33 +903,42 @@ begin
   Result := Ln(1 + (Store.DocumentCount - word.Frequency + 0.5) / (word.Frequency + 0.5));
 end;
 
-function BlockBound(Store: TFerretStore; Query: TFerretQuery; const word: TFastWord; Range: integer): double;
+function BlockBound(Store: TFerretStore; Query: TFerretQuery; const word: TFastWord; Range: integer; out TitlePresent: boolean): double;
 var
   I, J: integer;
   TF: double;
 begin
   TF := 0;
+  TitlePresent := False;
   I := FirstBlock(word, Range);
   while (I < Length(word.Blocks)) and (word.Blocks[I].Range = Range) do
   begin
     // Pending and custom stores may omit bounds; saturation remains a safe limit.
-    if Length(word.Blocks[I].Bounds) = 0 then Exit(2.2 * IDF(Store, word));
+    if Length(word.Blocks[I].Bounds) = 0 then
+    begin
+      TitlePresent := Query.IncludesField('title');
+      Exit(2.2 * IDF(Store, word));
+    end;
     for J := 0 to High(word.Blocks[I].Bounds) do
       with word.Blocks[I].Bounds[J] do
         if Query.IncludesField(Name) then
+        begin
           TF := TF + Frequency / LengthNorm(Store, Name, WordCount);
+          if Name = 'title' then TitlePresent := True;
+        end;
     Inc(I);
   end;
   Result := IDF(Store, word) * (2.2 * TF) / (1.2 + TF);
 end;
 
-function FrequencyScore(Store: TFerretStore; Query: TFerretQuery; const word: TFastWord; Number: integer; out Present: boolean): double;
+function FrequencyScore(Store: TFerretStore; Query: TFerretQuery; const word: TFastWord; Number: integer; out Present, TitlePresent: boolean): double;
 var
   Slot, I: integer;
   TF: double;
 begin
   Result := 0;
   Present := False;
+  TitlePresent := False;
   Slot := SummarySlot(word.Docs, Number);
   if Slot < 0 then Exit;
   TF := 0;
@@ -925,6 +947,7 @@ begin
       if Query.IncludesField(Name) then
       begin
         Present := True;
+        if Name = 'title' then TitlePresent := True;
         TF := TF + Weight * Count / LengthNorm(Store, Name, WordCount);
       end;
   Result := IDF(Store, word) * (2.2 * TF) / (1.2 + TF);
@@ -1011,24 +1034,28 @@ begin
     end;
 end;
 
-function UpperScore(const Scores: array of double; const Valid: array of boolean; const Parsed: TFerretParsedQuery): double;
+function UpperScore(const Scores: array of double; const Valid, Titles: array of boolean; const Parsed: TFerretParsedQuery): double;
 var
   B, I, Previous: integer;
   Score: double;
+  TitlePresent: boolean;
 begin
   Result := 0;
   for B := 0 to Parsed.Branches - 1 do
     if Valid[B] then
     begin
       Score := 0;
+      TitlePresent := True;
       Previous := -1;
       for I := 0 to High(Scores) do
         if (Parsed.Clauses[I].Branch = B) and not Parsed.Clauses[I].Negative then
         begin
           Score := Score + Scores[I];
+          TitlePresent := TitlePresent and Titles[I];
           if Previous >= 0 then Score := Score + 0.2 * (Scores[Previous] + Scores[I]);
           Previous := I;
         end;
+      if TitlePresent then Score := Score * WholeTitleBoost;
       if Score > Result then Result := Score;
     end;
 end;
@@ -1048,19 +1075,22 @@ type
   end;
   TBoundedCandidates = array of TBoundedCandidate;
 
-procedure ClauseScores(Store: TFerretStore; Query: TFerretQuery; const Clauses: TFastClauses; Number: integer; var Scores: array of double; var HasClause: array of boolean);
+procedure ClauseScores(Store: TFerretStore; Query: TFerretQuery; const Clauses: TFastClauses; Number: integer; var Scores: array of double;
+  var HasClause, Titles: array of boolean);
 var
   I, J: integer;
-  Present: boolean;
+  Present, TitlePresent: boolean;
 begin
   for I := 0 to High(Clauses) do
   begin
     HasClause[I] := True;
+    Titles[I] := True;
     Scores[I] := 0;
     for J := 0 to High(Clauses[I].Words) do
     begin
-      Scores[I] := Scores[I] + FrequencyScore(Store, Query, Clauses[I].Words[J], Number, Present);
+      Scores[I] := Scores[I] + FrequencyScore(Store, Query, Clauses[I].Words[J], Number, Present, TitlePresent);
       HasClause[I] := HasClause[I] and Present;
+      Titles[I] := Titles[I] and TitlePresent;
     end;
   end;
 end;
@@ -1077,19 +1107,6 @@ begin
       if (Parsed.Clauses[I].Branch = B) and (HasClause[I] = Parsed.Clauses[I].Negative) then Valid[B] := False;
     Result := Result or Valid[B];
   end;
-end;
-
-function CandidateUpper(Store: TFerretStore; Query: TFerretQuery; const Clauses: TFastClauses; const Parsed: TFerretParsedQuery; Number: integer): double;
-var
-  Scores: array of double;
-  HasClause, Valid: array of boolean;
-begin
-  SetLength(Scores, Length(Clauses));
-  SetLength(HasClause, Length(Clauses));
-  SetLength(Valid, Parsed.Branches);
-  ClauseScores(Store, Query, Clauses, Number, Scores, HasClause);
-  ValidBranches(HasClause, Parsed, Valid);
-  Result := UpperScore(Scores, Valid, Parsed);
 end;
 
 procedure SortCandidates(var Candidates: TBoundedCandidates; L, H: integer);
@@ -1123,6 +1140,7 @@ function ScoreCandidate(Store: TFerretStore; Query: TFerretQuery; const Clauses:
 var
   Doc: TFerretDocument;
   Local: TAllMatches;
+  Present, TitlePresent: boolean;
 begin
   if (Length(Clauses) = 1) and not Parsed.Clauses[0].Phrase and not Clauses[0].Words[0].Prefix and not Clauses[0].Words[0].Expanded then
   begin
@@ -1130,7 +1148,9 @@ begin
     Hit := Default(TFerretRankedHit);
     Hit.Number := Number;
     Hit.Id := Doc.Id;
-    Hit.Score := Bound * Factor;
+    Hit.Score := FrequencyScore(Store, Query, Clauses[0].Words[0], Number, Present, TitlePresent);
+    if TitlePresent then Hit.Score := Hit.Score * TitleFactor(Query, Parsed, 0, Doc);
+    Hit.Score := Hit.Score * Factor;
     Exit(True);
   end;
   Local := LocalMatches(Store, Clauses, Parsed, Number, False);
@@ -1139,7 +1159,8 @@ begin
 end;
 
 procedure ScoreRange(Store: TFerretStore; Query: TFerretQuery; const Clauses: TFastClauses; const Parsed: TFerretParsedQuery;
-  const Mask: TFerretDocumentMask; Range, Capacity: integer; Limit: double; var Heap: TFerretRankedHits);
+  const Mask: TFerretDocumentMask; Range, Capacity: integer; Limit: double; var Heap: TFerretRankedHits; var Scores: array of double;
+  var HasClause, Valid, Titles: array of boolean);
 var
   Candidates: TBoundedCandidates;
   Bit, N, I: integer;
@@ -1153,7 +1174,9 @@ begin
     begin
       Candidates[N].Number := Range * 128 + Bit;
       Candidates[N].Tier := MinimumTier(Clauses, Parsed, Range, Bit);
-      Candidates[N].Bound := CandidateUpper(Store, Query, Clauses, Parsed, Candidates[N].Number);
+      ClauseScores(Store, Query, Clauses, Candidates[N].Number, Scores, HasClause, Titles);
+      ValidBranches(HasClause, Parsed, Valid);
+      Candidates[N].Bound := UpperScore(Scores, Valid, Titles, Parsed);
       Inc(N);
     end;
   // Strong candidates establish a useful threshold before reading positions.
@@ -1173,13 +1196,13 @@ begin
 end;
 
 function RestrictedCandidate(Store: TFerretStore; Query: TFerretQuery; const Clauses: TFastClauses; const Parsed: TFerretParsedQuery;
-  Number: integer; var Scores: array of double; var HasClause, Valid: array of boolean; out Bound, Factor: double): boolean;
+  Number: integer; var Scores: array of double; var HasClause, Valid, Titles: array of boolean; out Bound, Factor: double): boolean;
 var
   Doc: TFerretDocument;
   Local: TAllMatches;
   I: integer;
 begin
-  ClauseScores(Store, Query, Clauses, Number, Scores, HasClause);
+  ClauseScores(Store, Query, Clauses, Number, Scores, HasClause, Titles);
   Local := LocalMatches(Store, Clauses, Parsed, Number, True);
   Doc := Store.DocumentInfo(Number);
   Factor := Query.Preference(Doc);
@@ -1190,19 +1213,19 @@ begin
       Scores[I] := Scores[I] * 1.5;
     end;
   Result := ValidBranches(HasClause, Parsed, Valid) and Query.Allows(Doc);
-  if Result then Bound := UpperScore(Scores, Valid, Parsed);
+  if Result then Bound := UpperScore(Scores, Valid, Titles, Parsed);
 end;
 
 function RankFast(Store: TFerretStore; Query: TFerretQuery; const Parsed: TFerretParsedQuery; out Total: integer): TFerretRankedHits;
 var
   Clauses: TFastClauses;
   Scores: array of double;
-  HasClause, ValidBranch: array of boolean;
+  HasClause, ValidBranch, Titles: array of boolean;
   Local: TAllMatches;
   Hit: TFerretRankedHit;
   I, J, B, Range, Bit, Number, Capacity: integer;
   Mask: TFerretDocumentMask;
-  CanSkip: boolean;
+  CanSkip, TitlePresent: boolean;
   Bound, Factor, Limit: double;
 begin
   Result := nil;
@@ -1212,6 +1235,7 @@ begin
   SetLength(Clauses, Length(Parsed.Clauses));
   SetLength(Scores, Length(Clauses));
   SetLength(HasClause, Length(Clauses));
+  SetLength(Titles, Length(Clauses));
   SetLength(ValidBranch, Parsed.Branches);
   CanSkip := (Length(Query.Filters) = 0) and (Length(Query.Fields) = 0) and not Assigned(Query.OnAllow);
   try
@@ -1236,23 +1260,27 @@ begin
         for I := 0 to High(Clauses) do
         begin
           Scores[I] := 0;
+          Titles[I] := True;
           for J := 0 to High(Clauses[I].Words) do
-            Scores[I] := Scores[I] + BlockBound(Store, Query, Clauses[I].Words[J], Range);
+          begin
+            Scores[I] := Scores[I] + BlockBound(Store, Query, Clauses[I].Words[J], Range, TitlePresent);
+            Titles[I] := Titles[I] and TitlePresent;
+          end;
         end;
-        if BelowHeap(UpperScore(Scores, ValidBranch, Parsed) * Limit, Result, Capacity, MinimumTier(Clauses, Parsed, Range, -1)) then Continue;
+        if BelowHeap(UpperScore(Scores, ValidBranch, Titles, Parsed) * Limit, Result, Capacity, MinimumTier(Clauses, Parsed, Range, -1)) then Continue;
       end;
       for I := 0 to High(Clauses) do
         for J := 0 to High(Clauses[I].Words) do LoadRange(Store, Clauses[I].Words[J], Range);
       if CanSkip then
       begin
-        ScoreRange(Store, Query, Clauses, Parsed, Mask, Range, Capacity, Limit, Result);
+        ScoreRange(Store, Query, Clauses, Parsed, Mask, Range, Capacity, Limit, Result, Scores, HasClause, ValidBranch, Titles);
         Continue;
       end;
       for Bit := 0 to 127 do
       begin
         if Mask[Bit div 32] and (cardinal(1) shl (Bit mod 32)) = 0 then Continue;
         Number := Range * 128 + Bit;
-        if not RestrictedCandidate(Store, Query, Clauses, Parsed, Number, Scores, HasClause, ValidBranch, Bound, Factor) then Continue;
+        if not RestrictedCandidate(Store, Query, Clauses, Parsed, Number, Scores, HasClause, ValidBranch, Titles, Bound, Factor) then Continue;
         Inc(Total);
         if Capacity = 0 then Continue;
         if BelowHeap(Bound * Factor, Result, Capacity, MinimumTier(Clauses, Parsed, Range, Bit)) then Continue;
@@ -1283,7 +1311,7 @@ var
 begin
   Result := Parsed;
   N := Store.DocumentCount;
-  if N < 8 then Exit;
+  if (N < 8) or (Length(Parsed.Clauses) < 2) then Exit;
   SetLength(Common, Length(Parsed.Clauses));
   SetLength(Required, Parsed.Branches);
   Terms := nil;
@@ -1292,7 +1320,7 @@ begin
       with Parsed.Clauses[I] do
       begin
         if Negative then Continue;
-        if not Phrase and not Prefix and (Length(Words) = 1) and Words[0].StemAllowed and (Words[0].Span = 1) and (UTF8Length(Words[0].Term) <= 2) then
+        if not Phrase and not Prefix and (Length(Words) = 1) and Words[0].StemAllowed and (Words[0].Span = 1) and (UTF8Length(Words[0].Term) <= 4) then
         begin
           if Terms = nil then Terms := TStringList.Create;
           Terms.Clear;
@@ -1322,8 +1350,22 @@ end;
 function RankDocuments(Store: TFerretStore; Query: TFerretQuery; const Parsed: TFerretParsedQuery; out Total: integer): TFerretRankedHits;
 var
   Relevant: TFerretParsedQuery;
+  I, J, B: integer;
 begin
   Relevant := RelevantClauses(Store, Parsed);
+  Relevant.Titles := nil;
+  SetLength(Relevant.Titles, Relevant.Branches);
+  for I := 0 to High(Relevant.Clauses) do
+    with Relevant.Clauses[I] do
+      if not Negative then
+      begin
+        B := Branch;
+        for J := 0 to High(Words) do
+        begin
+          if Relevant.Titles[B] <> '' then Relevant.Titles[B] := Relevant.Titles[B] + ' ';
+          Relevant.Titles[B] := Relevant.Titles[B] + Words[J].Term;
+        end;
+      end;
   if Query.Prune then Result := RankFast(Store, Query, Relevant, Total)
   else
     Result := RankPlain(Store, Query, Relevant, Total);
