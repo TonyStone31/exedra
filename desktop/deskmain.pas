@@ -516,7 +516,9 @@ begin
   Drafts := TStringList.Create;
   Commands := TStringList.Create;
   SuggestNames := TStringList.Create;
+  // shown once it has its picture: Qt complains about a tray icon without one
   Tray.Icon.Assign(Application.Icon);
+  Tray.Visible := True;
   TrayCount := -1;
   // The designer's sample header is not for the screen.
   RoomHeader.Caption := '';

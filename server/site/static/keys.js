@@ -329,16 +329,65 @@ window.Keys = (function () {
   }
 
   // A file for a private conversation: encrypted here, then uploaded.
+  // A JPEG or PNG without what the camera wrote beside the picture (where
+  // and when, the device, comments).  The server does this for a plain
+  // file; a sealed one it cannot read, so the page does it first.  A JPEG
+  // keeps the one value that says which way up it is.
+  function withoutCameraData(bytes) {
+    const d = new Uint8Array(bytes);
+    const parts = [];
+    let changed = false;
+    if (d.length > 16 && d[0] === 0xFF && d[1] === 0xD8) {
+      let p = 2, turn = 0;
+      while (p + 4 <= d.length && d[p] === 0xFF && d[p + 1] !== 0xDA) {
+        const m = d[p + 1], size = (d[p + 2] << 8) | d[p + 3];
+        if (size < 2 || p + 2 + size > d.length) return bytes;
+        const profile = m === 0xE2 && size > 13 && d[p + 4] === 0x49 && d[p + 5] === 0x43 && d[p + 6] === 0x43;
+        if (m < 0xE0 || (m > 0xEF && m !== 0xFE) || m === 0xE0 || m === 0xEE || profile) parts.push(d.subarray(p, p + 2 + size));
+        else {
+          changed = true;
+          // Exif, then the TIFF header: its first directory may hold the turn (tag 0x0112)
+          if (m === 0xE1 && !turn && size > 20 && d[p + 4] === 0x45 && d[p + 5] === 0x78) {
+            const base = p + 10, end = p + 2 + size, little = d[base] === 0x49;
+            const w = function (at) { return at + 1 < end ? (little ? d[at] | (d[at + 1] << 8) : (d[at] << 8) | d[at + 1]) : 0; };
+            const dir = base + (little ? w(base + 4) | (w(base + 6) << 16) : (w(base + 4) << 16) | w(base + 6));
+            for (let i = 0, n = w(dir); i < n; i++) if (w(dir + 2 + 12 * i) === 0x0112) turn = w(dir + 10 + 12 * i);
+          }
+        }
+        p += 2 + size;
+      }
+      if (!changed || p + 4 > d.length || d[p] !== 0xFF) return bytes;
+      if (turn > 1 && turn < 9) parts.unshift(Uint8Array.from([0xFF, 0xE1, 0, 0x22, 0x45, 0x78, 0x69, 0x66, 0, 0, 0x4D, 0x4D, 0, 0x2A, 0, 0, 0, 8,
+        0, 1, 1, 0x12, 0, 3, 0, 0, 0, 1, 0, turn, 0, 0, 0, 0, 0, 0]));
+      parts.unshift(d.subarray(0, 2));
+      parts.push(d.subarray(p));
+    } else if (d.length > 16 && d[0] === 0x89 && d[1] === 0x50 && d[2] === 0x4E && d[3] === 0x47) {
+      let p = 8;
+      parts.push(d.subarray(0, 8));
+      while (p + 12 <= d.length) {
+        const size = ((d[p] << 24) | (d[p + 1] << 16) | (d[p + 2] << 8) | d[p + 3]) >>> 0;
+        if (p + 12 + size > d.length) return bytes;
+        const kind = String.fromCharCode(d[p + 4], d[p + 5], d[p + 6], d[p + 7]);
+        if (['eXIf', 'tEXt', 'zTXt', 'iTXt', 'tIME'].indexOf(kind) >= 0) changed = true;
+        else parts.push(d.subarray(p, p + 12 + size));
+        p += 12 + size;
+      }
+      if (!changed || p !== d.length) return bytes;
+    } else return bytes;
+    return new Blob(parts).arrayBuffer();
+  }
+
   async function sealFile(other, file, expire) {
     const pair = await pairKey(other);
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const data = await crypto.subtle.encrypt({name: 'AES-GCM', iv: iv}, pair.key, await file.arrayBuffer());
+    const plain = await withoutCameraData(await file.arrayBuffer());
+    const data = await crypto.subtle.encrypt({name: 'AES-GCM', iv: iv}, pair.key, plain);
     const form = new FormData();
     form.append('sealed', '1');
     form.append('expire', expire || '');
     form.append('file', new Blob([data]), 'sealed');
     const answer = JSON.parse(await post('/api/upload', form));
-    return {token: answer.token, name: file.name, type: file.type, size: file.size, iv: b64(iv)};
+    return {token: answer.token, name: file.name, type: file.type, size: plain.byteLength, iv: b64(iv)};
   }
 
   async function openFile(other, meta) {

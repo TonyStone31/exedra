@@ -935,7 +935,8 @@ end;
 
 function EmailTaken(const Email: string; ExceptUser: integer): boolean;
 begin
-  Result := IntValue('SELECT COUNT(*) FROM users WHERE email = :e AND id <> :u', [LowerCase(Email), ExceptUser]) > 0;
+  // only an address its holder confirmed is theirs: one merely typed in reserves nothing
+  Result := IntValue('SELECT COUNT(*) FROM users WHERE email = :e AND id <> :u AND verified = 1', [LowerCase(Email), ExceptUser]) > 0;
 end;
 
 procedure SendAddressCheck(UserId: integer; const NewEmail: string);
@@ -980,18 +981,32 @@ begin
   NewEmail := VarToStr(Value('SELECT email FROM email_checks WHERE token_hash = :t', [Sha256Hex(ARequest.RouteParams['token'])]));
   if Id = 0 then
   begin
-    Strike(ClientIp(ARequest), 'password');
     SendText(AResponse, 410, 'That link has run out or was used already. Sign in and ask for a new one.');
   end
-  else if (NewEmail <> '') and EmailTaken(NewEmail, Id) then
-    SendText(AResponse, 409, 'Another account uses that address.')
   else
   begin
-    if NewEmail <> '' then
-      Exec('UPDATE users SET email = :e WHERE id = :u', [NewEmail, Id]);
-    Exec('UPDATE users SET verified = 1 WHERE id = :u', [Id]);
-    Exec('DELETE FROM email_checks WHERE user_id = :u', [Id]);
-    AResponse.SendRedirect('/');
+    // the address this link proves: the new one, or the account's own
+    if NewEmail = '' then
+      NewEmail := VarToStr(Value('SELECT email FROM users WHERE id = :u', [Id]));
+    if NewEmail = '' then
+      SendText(AResponse, 410, 'That link has run out or was used already. Sign in and ask for a new one.')
+    else if EmailTaken(NewEmail, Id) then
+      SendText(AResponse, 409, 'Another account uses that address.')
+    else
+    begin
+      Exec('START TRANSACTION', []);
+      try
+        Exec('UPDATE users SET email = :e, verified = 1 WHERE id = :u', [NewEmail, Id]);
+        // whoever else typed it in without proving it lets go of it
+        Exec('DELETE FROM email_checks WHERE user_id = :u OR user_id IN (SELECT id FROM users WHERE email = :e AND id <> :v AND verified <> 1)', [Id, NewEmail, Id]);
+        Exec('UPDATE users SET email = '''' WHERE email = :e AND id <> :u AND verified <> 1', [NewEmail, Id]);
+        Exec('COMMIT', []);
+      except
+        Exec('ROLLBACK', []);
+        raise;
+      end;
+      AResponse.SendRedirect('/');
+    end;
   end;
 end;
 
@@ -1043,6 +1058,12 @@ var
 begin
   Stored := VarToStr(Value('SELECT auth_hash FROM users WHERE id = :u', [UserId]));
   Current := ARequest.ContentFields.Values['current'];
+  // the account's own count of tries, whatever address they come from
+  if (Stored <> '') and not AllowAttempt('member ' + IntToStr(UserId), 'ownpw', SettingInt('password_tries', 10), 15) then
+  begin
+    SendText(AResponse, 429, 'Too many tries. Wait a while and try again.');
+    Exit(False);
+  end;
   Result := (Stored = '') or (IsHex(Current, 64) and CheckSecret(Current, Stored));
   if not Result then
   begin
@@ -1257,6 +1278,8 @@ begin
     SendText(AResponse, 400, 'That did not come from this site''s page.')
   else if VarToStr(Value('SELECT public_key FROM users WHERE id = :u', [Me.Id])) <> '' then
     SendText(AResponse, 409, 'This account has its keys already.')
+  else if (Stored <> '') and not AllowAttempt('member ' + IntToStr(Me.Id), 'ownpw', SettingInt('password_tries', 10), 15) then
+    SendText(AResponse, 429, 'Too many tries. Wait a while and try again.')
   else if (Stored <> '') and not CheckSecret(Auth, Stored) then
   begin
     Strike(ClientIp(ARequest), 'password');
@@ -1421,7 +1444,6 @@ begin
     SaltName := PasswordLinkName(Token);
   if Id = 0 then
   begin
-    Strike(ClientIp(ARequest), 'password');
     SendText(AResponse, 410, 'That link has run out or was used already. Ask for a new one.');
     Exit;
   end;

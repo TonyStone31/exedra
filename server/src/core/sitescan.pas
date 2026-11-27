@@ -50,7 +50,8 @@ function ScanText(const Text: string; MaxLength: integer): string;
   or not: ScanClean, ScanFound with the names in Words, or ScanError with
   what went wrong in Words.  Fresh asks again whether the scanner starts. }
 function ScanFile(const FileName: string; out Words: string; Fresh: boolean = False): integer;
-{ A member's upload at Route (chat, avatar, wiki, forum) scanned when
+{ A member's upload at Route (chat, avatar, wiki, forum): a picture's
+  camera data is taken out of the file, and the file is scanned when
   scan_files is on.  True when it may be kept; otherwise Refusal holds the
   words for the member and Code the answer's status.  Nothing is stored here. }
 function UploadScanPasses(UserId: integer; const Route, FileName, LocalPath: string; out Refusal: string; out Code: integer): boolean;
@@ -64,7 +65,7 @@ implementation
 uses
   {$ifdef unix} BaseUnix, {$endif}
   Classes, StrUtils, process, zipper, fpjson, fpsha256, httpdefs, httproute,
-  SiteDb, SiteUsers, SiteAdmin, SiteGuard, SiteSql, SiteWords;
+  SiteDb, SiteUsers, SiteAdmin, SiteGuard, SiteSql, SiteWords, SitePhoto;
 
 const
   OutputCap = 64 * 1024;
@@ -450,6 +451,8 @@ begin
   Result := True;
   Refusal := '';
   Code := 200;
+  // every upload comes through here: a picture first loses what its camera wrote into it
+  StripCameraData(LocalPath);
   if SettingInt('scan_files', 0) <> 1 then
     Exit;
   Outcome := ScanFile(LocalPath, Words);

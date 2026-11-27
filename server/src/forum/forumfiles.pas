@@ -151,7 +151,8 @@ begin
   Mime := ImageType(Sent.LocalFileName);
   Token := StoreFile(Me.Id, FORUM_FILE, Sent.FileName, Sent.LocalFileName, 0, 0);
   Name := VarToStr(Value('SELECT name FROM files WHERE token = :t', [Token]));
-  Result := TJSONObject.Create(['token', Token, 'name', Name, 'size', Sent.Size, 'image', Mime <> '', 'url', '/f/' + Token + '/' + Name]);
+  Result := TJSONObject.Create(['token', Token, 'name', Name, 'size', IntValue('SELECT size FROM files WHERE token = :t', [Token]), 'image',
+    Mime <> '', 'url', '/f/' + Token + '/' + Name]);
 end;
 
 { The files a post's text names become the post's: /f/ and the 32 letters

@@ -48,7 +48,7 @@ function Say(const Me: TMember; Room: TRoom; Parent: integer; Body: string; cons
 implementation
 
 uses
-  StrUtils, Variants, httproute, SiteDb, SiteSql, SiteMarkup, SiteFiles, SiteRoles, SiteBell, SiteSearch, SiteReactions, SiteWords, ChatPush;
+  StrUtils, Variants, httproute, SiteDb, SiteSql, SiteMarkup, SiteFiles, SiteRoles, SiteBell, SiteSearch, SiteIndex, SiteReactions, SiteWords, SiteGuard, ChatPush;
 
 const
   MaxBody = 8000;
@@ -503,6 +503,72 @@ begin
   end;
 end;
 
+{ A message as the index takes it, its channel as its group.  Private
+  conversations are another table and never come here. }
+function ChatDoc(const Id: string; var Doc: TIndexDoc): boolean;
+begin
+  with Query('SELECT body, room_id, created FROM messages WHERE id = :m AND deleted = 0', [StrToIntDef(Id, 0)]) do
+  try
+    Result := not EOF;
+    if not Result then
+      Exit;
+    Doc.Text := PlainWords(Fields[0].AsString);
+    Doc.Group := 'r' + Fields[1].AsString;
+    Doc.Time := Fields[2].AsDateTime;
+  finally
+    Free;
+  end;
+end;
+
+function ChatNext(const After: string; Count: integer): TStringArray;
+begin
+  Result := IndexIds('SELECT id FROM messages WHERE id > :a AND deleted = 0 ORDER BY id LIMIT :n', [StrToIntDef(After, 0), Count]);
+end;
+
+{ The condition FoundMessages puts on a channel, for the same reader. }
+function ReadableWhere(const Me: TMember): string;
+begin
+  if not Can(Me, 'view-room') then
+    Result := '1 = 0'
+  else if Me.Banned or (Me.Id = 0) then
+    Result := 'r.private = 0'
+  else
+    Result := '(r.private = 0 OR r.id IN (SELECT room_id FROM follows WHERE user_id = ' + IntToStr(Me.Id) + '))';
+end;
+
+function ChatGroups(ARequest: TRequest; const Me: TMember): TStringArray;
+var
+  I: integer;
+begin
+  Result := IndexIds('SELECT r.id FROM rooms r WHERE ' + ReadableWhere(Me), []);
+  for I := 0 to High(Result) do
+    Result[I] := 'r' + Result[I];
+  // a reader with no channel at all still gets a filter
+  if Length(Result) = 0 then
+    Result := TStringArray.Create('r0');
+end;
+
+function ChatHits(ARequest: TRequest; const Me: TMember; const Ids: TStringArray): TSearchHits;
+var
+  Found: TJSONArray;
+  Item: TJSONObject;
+  I: integer;
+begin
+  Result := nil;
+  Found := LoadMessages('WHERE m.id IN (' + IndexIdList(Ids) + ') AND m.deleted = 0 AND ' + ReadableWhere(Me), [], Me);
+  try
+    for I := 0 to Found.Count - 1 do
+    begin
+      Item := Found.Objects[I];
+      if not Item.Booleans['ignored'] then
+        AddSearchHit(Result, '#' + Item.Strings['room'], '/m/' + IntToStr(Item.Integers['id']), PlainLine(Item.Strings['body'], 220),
+          Item.Strings['at'], Item.Strings['name'], 'message', IntToStr(Item.Integers['id']));
+    end;
+  finally
+    Found.Free;
+  end;
+end;
+
 { Room and thread changes since rev, in revision order; more continues from
   the last rev. read marks a message read, here=1 adds presence and typing,
   rooms=1 adds unread counts, and live subscribes that connection to the
@@ -702,6 +768,7 @@ begin
     Exec('INSERT INTO messages (room_id, parent_id, user_id, author, body, html, re_id, rev) VALUES' + ' (:r, :p, :u, :a, :b, :h, :e, ' +
       RevNow + ')', [Room.Id, IdOrNull(Parent), IdOrNull(UserId), Author, Body, Html, IdOrNull(Re)]);
     Result := LastId;
+    SearchChanged('chat', IntToStr(Result));
     if Parent = 0 then
       Exec('INSERT INTO message_rooms (room_id, message_id, rev) SELECT :r, id, rev FROM messages' + ' WHERE id = :m', [Room.Id, Result]);
     AddAnswered(Members, Room, Parent, Re);
@@ -918,6 +985,7 @@ begin
   try
     Html := RenderText(Body, @MemberExists, @RoomExists, Members, Rooms);
     Exec('UPDATE messages SET body = :b, html = :h, edited = 1 WHERE id = :m', [Body, Html, Id]);
+    SearchChanged('chat', IntToStr(Id));
     NoteNames(Id, Me.Id, Members, Rooms, (IntValue('SELECT COUNT(*) FROM messages WHERE id = :m' + ' AND parent_id IS NULL', [Id]) > 0) and not RoomOfMessage(Id).Private);
   finally
     Rooms.Free;
@@ -948,6 +1016,7 @@ begin
     Exit;
   end;
   Exec('UPDATE messages SET body = '''', html = '''', deleted = 1, pinned = 0 WHERE id = :m', [Id]);
+  SearchChanged('chat', IntToStr(Id));
   DeleteFilesOf(Id, 'message');
   Parent := IntValue('SELECT parent_id FROM messages WHERE id = :m', [Id]);
   if Parent > 0 then
@@ -1158,10 +1227,16 @@ initialization
   HTTPRouter.RegisterRoute('/api/thread', rmGet, @ShowThread);
   HTTPRouter.RegisterRoute('/api/pins', rmGet, @ShowPins);
   RegisterSearch('chat', 'Chat', 10, @FindInChat, 'view-room');
+  RegisterIndexed('chat', @ChatDoc, @ChatNext, @ChatHits, @ChatGroups);
+  // a channel is read newest first: age counts for much
+  IndexPrefers('chat', 0, 30, 1);
   HTTPRouter.RegisterRoute('/api/search', rmGet, @Search);
   HTTPRouter.RegisterRoute('/api/sync', rmGet, @Sync);
   HTTPRouter.RegisterRoute('/api/post', rmPost, @Post);
   HTTPRouter.RegisterRoute('/api/edit', rmPost, @Edit);
+  RegisterRequestLimit('chatedit', 'Message changes', 120, 60, 1);
+  LimitRoute('chatedit', '/api/edit', 'POST');
+  LimitRoute('chatedit', '/api/dm/edit', 'POST');
   HTTPRouter.RegisterRoute('/api/delete', rmPost, @Remove);
   HTTPRouter.RegisterRoute('/api/react', rmPost, @React);
   HTTPRouter.RegisterRoute('/api/reacted', rmGet, @Reacted);

@@ -355,6 +355,11 @@ The mark is that bench seen from above, with three people on it.
 
 [0BSD](LICENSE). Use it for anything.
 
+Two things in `server/src/ferret` are other people's work: the word
+stemmers come from the [Snowball](https://snowballstem.org/) project
+(BSD 3-clause), and the letter tables are made from Unicode data. Their
+notices are in that folder and in every release.
+
 ## Security
 
 Found a security problem? Please report it privately, as

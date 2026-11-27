@@ -304,6 +304,35 @@ end;
 
 { -------------------------------------------------------------- the job }
 
+const
+  { Pages fetched at one time, over the whole site. }
+  MAX_JOBS = 8;
+
+var
+  Running: longint = 0;
+
+{ Takes a place for one more fetch without waiting; False when all are taken. }
+function PlaceFree: boolean;
+begin
+  Result := InterlockedIncrement(Running) <= MAX_JOBS;
+  if not Result then
+    InterlockedDecrement(Running);
+end;
+
+{ Starts the fetch in the place PlaceFree gave, and gives it back if the thread cannot start. }
+procedure StartJob(AMessageId: integer; const AUrl, AHash: string);
+begin
+  try
+    TPreviewJob.Create(AMessageId, AUrl, AHash);
+  except
+    on E: Exception do
+    begin
+      InterlockedDecrement(Running);
+      Log('Preview: ' + E.Message);
+    end;
+  end;
+end;
+
 constructor TPreviewJob.Create(AMessageId: integer; const AUrl, AHash: string);
 begin
   MessageId := AMessageId;
@@ -368,6 +397,7 @@ begin
     end;
   finally
     Got.Free;
+    InterlockedDecrement(Running);
   end;
 end;
 
@@ -393,11 +423,16 @@ begin
   Fresh := IntValue('SELECT COUNT(*) FROM previews WHERE url_hash = :h AND fetched > ' + SqlAgo(IntToStr(PREVIEW_DAYS), suDay), [Hash]) > 0;
   if Fresh then
     Exit;
+  // every place taken: this message goes without, and the address is not marked as tried
+  {$ifndef CGI}
+  if not PlaceFree then
+    Exit;
+  {$endif}
   Exec('INSERT INTO previews (url_hash, url, title, descr, image, site, ok, fetched) VALUES (:h, :u, '''', '''', '''', '''', 0, NOW())' +
     SqlOnConflict('url_hash', 'url = ' + SqlNew('url') + ', ok = 0, fetched = NOW()'), [Hash, Url]);
   // a CGI program has no threads (no cthreads in its build): no previews there
   {$ifndef CGI}
-  TPreviewJob.Create(MessageId, Url, Hash);
+  StartJob(MessageId, Url, Hash);
   {$endif}
 end;
 
@@ -446,10 +481,14 @@ begin
   Exec('INSERT INTO dm_previews (dm_id, url_hash) VALUES (:m, :h)' + SqlOnConflict('dm_id', 'url_hash = ' + SqlNew('url_hash')), [DmId, Hash]);
   if IntValue('SELECT COUNT(*) FROM previews WHERE url_hash = :h AND fetched > ' + SqlAgo(IntToStr(PREVIEW_DAYS), suDay), [Hash]) > 0 then
     Exit;
+  {$ifndef CGI}
+  if not PlaceFree then
+    Exit;
+  {$endif}
   Exec('INSERT INTO previews (url_hash, url, title, descr, image, site, ok, fetched) VALUES (:h, :u, '''', '''', '''', '''', 0, NOW())' +
     SqlOnConflict('url_hash', 'url = ' + SqlNew('url') + ', ok = 0, fetched = NOW()'), [Hash, Url]);
   {$ifndef CGI}
-  TPreviewJob.Create(-DmId, Url, Hash);
+  StartJob(-DmId, Url, Hash);
   {$endif}
 end;
 

@@ -1443,12 +1443,28 @@
     return (area.value.slice(0, area.selectionStart).match(/```/g) || []).length % 2 === 1;
   }
 
-  async function upload(file, expire, sealedFor) {
+  // Sends one file; told(share) hears how much of it has gone up, 0 to 1.
+  function upload(file, expire, sealedFor, told) {
     if (sealedFor) return Keys.sealFile(sealedFor, file, expire);
     const form = new FormData();
     form.append('expire', expire || '');
     form.append('file', file, file.name || 'pasted.png');
-    return JSON.parse(await post('/api/upload', form));
+    return new Promise(function (resolve, reject) {
+      const ask = new XMLHttpRequest();
+      ask.open('POST', '/api/upload');
+      if (told) ask.upload.addEventListener('progress', function (e) { if (e.lengthComputable) told(e.loaded / e.total); });
+      ask.addEventListener('load', function () {
+        if (ask.status >= 200 && ask.status < 300) {
+          try { resolve(JSON.parse(ask.responseText)); } catch (err) { reject(err); }
+          return;
+        }
+        const e = new Error(ask.responseText);
+        e.status = ask.status;
+        reject(e);
+      });
+      ask.addEventListener('error', function () { reject(new Error(t('The file did not go up. Check the connection and try again.'))); });
+      ask.send(form);
+    });
   }
 
   // The box members type in, for a room, a thread (parent) or a private
@@ -1519,24 +1535,38 @@
     // each upload's chip, apart from the upload itself, which may be sent as it is
     const chips = new Map();
 
-    const add = async function (list) {
-      for (const file of list) {
-        const chip = el('span', 'chip busy', file.name || t('picture'));
-        files.appendChild(chip);
-        try {
-          const done = await upload(file, expire.value, dm && S.dmLocked ? dm : '');
-          pending.push(done);
-          chips.set(done, chip);
-          chip.classList.remove('busy');
-          const x = el('button', '', '×');
-          x.type = 'button';
-          x.addEventListener('click', function () { pending.splice(pending.indexOf(done), 1); chip.remove(); });
-          chip.appendChild(x);
-        } catch (err) {
-          chip.remove();
-          failed(err);
+    // the uploads still on their way: Send waits for them
+    const busy = new Set();
+
+    const add = function (list) {
+      const run = (async function () {
+        for (const file of list) {
+          const chip = el('span', 'chip busy', file.name || t('picture'));
+          const share = el('span', 'share', '');
+          chip.appendChild(share);
+          files.appendChild(chip);
+          try {
+            const done = await upload(file, expire.value, dm && S.dmLocked ? dm : '', function (part) {
+              share.textContent = Math.round(part * 100) + '%';
+              chip.style.setProperty('--up', Math.round(part * 100) + '%');
+            });
+            share.remove();
+            chip.style.removeProperty('--up');
+            pending.push(done);
+            chips.set(done, chip);
+            chip.classList.remove('busy');
+            const x = el('button', '', '×');
+            x.type = 'button';
+            x.addEventListener('click', function () { pending.splice(pending.indexOf(done), 1); chip.remove(); });
+            chip.appendChild(x);
+          } catch (err) {
+            chip.remove();
+            failed(err);
+          }
         }
-      }
+      })();
+      busy.add(run);
+      run.then(function () { busy.delete(run); });
     };
 
     attach.addEventListener('click', function () { filePick.click(); });
@@ -1570,10 +1600,19 @@
 
     let sending = false;
     const submit = async function () {
-      const text = area2.value.trim();
-      if (!text && !pending.length) return;
       // Enter again while it goes would send it twice
       if (sending) return;
+      if (busy.size) {
+        // a message does not go out with half its files
+        sending = true;
+        send.disabled = true;
+        toast(t('Sending when the files are up'));
+        while (busy.size) await Promise.all(Array.from(busy));
+        sending = false;
+        send.disabled = false;
+      }
+      const text = area2.value.trim();
+      if (!text && !pending.length) return;
       Drafts.delete(draftKey);
       // The commands the page does itself: a private message is encrypted
       // here, so the server never sees one.

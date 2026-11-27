@@ -3,13 +3,13 @@
    cannot change the corner chat's. */
 .live-strip, .live-bench {
   --bg: #ffffff; --bg-soft: #f6f7fa; --hover: #f3f5f9; --line: #e3e7ee; --ink: #141a24;
-  --dim: #5b6577; --faint: #8b94a4;
+  --dim: #5b6577; --faint: #687182; --field-line: #8b94a4;
   --side: #0e1420; --side-2: #151d2b; --side-ink: #cfd6e3; --side-dim: #7d899e; --side-active: #233250;
   --side-line: #1d2636;
-  --accent: #2c63d6; --accent-ink: #ffffff; --accent-soft: #e9f0ff; --teal: #0f9d8f; --amber: #c27a06;
-  --red: #d64545; --mention: #fff5dc; --shadow: 0 6px 24px rgba(15, 21, 32, .12);
+  --accent: #2c63d6; --accent-ink: #ffffff; --accent-soft: #e9f0ff; --teal: #0a7a70; --amber: #955d00;
+  --red: #cf3c3c; --mention: #fff5dc; --shadow: 0 6px 24px rgba(15, 21, 32, .12);
   --code-bg: #f5f7fb; --code-bar: #eceff5;
-  --k: #8f3fb6; --c: #6b7686; --s: #1d7d4f; --n: #b65a00; --d: #2c63d6; --sym: #3c4656;
+  --k: #8f3fb6; --c: #667181; --s: #1d7d4f; --n: #b65a00; --d: #2c63d6; --sym: #3c4656;
   color-scheme: light;
   --faint: var(--dim); --teal: #087b70; --amber: #986000; --red: #ba3030; --c: #5e6878; --n: #a95200;
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); text-align: left;
@@ -27,7 +27,7 @@
 .live-bench button, .live-bench textarea { font: inherit; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .live-bench { --bg: #0b0f16; --bg-soft: #0f1520; --hover: #121a27; --line: #212b3b; --ink: #e8edf6;
-  --dim: #9ba7bb; --faint: #6c788c;
+  --dim: #9ba7bb; --faint: #7a869b; --field-line: #56657d;
   --side: #070a10; --side-2: #0d121b; --side-active: #1b2840; --side-line: #161e2b;
   --accent: #5b8cff; --accent-soft: #15213a; --teal: #3fd1c0; --amber: #f2b042; --red: #ff6b6b;
   --mention: #2a2312; --shadow: 0 8px 28px rgba(0, 0, 0, .45);
@@ -36,7 +36,7 @@
   color-scheme: dark; --teal: #3fd1c0; --amber: #f2b042; --red: #ff6b6b; --c: #96a3b8; --n: #f7a35c; --accent-ink: #081426; }
 }
 :root[data-theme="dark"] .live-bench { --bg: #0b0f16; --bg-soft: #0f1520; --hover: #121a27; --line: #212b3b; --ink: #e8edf6;
-  --dim: #9ba7bb; --faint: #6c788c;
+  --dim: #9ba7bb; --faint: #7a869b; --field-line: #56657d;
   --side: #070a10; --side-2: #0d121b; --side-active: #1b2840; --side-line: #161e2b;
   --accent: #5b8cff; --accent-soft: #15213a; --teal: #3fd1c0; --amber: #f2b042; --red: #ff6b6b;
   --mention: #2a2312; --shadow: 0 8px 28px rgba(0, 0, 0, .45);

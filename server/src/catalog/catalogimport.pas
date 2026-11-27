@@ -26,7 +26,7 @@ implementation
 
 uses
   Classes, SysUtils, StrUtils, Variants, jsonparser, httpdefs, httproute,
-  SiteDb, SiteUsers, SiteRoles, SiteAdmin, SiteGuard, SiteMarkup, WebPages, SiteWords, SiteSql, Catalog;
+  SiteDb, SiteUsers, SiteRoles, SiteAdmin, SiteGuard, SiteMarkup, WebPages, SiteWords, SiteSql, SiteIndex, Catalog;
 
 const
   ReadmeBytes = 190000;
@@ -224,6 +224,7 @@ begin
   end;
   Exec('INSERT INTO catalog_entries (' + Columns + ', seen) VALUES (' + Params + ', ' + SqlUtcNow + ')' + SqlOnConflict('entry_key',
     Changes + ', seen = ' + SqlUtcNow), BindValues);
+  SearchChanged('catalog', VarToStr(Value('SELECT id FROM catalog_entries WHERE entry_key = :k', [Item.Strings['entry_key']])));
   if Result then
     Exec('UPDATE catalog_totals SET visible = visible + 1 WHERE id = 1', [])
   // what was read from the old address is not this project's any more
@@ -385,6 +386,7 @@ begin
         if not CatalogImageAllowed(Image) then
           Image := '';
         Exec('UPDATE catalog_entries SET image = :i WHERE id = :e', [Image, Id]);
+        SearchChanged('catalog', IntToStr(Id));
         Exec('COMMIT', []);
         Inc(Saved);
       except

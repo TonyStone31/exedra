@@ -698,7 +698,6 @@ begin
     Exit;
   if not FindFollowKey(R.RouteParams['key'], Found) then
   begin
-    Strike(ClientIp(R), 'password');
     SendText(S, 404, Say('That link is not known here.'));
     Exit;
   end;
@@ -906,8 +905,8 @@ begin
           Content := Content + '<p class="forum-guest forum-hidden">' + W('A moderator has stopped you posting in the forum.') + '</p>';
         if Writable(Me) and not Topic.Get('hidden', False) and (not Topic.Get('locked', False) or Moderate(Me)) then
           Content := Content + '<section id="quick-reply" data-forum-tools hidden><h2>' + W('Quick reply') + '</h2><p class="forum-quote-hint">' +
-            W('To quote part of a post, select the words in it and press Quote selection.') + '</p>' +
-            Form('reply', HiddenField('topic_id', IntToStr(Topic.Get('id', 0))) + Editor('', ForumUploadAttributes(Me)), Say('Post reply')) + '</section>';
+            W('To quote part of a post, select the words in it and press Quote selection.') + '</p>' + Form('reply',
+            HiddenField('topic_id', IntToStr(Topic.Get('id', 0))) + Editor('', ForumUploadAttributes(Me)), Say('Post reply')) + '</section>';
       end
       else if Path.StartsWith('/forum/') then
       begin

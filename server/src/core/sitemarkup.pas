@@ -44,6 +44,9 @@ function HtmlText(const S: string): string;
   out, links as their words and addresses as their site's name, at most
   Limit bytes and never part of a character. }
 function PlainLine(const Body: string; Limit: integer = 160): string;
+{ Markdown as the words a reader sees, for a search index: pictures and the
+  usual HTML tags left out, links as their words, code and line breaks kept. }
+function PlainWords(const Body: string): string;
 
 implementation
 
@@ -1158,33 +1161,42 @@ begin
   Result := RenderMarkdown(LinkNames(Text, MemberExists, RoomExists, Members, Rooms), [], False, ParserClass, ExtraOptions);
 end;
 
+{ Markdown's signs out of S: pictures go, links stay as their words and an
+  address as its site's name.  No pattern reads past the next opening
+  bracket or the end of a run of signs, so the time follows the length. }
+function WithoutSigns(const S: string): string;
+begin
+  Result := ReplaceRegExpr('!\[[^\]\[]*\]\([^)\[]*\)', S, ' ', False);
+  Result := ReplaceRegExpr('\[([^\]\[]*)\]\([^)\[]*\)', Result, '$1', True);
+  // the wiki's [[Page Name|words]] and [[Page Name]]
+  Result := ReplaceRegExpr('\[\[([^\]\[|]*)\|([^\]\[]*)\]\]', Result, '$2', True);
+  Result := ReplaceRegExpr('\[\[([^\]\[]*)\]\]', Result, '$1', True);
+  // an address as the name of its site
+  Result := ReplaceRegExpr('https?://(www\.)?([^/\s]+)\S*', Result, '$2', True);
+  Result := ReplaceRegExpr('(^|\s)[#>*_~`]+', Result, '$1', True);
+  Result := ReplaceRegExpr('(?<![*_~`])[*_~`]+(\s|$)', Result, '$1', True);
+end;
+
 function PlainLine(const Body: string; Limit: integer): string;
 var
   S: string;
-  I, Fence: integer;
+  I, Fence, At: integer;
 begin
-  S := Body;
   // fenced code becomes a word, so a paste of source does not fill the line
+  S := '';
+  At := 1;
   repeat
-    I := Pos('```', S);
+    I := PosEx('```', Body, At);
     if I = 0 then
+    begin
+      S := S + Copy(Body, At, MaxInt);
       Break;
-    Fence := PosEx('```', S, I + 3);
-    if Fence = 0 then
-      S := Copy(S, 1, I - 1) + ' { … } '
-    else
-      S := Copy(S, 1, I - 1) + ' { … } ' + Copy(S, Fence + 3, MaxInt);
-  until False;
-  // pictures out, links as their words, addresses and markup signs out
-  S := ReplaceRegExpr('!\[[^\]]*\]\([^)]*\)', S, ' ', False);
-  S := ReplaceRegExpr('\[([^\]]*)\]\([^)]*\)', S, '$1', True);
-  // the wiki's [[Page Name|words]] and [[Page Name]]
-  S := ReplaceRegExpr('\[\[([^\]|]*)\|([^\]]*)\]\]', S, '$2', True);
-  S := ReplaceRegExpr('\[\[([^\]]*)\]\]', S, '$1', True);
-  // an address as the name of its site
-  S := ReplaceRegExpr('https?://(www\.)?([^/\s]+)\S*', S, '$2', True);
-  S := ReplaceRegExpr('(^|\s)[#>*_~`]+', S, '$1', True);
-  S := ReplaceRegExpr('[*_~`]+(\s|$)', S, '$1', True);
+    end;
+    S := S + Copy(Body, At, I - At) + ' { … } ';
+    Fence := PosEx('```', Body, I + 3);
+    At := Fence + 3;
+  until Fence = 0;
+  S := WithoutSigns(S);
   for I := 1 to Length(S) do
     if S[I] in [#9, #10, #13] then
       S[I] := ' ';
@@ -1200,6 +1212,13 @@ begin
     S := TrimRight(Copy(S, 1, I)) + '…';
   end;
   Result := S;
+end;
+
+function PlainWords(const Body: string): string;
+begin
+  // a fixed list of tags, so TList<Integer> keeps its word
+  Result := WithoutSigns(ReplaceRegExpr('(?i)</?(a|b|i|p|br|img|div|span|table|tr|td|th|ul|ol|li|h[1-6]|code|pre|em|strong|sub|sup|kbd|details|' +
+    'summary|center|hr|blockquote|picture|source)(\s[^<>]*)?/?>', Body, ' ', False));
 end;
 
 initialization

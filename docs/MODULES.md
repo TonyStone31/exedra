@@ -219,6 +219,10 @@ what the module's own pages check: give back only what `Me` may open
 (`Me.Id` is 0 for a visitor). Nothing else in the site looks at a
 module's hits before they are shown.
 
+A site can answer its search from an index it keeps itself (the setting
+`search_engine`). A module that has not joined that index is asked
+through this function under every setting.
+
 Two more arguments are optional. A permission
 (`RegisterSearch(..., @FindNotes, 'notes-read')`) keeps the module out of
 the box and the results for a reader who does not hold it. An address

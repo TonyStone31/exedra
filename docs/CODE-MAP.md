@@ -13,6 +13,7 @@ which unit to open. To add a module of your own, see [MODULES.md](MODULES.md).
 server/
   exedra.lpr          the program: one line of units, nothing else
   src/core/           what every site has: members, the admin page, the guard
+  src/ferret/         a full-text search engine, a copy kept as it is
   src/chat/           the chat module
   src/wiki/           the wiki module
   src/forum/          the forum module
@@ -123,12 +124,14 @@ order their `:names` first appear in the statement.
 | `siteadmin` | the admin page's data: settings, members, roles |
 | `siteparts` | the modules a site owner turns on or off |
 | `sitesearch` | the search box on every page, `/search` and `/api/site-search`: each module registers its own search (`RegisterSearch`) |
+| `siteindex` | the site's own search index, one for each module that joined it (`RegisterIndexed`): kept under `data/search`, built on a thread, kept in step through the table `search_queue`, and asked by `sitesearch` when the setting `search_engine` says so |
 | `webpages` | the pages every site has (home, sign-in, profile, admin shell), templates, dates |
 | `sitebase` | a site under a path of its domain (`https://example.com/community`) |
 | `sitewords` | the site's words in other languages |
 | `sitemarkup` | members' text to HTML: Markdown, mentions, code blocks |
 | `sitefiles` | files members send, and fetching them |
 | `sitereactions` | the reactions every module offers: the two lists an admin keeps, the table a module stores them in, and reading it (the reactions on a page of things, who gave one) |
+| `sitephoto` | takes location and other camera data out of uploaded pictures |
 | `sitescan` | virus scanning of what members send |
 | `sitefetch` | fetching an address a stranger gave, safely |
 | `sitemail`, `sitenotices` | mail from the site; notices to a member |
@@ -143,6 +146,17 @@ order their `:names` first appear in the statement.
 | `sitepoll` | waiting on sockets |
 | `siteversion` | the release number |
 | `syntaxtable`, `syntaxlangs`, `syntaxlfm`, `syntaxmarkdown`, `syntaxrst`, `syntaxbarye` | coloring code blocks, on FPC's fcl-syntax |
+
+### ferret
+
+Ferret is a full-text search engine by the same author, with its own
+license file in the folder. These units are a copy and are not edited
+here. Open `ferret` first: a `TFerretIndex` takes documents and answers
+searches. The stemmer units (`englishstemmer` and the others, on
+`snowballprogram`) are from the Snowball project, and `ferretunicode.inc`
+holds letter tables made from Unicode data. Both have their notices
+beside them. The one unit that uses them is `siteindex` in the core, and
+only in the server program.
 
 ### chat
 

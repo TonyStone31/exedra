@@ -457,6 +457,41 @@ A `%d` or `%s` on the left has to be on the right too. The same works for
 another language in `de.json`, `fr.json` and so on; your file wins over
 the one Exedra brings, and an update leaves it alone.
 
+### The search index
+
+Every page has one search box, and each module answers it from the
+database. The site can also keep a search index of its own and answer
+from that. It is off until you turn it on: **Settings**, group
+**Search**.
+
+- "The site search answers from": `database` is how it works without an
+  index. `index` answers from the index. `compare` keeps the index and
+  still answers everyone from the database, except those who may change
+  the settings, so you can look at it before your visitors do.
+- "Languages whose word forms a search matches": with `en`, a search for
+  "index" also finds "indexes". Name the languages your site is written
+  in, with commas between them, out of da, de, en, es, fi, fr, it, nl,
+  no, pt and sv. Changing the list builds the index again.
+
+A module is answered from the index only once it has joined it. Until
+then it is searched in the database as before, whatever the setting says.
+
+To compare the two, search while you are signed in as someone who may
+change the settings. The results page then says which one answered and
+how long it took, with a link to the same search answered by the other.
+The **Search** settings also show how the index of each module stands.
+
+The index is kept in `data/search`. The program makes it, keeps it in
+step with what members write, and builds it again once a day and whenever
+it no longer fits the database. Expect it to take about one and a half
+times the room of the text it searches. It is in no backup, because the
+program makes it again, and it is safe to delete while the server is
+stopped.
+
+If you load a database dump by other means than the program's own
+restore, delete `data/search` before you start the server. The index
+cannot tell that the database under it changed.
+
 ## 6. Put it on the internet
 
 Exedra speaks plain HTTP. A proxy in front holds the certificate. The
@@ -879,6 +914,7 @@ requests. That means:
   forms, and a visitor waits a little longer for each.
 - Nothing is done in the background: no backups from the admin page
   (use the host's own), no storage figures, no visitors report.
+- No search index: the search always asks the database.
 
 To set it up: put `exedra.cgi` in the host's `cgi-bin` and the config
 file, `exedra.ini`, **outside the web root**, with `files=` naming a

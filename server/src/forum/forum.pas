@@ -66,7 +66,7 @@ implementation
 
 uses
   Classes, Variants, sqldb, httproute,
-  SiteDb, SiteRoles, SiteAdmin, SiteGuard, SiteCrawlers, SiteMarkup, SiteFiles, SiteScan, SiteWords, SiteSql, SiteSearch, SiteReactions, WebPages,
+  SiteDb, SiteRoles, SiteAdmin, SiteGuard, SiteCrawlers, SiteMarkup, SiteFiles, SiteScan, SiteWords, SiteSql, SiteSearch, SiteIndex, SiteReactions, WebPages,
   ForumRules, ForumRequest, ForumPages, ForumStaff, ForumFiles, ForumBoards, ForumReactions, ForumFollow;
 
 type
@@ -704,6 +704,13 @@ begin
   Result := VarToStr(Value('SELECT signature FROM forum_members WHERE user_id = :u', [Me.Id]));
 end;
 
+{ Both of a topic's documents in the index are made again. }
+procedure TopicChanged(TopicId: integer);
+begin
+  SearchChanged('forum', IntToStr(TopicId));
+  SearchChanged('forum', IntToStr(TopicId) + 's');
+end;
+
 function NewTopic(R: TRequest; const Me: TMember): TJSONObject;
 var
   BoardId, TopicId, PostId: integer;
@@ -727,6 +734,7 @@ begin
   KeepPostFiles(PostId, Me.Id, Body);
   NotePost(TopicId, BoardId, Me.Id, PostId, True);
   FollowOnPost(Me, TopicId);
+  TopicChanged(TopicId);
   Result := TJSONObject.Create(['topic_id', TopicId, 'post_id', PostId]);
 end;
 
@@ -748,6 +756,7 @@ begin
   NotePost(Topic.Id, Topic.BoardId, Me.Id, PostId, False);
   NoteReply(Topic.Id, PostId, Me.Id);
   FollowOnPost(Me, Topic.Id);
+  TopicChanged(Topic.Id);
   Result := TJSONObject.Create(['topic_id', Topic.Id, 'post_id', PostId, 'page', (IntValue('SELECT p.' + ForumPositionColumn(Moderate(Me)) +
     ' FROM forum_posts p WHERE p.id = :p', [PostId]) - 1) div ForumPageSize + 1]);
 end;
@@ -885,6 +894,7 @@ begin
     RefreshMember(AuthorId);
     RefreshBoard(Topic.BoardId);
   end;
+  TopicChanged(Topic.Id);
   Result := TJSONObject.Create(['ok', True, 'topic_deleted', Action = fdTopic]);
 end;
 
@@ -932,6 +942,7 @@ begin
   end
   else
     Refuse(400, 'Unknown moderation action.');
+  TopicChanged(Topic.Id);
   Result := TJSONObject.Create(['ok', True]);
 end;
 
@@ -960,6 +971,7 @@ begin
   RefreshPositions(Topic.Id);
   RefreshTopicMembers(Topic.Id);
   RefreshBoard(Topic.BoardId);
+  TopicChanged(Topic.Id);
   Result := TJSONObject.Create(['ok', True]);
 end;
 
@@ -1009,6 +1021,106 @@ end;
 
 { The forum in the site's search: topics, as its own search finds them, in
   the boards Me may read.  Words the forum refuses find nothing. }
+{ A topic is two documents in the index: '12' is what a member reads, its
+  hidden posts left out, and '12s' is what the staff read. }
+function ForumDoc(const Id: string; var Doc: TIndexDoc): boolean;
+var
+  Staff: boolean;
+  TopicId: integer;
+begin
+  Staff := Id.EndsWith('s');
+  TopicId := StrToIntDef(Id.TrimRight(['s']), 0);
+  with Query('SELECT title, board_id, hidden, last_post_at FROM forum_topics WHERE id = :t', [TopicId]) do
+  try
+    Result := not EOF and (Staff or (Fields[2].AsInteger = 0));
+    if not Result then
+      Exit;
+    Doc.Title := Fields[0].AsString;
+    Doc.Group := 'b' + Fields[1].AsString;
+    if Staff then
+      Doc.Group := 's' + Fields[1].AsString;
+    Doc.Time := Fields[3].AsDateTime;
+  finally
+    Free;
+  end;
+  Doc.Count := -1;
+  with Query('SELECT body FROM forum_posts WHERE topic_id = :t AND (hidden = 0 OR :s = 1) ORDER BY id', [TopicId, Ord(Staff)]) do
+  try
+    while not EOF and (Length(Doc.Text) < 512 * 1024) do
+    begin
+      Doc.Text := Doc.Text + PlainWords(Fields[0].AsString) + LineEnding + LineEnding;
+      Inc(Doc.Count);
+      Next;
+    end;
+  finally
+    Free;
+  end;
+  if Doc.Count < 0 then
+    Doc.Count := 0;
+end;
+
+{ Whole pairs only: a batch never ends between a topic's two documents. }
+function ForumNext(const After: string; Count: integer): TStringArray;
+var
+  Ids: TStringArray;
+  I: integer;
+begin
+  Ids := IndexIds('SELECT id FROM forum_topics WHERE id > :a ORDER BY id LIMIT :n', [StrToIntDef(After.TrimRight(['s']), 0), (Count + 1) div 2]);
+  Result := nil;
+  SetLength(Result, 2 * Length(Ids));
+  for I := 0 to High(Ids) do
+  begin
+    Result[2 * I] := Ids[I];
+    Result[2 * I + 1] := Ids[I] + 's';
+  end;
+end;
+
+{ The boards Me may read now: the staff's copies for a moderator, the
+  members' for everyone else. }
+function ForumGroups(ARequest: TRequest; const Me: TMember): TStringArray;
+var
+  Entry, Mark: string;
+begin
+  Result := nil;
+  Mark := 'b';
+  if Moderate(Me) then
+    Mark := 's';
+  for Entry in ReadableBoards(Me).Split([','], TStringSplitOptions.ExcludeEmpty) do
+  begin
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := Mark + Trim(Entry);
+  end;
+end;
+
+function ForumHits(ARequest: TRequest; const Me: TMember; const Ids: TStringArray): TSearchHits;
+var
+  Plain: TStringArray;
+  I: integer;
+  Staff: boolean;
+  Q: TSQLQuery;
+begin
+  Result := nil;
+  Staff := Moderate(Me);
+  Plain := nil;
+  SetLength(Plain, Length(Ids));
+  for I := 0 to High(Ids) do
+    Plain[I] := Ids[I].TrimRight(['s']);
+  Q := Query(TopicSelect(Me) + ' WHERE t.id IN (' + IndexIdList(Plain) + ') AND ' + ForumTopicWhere(ReadableBoards(Me), Staff), []);
+  try
+    while not Q.EOF do
+    begin
+      // a hit keeps the id the index gave it: the staff's copy only for the staff
+      for I := 0 to High(Ids) do
+        if (Plain[I] = Q.FieldByName('id').AsString) and (Ids[I].EndsWith('s') = Staff) then
+          AddSearchHit(Result, Q.FieldByName('title').AsString, ForumTopicUrl(Q.FieldByName('id').AsInteger), '', Q.FieldByName('last_at').AsString,
+            Q.FieldByName('author_name').AsString, 'topic', Ids[I]);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
 function FindInForum(ARequest: TRequest; const Me: TMember; const Words: string; Offset, Limit: integer; out More: boolean): TSearchHits;
 var
   Found: TJSONArray;
@@ -1339,6 +1451,8 @@ initialization
   LimitRoute('forumedit', '/forum/follow', 'POST');
   RegisterSearchRoute('/api/forum/search');
   RegisterSearch('forum', 'Forum', 30, @FindInForum, 'forum-read', '/forum/search?q=');
+  RegisterIndexed('forum', @ForumDoc, @ForumNext, @ForumHits, @ForumGroups);
+  IndexPrefers('forum', 5, 365, 0.3);
   AddRoute('read', rmPost);
   AddRoute('recent', rmGet);
   AddRoute('unread', rmGet);

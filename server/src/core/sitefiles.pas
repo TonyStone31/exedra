@@ -32,6 +32,11 @@ type
   this purpose registers a guard: then each download asks the guard. }
 procedure RegisterFileGuard(const Purpose: string; Guard: TFileGuard);
 
+var
+  { Set by the server: whether the request behind an answer asked for the
+    headers alone.  Such a request does not count as a download. }
+  AskedForHeaders: function(AResponse: TResponse): boolean = nil;
+
 { Between the two, files deleted are only noted, and leave the disk when
   the work is done (Done) or stay when it failed: a transaction that is
   rolled back gets its rows back, and so must find its files. }
@@ -286,8 +291,8 @@ begin
     if (OldAvatar <> '') and (OldAvatar <> Token) then
       DeleteFileByToken(OldAvatar);
   end;
-  SendJSON(AResponse, TJSONObject.Create(['token', Token, 'name', Name, 'size', Upload.Size, 'mime', Mime, 'image', Mime.StartsWith('image/'),
-    'url', '/f/' + Token + '/' + Name]));
+  SendJSON(AResponse, TJSONObject.Create(['token', Token, 'name', Name, 'size', IntValue('SELECT size FROM files WHERE token = :t', [Token]),
+    'mime', Mime, 'image', Mime.StartsWith('image/'), 'url', '/f/' + Token + '/' + Name]));
 end;
 
 var
@@ -349,7 +354,7 @@ procedure Download(ARequest: TRequest; AResponse: TResponse);
 var
   Token, SavedName, FileMime, Purpose: string;
   Content: TFileStream;
-  FinalDownload: boolean;
+  FinalDownload, Probe: boolean;
   MessageId, OwnerId: integer;
   Guard: TFileGuard;
 begin
@@ -404,16 +409,23 @@ begin
         Exit;
       end;
     end;
-    Exec('UPDATE files SET downloads = downloads + 1 WHERE token = :t', [Token]);
-    if FinalDownload then
-      Exec('DELETE FROM files WHERE token = :t', [Token]);
-    Exec('COMMIT', []);
+    // a look at the headers uses nothing up
+    Probe := Assigned(AskedForHeaders) and AskedForHeaders(AResponse);
+    if Probe then
+      Exec('ROLLBACK', [])
+    else
+    begin
+      Exec('UPDATE files SET downloads = downloads + 1 WHERE token = :t', [Token]);
+      if FinalDownload then
+        Exec('DELETE FROM files WHERE token = :t', [Token]);
+      Exec('COMMIT', []);
+    end;
   except
     Content.Free;
     Exec('ROLLBACK', []);
     raise;
   end;
-  if FinalDownload then
+  if FinalDownload and not Probe then
     DeleteFile(FilesDir + Token);
   AResponse.ContentType := FileMime;
   AResponse.SetCustomHeader('X-Content-Type-Options', 'nosniff');

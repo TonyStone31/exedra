@@ -53,7 +53,10 @@ knowing before you rely on it.
   scripts. Someone who controls the server could hand out a key or a
   script of their own. To catch a swapped key, each locked conversation
   shows a safety code. Both members see the same code, and can compare
-  it some other way, by a call or in person. The browser also remembers
+  it some other way, by a call or in person. The code is made from the
+  keys the server gives out, so it shows a key swapped on one side. It
+  does not yet show a server that swaps them on both, which I am working
+  on. The browser also remembers
   the key it saw for each member and warns when another one comes, which
   happens after a password reset. Nothing can catch a changed script, so
   the people who run the site are trusted not to do that. This is true

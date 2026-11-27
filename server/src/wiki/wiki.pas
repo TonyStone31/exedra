@@ -106,7 +106,7 @@ implementation
 
 uses
   StrUtils, Variants, fpjson, httproute, SiteStatic, SiteWords, SiteDb, SiteUsers, SiteRoles,
-  SiteAdmin, SiteGuard, SiteGuardRules, SiteMail, SiteStats, SiteVisitors, WebPages, WikiRender, SiteSql, SiteParts, SiteNotices, SiteSearch, WikiEmoji, WikiEmojiSite;
+  SiteAdmin, SiteGuard, SiteGuardRules, SiteMail, SiteStats, SiteVisitors, WebPages, WikiRender, SiteSql, SiteParts, SiteNotices, SiteSearch, SiteIndex, WikiEmoji, WikiEmojiSite;
 
 const
   // the most an admin may allow a page (wiki_page_kb); the form that sends
@@ -845,6 +845,7 @@ begin
     StoreLinks(Page.Id, Targets, Body);
     if Made then
       MarkLinkersStale(Slug);
+    SearchChanged('wiki', IntToStr(Page.Id));
     Exec('COMMIT', []);
     TransactionOpen := False;
     Result := '';
@@ -909,7 +910,9 @@ begin
       if Assigned(WikiPageMoving) then
         WikiPageMoving(OldSlug, NewSlug);
       MarkLinkersStale(NewSlug);
+      SearchChanged('wiki', IntToStr(RedirectId));
     end;
+    SearchChanged('wiki', IntToStr(Page.Id));
     Exec('COMMIT', []);
     TransactionOpen := False;
     if Renamed and Assigned(WikiPageMoved) then
@@ -953,6 +956,7 @@ begin
     Exec('DELETE FROM wiki_links WHERE page_id = :p', [Page.Id]);
     Exec('DELETE FROM wiki_pages WHERE id = :p', [Page.Id]);
     MarkLinkersStale(Page.Slug);
+    SearchChanged('wiki', IntToStr(Page.Id));
     Exec('COMMIT', []);
     TransactionOpen := False;
     Result := '';
@@ -1003,6 +1007,7 @@ begin
     StoreLinks(PageId, Targets, Body);
     Exec('DELETE FROM wiki_deleted WHERE page_id = :p', [PageId]);
     MarkLinkersStale(Name);
+    SearchChanged('wiki', IntToStr(PageId));
     Exec('COMMIT', []);
     TransactionOpen := False;
     Result := '';
@@ -1342,8 +1347,11 @@ begin
       Free;
     end;
     for I := 0 to Pending.Count - 1 do
+    begin
       Exec('UPDATE wiki_pages SET lang = :lang WHERE id = :id AND lang = :empty',
         [SlugLanguage(Pending.ValueFromIndex[I]), StrToInt(Pending.Names[I]), '']);
+      SearchChanged('wiki', Pending.Names[I]);
+    end;
   finally
     Pending.Free;
   end;
@@ -2820,6 +2828,67 @@ begin
   end;
 end;
 
+{ A page as the index takes it: its words, its language as its group, and
+  how many other pages link to it. }
+function WikiDoc(const Id: string; var Doc: TIndexDoc): boolean;
+var
+  Slug: string;
+begin
+  with Query('SELECT slug, title, body, lang, updated FROM wiki_pages WHERE id = :i', [StrToIntDef(Id, 0)]) do
+  try
+    Result := not EOF;
+    if not Result then
+      Exit;
+    Slug := Fields[0].AsString;
+    Doc.Title := Fields[1].AsString;
+    if TitleOf(Slug) <> Doc.Title then
+      Doc.Names := TitleOf(Slug);
+    Doc.Text := PlainWords(Fields[2].AsString);
+    Doc.Language := Fields[3].AsString;
+    Doc.Group := 'l' + Doc.Language;
+    Doc.Time := Fields[4].AsDateTime;
+  finally
+    Free;
+  end;
+  Doc.Count := IntValue('SELECT COUNT(*) FROM wiki_links WHERE target_key = :k AND page_id <> :i', [LowerCase(Slug), StrToIntDef(Id, 0)]);
+end;
+
+function WikiNext(const After: string; Count: integer): TStringArray;
+begin
+  Result := IndexIds('SELECT id FROM wiki_pages WHERE id > :a ORDER BY id LIMIT :n', [StrToIntDef(After, 0), Count]);
+end;
+
+{ The reader's language, or every language a page is in. }
+function WikiGroups(ARequest: TRequest; const Me: TMember): TStringArray;
+var
+  I: integer;
+begin
+  if FilterLanguage(ARequest) <> 'all' then
+    Exit(TStringArray.Create('l' + FilterLanguage(ARequest)));
+  Result := IndexIds('SELECT DISTINCT lang FROM wiki_pages', []);
+  for I := 0 to High(Result) do
+    Result[I] := 'l' + Result[I];
+end;
+
+function WikiHits(ARequest: TRequest; const Me: TMember; const Ids: TStringArray): TSearchHits;
+var
+  Language: string;
+begin
+  Result := nil;
+  Language := FilterLanguage(ARequest);
+  with Query('SELECT id, slug, title, SUBSTRING(body, 1, 600), lang FROM wiki_pages WHERE id IN (' + IndexIdList(Ids) + ')', []) do
+  try
+    while not EOF do
+    begin
+      if (Language = 'all') or (Fields[4].AsString = Language) then
+        AddSearchHit(Result, Fields[2].AsString, PageUrl(Fields[1].AsString), PlainLine(Fields[3].AsString, 220), '', '', 'page', Fields[0].AsString);
+      Next;
+    end;
+  finally
+    Free;
+  end;
+end;
+
 procedure ApiChanges(ARequest: TRequest; AResponse: TResponse);
 var
   List: TJSONArray;
@@ -2855,6 +2924,7 @@ begin
     [LowerCase(MAIN_PAGE), MAIN_PAGE, 'Main Page', WELCOME, RenderPage(WELCOME)]);
   Exec('INSERT INTO wiki_revisions (page_id, rev, title, body, summary, user_id, at) SELECT id, 1, title, body, ''The first page'', NULL, NOW() FROM wiki_pages WHERE name_key = :k',
     [LowerCase(MAIN_PAGE)]);
+  SearchChanged('wiki', IntToStr(IntValue('SELECT id FROM wiki_pages WHERE name_key = :k', [LowerCase(MAIN_PAGE)])));
 end;
 
 { The wiki's pictures: files under <files>/wiki-images, served at
@@ -2958,6 +3028,8 @@ initialization
   RegisterPartHome('wiki', '/wiki');
   RegisterHomePart('wiki_home', @WikiHomeCard);
   RegisterStartup(@SeedMainPage);
+  RegisterIndexed('wiki', @WikiDoc, @WikiNext, @WikiHits, @WikiGroups, True);
+  IndexPrefers('wiki', 10, 0, 0);
   HTTPRouter.RegisterRoute('/wiki', rmAll, @ShowWiki);
   HTTPRouter.RegisterRoute('/wiki/*slug', rmAll, @ShowWiki);
   HTTPRouter.RegisterRoute('/wiki-pages', rmGet, @ShowPages);

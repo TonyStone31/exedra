@@ -73,7 +73,7 @@ function MultipartProblem(const ContentType: string; const Body: TBytes; MaxPart
 
 implementation
 
-uses StrUtils, SiteDb, SiteGuard, SiteStats, SiteUsers, SiteRoles, SiteBase;
+uses StrUtils, SiteDb, SiteGuard, SiteStats, SiteUsers, SiteRoles, SiteBase, SiteFiles;
 
 const
   // what anyone may send; more needs a signed-in member (and the route's
@@ -384,4 +384,11 @@ begin
   DoneConnection;
 end;
 
+function HeadersAlone(AResponse: TResponse): boolean;
+begin
+  Result := (AResponse is TGuardResponse) and TGuardResponse(AResponse).FHeadOnly;
+end;
+
+initialization
+  AskedForHeaders := @HeadersAlone;
 end.

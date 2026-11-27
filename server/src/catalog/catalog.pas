@@ -139,7 +139,7 @@ implementation
 uses
   Classes, StrUtils, Variants, URIParser, sqldb, SiteStatic,
   httproute, SiteDb, SiteRoles,
-  SiteAdmin, SiteGuard, SiteGuardRules, SiteMarkup, SiteVisitors, WebPages, SiteWords, SiteSql, SiteParts, SiteSearch,
+  SiteAdmin, SiteGuard, SiteGuardRules, SiteMarkup, SiteVisitors, WebPages, SiteWords, SiteSql, SiteParts, SiteSearch, SiteIndex,
   // the catalog's other units, so the program names Catalog alone
   CatalogReports, CatalogImport, CatalogAdmin;
 
@@ -1340,6 +1340,68 @@ begin
   finally
     Found.Free;
   end;
+end;
+
+{ An entry as the index takes it: what it says of itself, then its README. }
+function CatalogDoc(const Id: string; var Doc: TIndexDoc): boolean;
+var
+  Item: TJSONObject;
+  Field, Day: string;
+  Votes, Liked: integer;
+begin
+  Item := ReadEntry(StrToIntDef(Id, 0));
+  Result := Item <> nil;
+  if not Result then
+    Exit;
+  try
+    Doc.Title := EntryTitle(Item);
+    if Item.Get('name', '') <> Doc.Title then
+      Doc.Names := Item.Get('name', '');
+    for Field in ['name', 'summary', 'topics', 'categories', 'owner', 'authors'] do
+      Doc.Text := Doc.Text + Item.Get(Field, '') + LineEnding;
+    Doc.Text := Doc.Text + PlainWords(VarToStr(Value('SELECT body FROM catalog_readmes WHERE entry_id = :e', [StrToIntDef(Id, 0)])));
+    Votes := Item.Get('rating_count', 0);
+    if Votes > 20 then
+      Votes := 20;
+    Liked := Item.Get('interest', 0);
+    if Liked > 50 then
+      Liked := 50;
+    Doc.Count := Round(2 * Ln(2 + Item.Get('stars', 0))) + 3 * Votes + Liked;
+    Day := Copy(LatestDate(Item), 1, 10);
+    if (Length(Day) <> 10) or not TryEncodeDate(StrToIntDef(Copy(Day, 1, 4), 0), StrToIntDef(Copy(Day, 6, 2), 0), StrToIntDef(Copy(Day, 9, 2), 0), Doc.Time) then
+      Doc.Time := 0;
+  finally
+    Item.Free;
+  end;
+end;
+
+function CatalogNext(const After: string; Count: integer): TStringArray;
+begin
+  Result := IndexIds('SELECT id FROM catalog_entries WHERE id > :a ORDER BY id LIMIT :n', [StrToIntDef(After, 0), Count]);
+end;
+
+function CatalogHits(ARequest: TRequest; const Me: TMember; const Ids: TStringArray): TSearchHits;
+var
+  Id: string;
+  Item: TJSONObject;
+begin
+  Result := nil;
+  for Id in Ids do
+  begin
+    Item := ReadEntry(StrToIntDef(Id, 0), Me.Id);
+    if Item = nil then
+      Continue;
+    try
+      AddSearchHit(Result, EntryTitle(Item), '/catalog/' + Id, Item.Get('summary', ''), LatestDate(Item), Item.Get('owner', ''), 'entry', Id);
+    finally
+      Item.Free;
+    end;
+  end;
+end;
+
+procedure EntryChanged(EntryId: integer);
+begin
+  SearchChanged('catalog', IntToStr(EntryId));
 end;
 
 function CatalogParams(ARequest: TRequest; Page: integer; const Omit: string = ''): string;
@@ -2564,6 +2626,10 @@ initialization
   LimitRoute('catlist', '/api/catalog', 'GET');
   RegisterSearchRoute('/catalog');
   RegisterSearch('catalog', 'Catalog', 40, @FindInCatalog, '', '/catalog?q=');
+  RegisterIndexed('catalog', @CatalogDoc, @CatalogNext, @CatalogHits, nil, True);
+  IndexPrefers('catalog', 10, 0, 0);
+  RegisterCatalogHidden('search', @EntryChanged);
+  RegisterCatalogDelete('search', @EntryChanged);
   LimitRoute('catroom', '/catalog/*', 'POST');
   LimitRoute('catbadge', '/catalog-badge/*', 'GET');
 

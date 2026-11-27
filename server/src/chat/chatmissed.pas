@@ -166,7 +166,6 @@ begin
     Who := VarToStr(Value('SELECT name FROM users WHERE mail_key = :k', [Key]));
   if Who = '' then
   begin
-    Strike(ClientIp(ARequest), 'password');
     SendText(AResponse, 404, 'That link is not known here.');
     Exit;
   end;

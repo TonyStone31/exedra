@@ -46,6 +46,13 @@ That is for Linux, where it is built on GTK3 and needs the GTK3 libraries
 (`libgtk-3-0` on Debian and Ubuntu; a desktop has them). On Windows and
 macOS leave `--ws=gtk3` out. The program is `desktop/exedra-desktop`.
 
+It also builds with Qt: give `--ws=qt5` or `--ws=qt6` in place of
+`--ws=gtk3`. That needs the Qt library Lazarus programs link to
+(`libqt5pas-dev` on Debian and Ubuntu, and for Qt6 `libqt6pas-dev` where
+the system has it, or built from `lcl/interfaces/qt6/cbindings` in the
+Lazarus source). The Qt builds start and show their windows. I have not
+used them for real yet, so expect rough edges.
+
 ## Using it
 
 Start it and give it your site's address and your sign-in. It is a chat

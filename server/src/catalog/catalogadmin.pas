@@ -29,7 +29,7 @@ implementation
 
 uses
   Classes, SysUtils, Variants, StrUtils, DB, httproute,
-  SiteDb, SiteUsers, SiteRoles, SiteAdmin, SiteGuard, SiteGuardRules, SiteMarkup, SiteStats, SiteVisitors, SiteFiles, SiteScan,
+  SiteDb, SiteUsers, SiteRoles, SiteAdmin, SiteGuard, SiteGuardRules, SiteMarkup, SiteStats, SiteVisitors, SiteFiles, SiteScan, SiteIndex,
   Catalog, CatalogImport, SiteParts, SiteWords, SiteSql;
 
 const
@@ -319,6 +319,7 @@ begin
       Exec('UPDATE catalog_entries SET ' + Words.Names[I] + ' = :v, words_set = 1 WHERE id = :i', [Words.ValueFromIndex[I], Id]);
     if Words.Count > 0 then
       Log(Me.Name + ' changed the words of catalog entry ' + IntToStr(Id));
+    SearchChanged('catalog', IntToStr(Id));
     CatalogEntriesChanged;
     SendText(AResponse, 200, Say('Saved.'));
   finally

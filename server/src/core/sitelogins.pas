@@ -249,7 +249,6 @@ begin
   Token := TakeGrant(ARequest.ContentFields.Values['code'], ARequest.ContentFields.Values['state']);
   if Token = '' then
   begin
-    Strike(ClientIp(ARequest), 'password');
     SendText(AResponse, 404, 'That sign-in is not waiting here, or was taken already.');
   end
   else
@@ -503,9 +502,6 @@ begin
   if not Ready(P.Name) or (ARequest.QueryFields.Values['state'] = '') or (ARequest.QueryFields.Values['state'] <> ARequest.CookieFields.Values['oauth']) or
     not WhoIsIt(ARequest, P, Id, Login) then
   begin
-    // the provider's own no (the member pressed Cancel there) is not a guess
-    if ARequest.QueryFields.Values['error'] = '' then
-      Strike(ClientIp(ARequest), 'password');
     if ForApp then
       AResponse.SendRedirect(AppReturn(ARequest, 'failed=1'))
     else

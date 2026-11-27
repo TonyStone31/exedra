@@ -556,9 +556,33 @@ begin
       SendText(AResponse, 409, 'This account is closed. Reopen it first.');
       Exit;
     end;
+  // every right is checked before anything is changed
+  if (ARequest.ContentFields.IndexOfName('banned') >= 0) and (not Can(Me, 'ban') or (Shielded(Current) and not HasRole(Me.Roles, 'admin'))) then
+  begin
+    SendText(AResponse, 403, 'Banning this member is not open to you.');
+    Exit;
+  end;
+  // The account's name, a way into it, its end and its return: on staff for an
+  // admin only, and never on someone who may do what the one asking may not.
+  with ARequest.ContentFields do
+    Strong := (IndexOfName('rename') >= 0) or (Values['password_link'] = '1') or (Values['close'] = '1') or (Values['reopen'] = '1');
+  if Strong and not HasRole(Me.Roles, 'admin') then
+  begin
+    Refused := '';
+    if not Can(Me, 'manage-members') or Shielded(Current) then
+      Refused := 'x';
+    for R in Current.Split([','], TStringSplitOptions.ExcludeEmpty) do
+      if not HoldsAllOf(Me, Trim(R)) then
+        Refused := 'x';
+    if Refused <> '' then
+    begin
+      SendText(AResponse, 403, 'Changing this member''s account is not open to you.');
+      Exit;
+    end;
+  end;
   if ARequest.ContentFields.IndexOfName('roles') >= 0 then
   begin
-    if not Can(Me, 'manage-members') then
+    if not Can(Me, 'manage-members') or (Shielded(Current) and not HasRole(Me.Roles, 'admin')) then
     begin
       SendText(AResponse, 403, 'Giving roles is for admins.');
       Exit;
@@ -590,11 +614,6 @@ begin
   end;
   if ARequest.ContentFields.IndexOfName('banned') >= 0 then
   begin
-    if not Can(Me, 'ban') or (Shielded(Current) and not HasRole(Me.Roles, 'admin')) then
-    begin
-      SendText(AResponse, 403, 'Banning this member is not open to you.');
-      Exit;
-    end;
     Exec('UPDATE users SET banned = :b WHERE id = :u', [Ord(ARequest.ContentFields.Values['banned'] = '1'), Id]);
     if ARequest.ContentFields.Values['banned'] = '1' then
     begin
@@ -603,15 +622,6 @@ begin
     end;
     Log(Me.Name + ' set banned=' + ARequest.ContentFields.Values['banned'] + ' for ' + Name);
   end;
-  // The account's name, a way into it, its end and its return: on staff, for an admin only.
-  with ARequest.ContentFields do
-    Strong := (IndexOfName('rename') >= 0) or (Values['password_link'] = '1') or (Values['close'] = '1') or (Values['reopen'] = '1');
-  if Strong then
-    if not Can(Me, 'manage-members') or (Shielded(Current) and not HasRole(Me.Roles, 'admin')) then
-    begin
-      SendText(AResponse, 403, 'Changing this member''s account is not open to you.');
-      Exit;
-    end;
   if ARequest.ContentFields.IndexOfName('rename') >= 0 then
   begin
     NewName := Trim(ARequest.ContentFields.Values['rename']);

@@ -31,9 +31,9 @@
 .directory .tile:hover { transform: none; }
 .directory .tiles { grid-template-columns: repeat(auto-fill, minmax(min(290px, 100%), 1fr)); }
 .findpages { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 24px 0; }
-.findpages a, .findpages button { padding: 7px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 14px; }
+.findpages a, .findpages button { padding: 7px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); font-size: 14px; }
 .findpages a { text-decoration: none; }
-.findpages a:hover, .findpages button:hover { background: var(--hover); }
+.findpages a:hover { background: var(--hover); }
 .directory .hint { margin-block: 16px 24px; font-size: 13px; }
 @media (max-width: 700px) {
   .tile { padding: 16px; }
@@ -139,7 +139,7 @@ h1.catalog-named .catalog-icon > span { font-size: 24px; }
 .narrow-icon { flex: none; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
 .discover-narrow .discover-choice { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; display: grid; gap: 8px; min-width: 220px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); box-shadow: 0 10px 28px rgba(0, 0, 0, .16); }
 .discover-choice label { display: grid; gap: 4px; font-size: 13px; color: var(--dim); }
-.discover-choice select { padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 14px; }
+.discover-choice select { padding: 7px 8px; font-size: 14px; }
 /* the two answers: a bar of their own, apart from the project */
 .discover-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0; }
 .discover-bar form { margin: 0; }

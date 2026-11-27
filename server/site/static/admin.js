@@ -2100,6 +2100,7 @@
       save.type = 'submit';
       form.appendChild(save);
       if (group === 'File scanning') fileScanning(form);
+      if (group === 'Search') searchIndex(form);
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
         save.disabled = true;
@@ -2152,6 +2153,33 @@
       } catch (err) { failed(err); }
       finally { test.disabled = false; }
     });
+    show().catch(failed);
+  }
+
+  // Under the Search settings: how each module's index stands, read again
+  // while one is being built.
+  function searchIndex(form) {
+    const panel = el('div', 'scan-panel');
+    form.appendChild(panel);
+    const show = async function () {
+      const d = await get('/api/admin/search');
+      panel.replaceChildren(el('h3', '', t('Search index')));
+      if (d.cgi) { panel.appendChild(el('p', 'hint', t('This program runs as CGI and keeps no index: the database search answers.'))); return; }
+      if (!d.parts.length) panel.appendChild(el('p', 'hint', t('Nothing here is searched through the index yet.')));
+      for (const p of d.parts) {
+        const count = p.documents.toLocaleString(locale);
+        let words = p.state === 'ready' ? t('%s documents, ready', count) :
+          p.state === 'building' ? t('building, %s', p.step || '') :
+          p.state === 'failed' ? t('failed: %s', p.problem) :
+          p.state === 'waiting' ? t('waiting to be built') : t('off');
+        if (p.queued) words += ', ' + t('%s changes waiting', p.queued.toLocaleString(locale));
+        if (p.refused) words += ', ' + t('%s found but not shown', p.refused.toLocaleString(locale));
+        const line = el('p', 'hint', p.part + ': ' + words);
+        line.setAttribute('role', 'status');
+        panel.appendChild(line);
+      }
+      if (form.isConnected && d.parts.some(function (p) { return p.state === 'building'; })) setTimeout(function () { show().catch(failed); }, 2000);
+    };
     show().catch(failed);
   }
 

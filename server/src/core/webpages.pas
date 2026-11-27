@@ -43,6 +43,8 @@ function PageRequest: TRequest;
 function CachedHomePart(const Name: string): string;
 { Language empty means the current request's. }
 function FillTemplate(const Name: string; const Values: array of string; const Language: string = ''): string;
+{ The stamp static files are asked with, so a new build or date format is fetched anew. }
+function StaticVersion: string;
 procedure SendPage(AResponse: TResponse; const Html: string);
 { After a form's POST: the browser loads TargetUrl with a GET (303), and the
   answer is sent, as SendText and SendJSON send theirs.  The framework's
@@ -118,6 +120,13 @@ var
   { Goes on /static addresses in the templates, so a browser takes the new
     app.js and site.css after a restart instead of the copy it kept. }
   Started: string;
+
+function StaticVersion: string;
+begin
+  Result := Started + StringReplace(StringReplace(StringReplace(Setting('date_format', 'm-d-yyyy'), '/', 's', [rfReplaceAll]), '.', 'p', [rfReplaceAll]),
+    '-', '', [rfReplaceAll]);
+end;
+
 
 function ShowDate(const Iso: string): string;
 var
@@ -318,8 +327,7 @@ begin
     T.Values['brand'] := Brand;
     T.Values['powered'] := PoweredBy(Lang);
     // the date format rides along, so a new choice reaches every cached script
-    T.Values['v'] := Started + StringReplace(StringReplace(StringReplace(Setting('date_format', 'm-d-yyyy'), '/', 's', [rfReplaceAll]),
-      '.', 'p', [rfReplaceAll]), '-', '', [rfReplaceAll]);
+    T.Values['v'] := StaticVersion;
     T.Values['partscripts'] := PartScriptTags(T.Values['v']);
     T.Values['nav'] := PartLinks;
     T.Values['lang'] := HtmlLanguage(Lang);
@@ -419,8 +427,7 @@ var
   Name, StyleTags, ScriptTags, Who, Version: string;
 begin
   // the same stamp the templates put on their own files, so a new build is fetched anew
-  Version := Started + StringReplace(StringReplace(StringReplace(Setting('date_format', 'm-d-yyyy'), '/', 's', [rfReplaceAll]), '.', 'p', [rfReplaceAll]),
-    '-', '', [rfReplaceAll]);
+  Version := StaticVersion;
   StyleTags := '';
   for Name in Styles.Split([','], TStringSplitOptions.ExcludeEmpty) do
     StyleTags := StyleTags + '<link rel="stylesheet" href="/static/' + E(Trim(Name)) + '?v=' + Version + '">';
@@ -822,7 +829,6 @@ begin
   Name := PasswordLinkName(ARequest.RouteParams['token']);
   if Name = '' then
   begin
-    Strike(ClientIp(ARequest), 'password');
     SendText(AResponse, 410, Say('That link has run out or was used already.') + ' ' + Say('Ask for a new one.'));
   end
   else

@@ -12,7 +12,7 @@ interface
 implementation
 
 uses
-  Classes, SysUtils, fpjson, httpdefs, httproute, SiteDb, SiteSql, SiteUsers, ChatRooms, SiteFiles, SiteRoles, SiteBell, SiteAdmin, SiteGuard;
+  Classes, SysUtils, fpjson, httpdefs, httproute, SiteDb, SiteSql, SiteUsers, ChatRooms, SiteFiles, SiteRoles, SiteBell, SiteAdmin, SiteGuard, SiteIndex;
 
 { The members of each private channel, by the channel's id. }
 function PrivateMembers: TJSONObject;
@@ -131,6 +131,8 @@ begin
     Exec('DELETE x FROM message_rooms x JOIN messages m ON m.id = x.message_id WHERE m.room_id = :r', [Room.Id]);
     Exec('DELETE FROM message_rooms WHERE room_id = :r', [Room.Id]);
     Exec('DELETE FROM messages WHERE room_id = :r', [Room.Id]);
+    // every message of the channel left: the chat's index is made again
+    SearchChanged('chat', '');
     Exec('DELETE FROM follows WHERE room_id = :r', [Room.Id]);
     Exec('DELETE FROM room_roles WHERE room_id = :r', [Room.Id]);
     Exec('DELETE FROM mutes WHERE room_id = :r', [Room.Id]);

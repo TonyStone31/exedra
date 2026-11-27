@@ -445,9 +445,9 @@ begin
       ServiceNotice(NameRefusal(Name))
     else if Length(Words[1]) < 8 then
       ServiceNotice('A password needs 8 characters or more.')
-    else if MailReady and not ValidEmail(Words[2]) then
+    else if (MailReady or (Words[2] <> '')) and not ValidEmail(Words[2]) then
       ServiceNotice('That does not look like an email address.')
-    else if MailReady and EmailTaken(Words[2]) then
+    else if (Words[2] <> '') and EmailTaken(Words[2]) then
       ServiceNotice('Another account uses that address.')
     else
     begin

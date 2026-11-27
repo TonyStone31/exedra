@@ -9,6 +9,9 @@ unit SiteBackup;
 
 interface
 
+uses
+  SiteDb;
+
 { The command line's backup and restore: the same jobs, run to the end in the
   caller's thread, with each step printed. }
 function CommandLineBackup(WithPictures, WithLogs: boolean): boolean;
@@ -17,12 +20,22 @@ function CommandLineRestore(const Path: string): boolean;
 { A top-level folder of data/ the program makes again on its own (a static
   copy, a cache): left out of every backup and never put back. }
 procedure LeaveOutOfBackups(const Folder: string);
+{ Proc runs each time a restore has put the database back and the settings
+  are read again: for what a unit keeps beside the tables. }
+procedure RegisterAfterRestore(Proc: TChore);
+{ A folder only the service's user can open, from the moment it is made;
+  one that is there is closed to everyone else. }
+procedure PrivateFolder(const Folder: string);
+{ Folder and everything in it deleted. }
+procedure RemoveFolder(const Folder: string);
+{ Room left on the disk holding Folder, in bytes; -1 when unknown. }
+function FreeBytes(const Folder: string): int64;
 
 implementation
 
 uses
   {$ifdef unix} Unix, BaseUnix, {$endif} SysUtils, Classes, StrUtils, DateUtils, Variants, DB, sqldb, zipper, fpjson, httpdefs, httproute,
-  SiteDb, SiteUsers, SiteRoles, SiteAdmin, SiteGuard, SiteStats, SiteBell, WebPages, SiteSql;
+  SiteUsers, SiteRoles, SiteAdmin, SiteGuard, SiteStats, SiteBell, WebPages, SiteSql;
 
 const
   { the first line of a backup's database file }
@@ -49,6 +62,7 @@ type
 
 var
   Remade: TStringList;
+  AfterRestore: array of TChore;
   JobLock: TRTLCriticalSection;
   JobKind: TJobKind = jkNone;
   JobStep, JobError, JobLast, JobBy: string;
@@ -60,9 +74,6 @@ var
     data/backups/checks.json so a restart does not forget the checks }
   Known: TStringList;
 
-{ A folder only the service's user can open, from the moment it is made:
-  backups hold the config (the database password) and the data folder
-  (keys), and so do their unpacked copies. }
 procedure PrivateFolder(const Folder: string);
 {$ifdef unix}
 var
@@ -103,6 +114,7 @@ end;
 function BackupsFolder: string;
 begin
   Result := FilesRoot + 'data' + PathDelim + 'backups' + PathDelim;
+  // backups hold the config (the database password) and the data folder (keys), and so do their unpacked copies
   PrivateFolder(Result);
 end;
 
@@ -164,6 +176,12 @@ procedure LeaveOutOfBackups(const Folder: string);
 begin
   if Remade.IndexOf(Folder) < 0 then
     Remade.Add(Folder);
+end;
+
+procedure RegisterAfterRestore(Proc: TChore);
+begin
+  SetLength(AfterRestore, Length(AfterRestore) + 1);
+  AfterRestore[High(AfterRestore)] := Proc;
 end;
 
 { The top-level names of data/ a backup passes over: its own folder, the
@@ -787,7 +805,6 @@ begin
   end;
 end;
 
-{ Room left on the disk holding Folder, in bytes; -1 when unknown. }
 function FreeBytes(const Folder: string): int64;
 {$ifdef unix}
 var
@@ -1442,6 +1459,7 @@ var
   Signed, Restored, Marks: TStringList;
   Entry: TSearchRec;
   StayShut: boolean;
+  Proc: TChore;
 begin
   Tmp := BackupsFolder + 'restoring' + PathDelim;
   RemoveFolder(Tmp);
@@ -1522,6 +1540,8 @@ begin
       LoadBlocks;
       // who may do what is the backup's now
       LoadGrants;
+      for Proc in AfterRestore do
+        Proc();
       Files := 0;
       // the logs too, when the backup has them
       if DirectoryExists(Tmp + 'data') then

@@ -25,15 +25,13 @@ body.wiki { background: var(--bg); }
 }
 .skip-link:focus { transform: none; }
 .theme-choice { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; white-space: nowrap; }
-.theme-choice select {
-  padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font-size: 13px;
-}
+.theme-choice select { padding: 5px 7px; font-size: 13px; }
 /* the plain top bar is dark; a site with its own bar styles these itself */
 body.plainbar .topbar .theme-choice, body.plainbar .topbar .wiki-language label { color: var(--side-ink); }
 .wiki-language { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; max-width: 100%; }
 .wiki-language label { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--dim); }
-.wiki-language select { min-width: 0; max-width: 170px; padding: 4px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
-.wiki-language button { padding: 4px 8px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.wiki-language select { min-width: 0; max-width: 170px; padding: 4px; }
+.wiki-language button { padding: 4px 8px; }
 
 /* as wide as the header above it: 1240px and the padding (22 Nov 2026) */
 .wikipage {
@@ -153,22 +151,15 @@ body.plainbar .topbar .theme-choice, body.plainbar .topbar .wiki-language label 
 /* editing: the whole width of the window, the text and its preview need the room */
 .wiki.edit .wikipage:has(.wikiedit) { max-width: none; }
 .wikiedit label, .wikiform label { display: block; margin: 18px 0 8px; font-size: 14px; font-weight: 600; }
-.wikiedit input, .wikiedit textarea, .wikiform input {
-  display: block; width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px;
-  border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
-}
+.wikiedit input, .wikiedit textarea, .wikiform input { display: block; width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; }
 .wikiedit input, .wikiform input { margin-top: 6px; }
 .wikiform input { max-width: 560px; }
 .wikiedit textarea {
   height: calc(100vh - 190px); min-height: 320px; resize: vertical; font-size: 14px; line-height: 1.65; tab-size: 2;
 }
 .wikiedit > p:last-child, .wikiform > p:last-child { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.wikiedit button, .wikiform button {
-  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--line);
-  background: var(--bg-soft); color: var(--ink); font-weight: 600;
-}
+.wikiedit button, .wikiform button { padding: 8px 16px; font-weight: 600; }
 .wikiedit button[type="submit"]:not([name]), .wikiform button[type="submit"] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
-.wikiedit button[name]:hover { background: var(--hover); }
 .wikiedit .fine, .wikiform .fine { margin: 16px 0; }
 /* the page's name beside its label, so the text starts higher on the screen */
 .wikiedit label.wikiedit-title { display: flex; align-items: center; gap: 12px; margin: 14px 0 0; }

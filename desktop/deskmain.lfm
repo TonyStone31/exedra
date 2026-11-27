@@ -599,7 +599,6 @@ object MainForm: TMainForm
   end
   object Tray: TTrayIcon
     Hint = 'Exedra'
-    Visible = True
     OnClick = TrayClick
     Left = 496
     Top = 160

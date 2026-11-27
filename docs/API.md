@@ -421,6 +421,10 @@ members). Private conversations are not searched here.
   module that is off or that the asker may not search: every module.
 - `page`: with `in`, the page of that module's hits, 20 to a page, from 1.
   Without `in` each module gives its first 5.
+- `engine`: `database` or `index`, to pick what answers this one request.
+  It counts only for someone who holds `manage-settings`, on a site whose
+  setting `search_engine` is `compare` or `index`. For everyone else it
+  is ignored.
 
 ```json
 {
@@ -444,9 +448,25 @@ on this site, `excerpt` is plain text (empty when the module has none),
 module's word for what was found (`message`, `page`, `topic`, `entry`).
 A chat message's `title` is its channel, `#name`.
 
+A site can answer from a search index it keeps itself (the setting
+`search_engine`). A group answered that way may carry one of two more fields.
+`showing_for` holds the words that were searched for when the index took
+a word as misspelled, and `did_you_mean` holds words to offer in place of
+the ones sent. For someone who holds `manage-settings` every group also
+says what answered it, in `engine`: `index` or `database`. When the index
+answers, `q` may hold a phrase in quotes, `OR` between words and a minus
+in front of a word to leave it out.
+
 Each module also keeps its own search, with choices this one does not
 have: `/api/search` (one channel), `/api/wiki/search`, `/api/forum/search`
 and `/api/catalog` (filters and sorts).
+
+`GET /api/site-suggest?q=&in=` gives what the search box offers while
+someone types, where the site's own index answers: `{"q": "tstr",
+"offers": [{"text": "TStringList", "url": "/wiki/TStringList", "caption":
+"Wiki"}, {"text": "tstringlist loadfromfile"}]}`. An offer with `url` is
+a page to open, one without is words to search for. Eight at most, none
+for fewer than two characters, and only from modules everyone may read.
 
 ## The desktop client
 
@@ -481,18 +501,31 @@ could not check. `POST /api/admin/scans/test` scans the EICAR test file and
 answers `caught`, `error` and the scanner's `words`. Both need
 manage-settings.
 
+`GET /api/admin/search` answers how the site's search index stands:
+`engine` (the setting), `cgi` (true for the CGI program, which keeps no
+index) and `parts`, one for each module that joined the index, with
+`part`, `state` (`off`, `waiting`, `building`, `ready` or `failed`),
+`documents`, `built` (when it was last built, ISO and UTC), `step` (how
+far a build is), `queued` (changes waiting to go in), `refused` (hits the
+index offered and the module did not show) and `problem` (why it failed).
+It needs manage-settings.
+
 Safety settings show their stored names on the admin page. The defaults
 are `missing_tries=6` per minute (scanner paths count three),
 `admin_probe_tries=3` per minute and `password_tries=10` in 15 minutes.
 A wrong or expired token is held by its own limit (`token_tries`) and is
-not a password try. A request the browser made on its own, a picture or
-anything another site set off, counts for nothing. Refused admin routes and unknown admin paths
-both answer `404 Nothing here.`. `block_strikes=3` makes the third block
-permanent; `block_cache_max=10000` drops the oldest cached addresses
+not a password try. A request the browser made on its own, a picture, a
+link followed from a page or anything another site set off, counts for
+nothing. The browser says which those are, so a program that says the same
+is not counted either: the guard slows scanners down, it does not prove
+there are none. Refused admin routes and unknown admin paths
+both answer `404 Nothing here.`. From the third block on (`block_strikes=3`)
+a block lasts `block_days`; `block_cache_max=10000` drops the oldest cached addresses
 (hard cap 100,000). This machine's own address and `allowed_ips` are never
-blocked. Other addresses of the house network are, unless one passes on
-visitors' requests without being named under `proxies`: it is left alone
-and the admin page says so. IPv6 spellings and mapped IPv4 addresses share counters.
+blocked. Every other address is, the house network's too. A proxy in front
+has to be named under `proxies`, or every visitor looks like that one
+address: the admin page says so when it sees one that is not named.
+IPv6 spellings and mapped IPv4 addresses share counters.
 
 `signuptry_address=10` caps signup attempts per minute across web, IRC and
 external sign-in; `signups_per_address=10` caps completed accounts per day.

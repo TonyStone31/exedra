@@ -219,7 +219,8 @@ begin
       Paths := Parts[2];
       // one or two odd requests can be a link someone was led to click: not
       // a scanner yet, unless the address was already blocked for more
-      Lone := (StrToIntDef(Parts[3], 1) < MIN_HITS) and (Pos('miss', Kinds) = 0) and (Pos('password', Kinds) = 0);
+      // a block for missing pages counts as one of the hits and is no proof by itself
+      Lone := (StrToIntDef(Parts[3], 1) - Ord(Pos('miss', Kinds) > 0) < MIN_HITS) and (Pos('password', Kinds) = 0);
       if Lone or NeverBlocked(Ip) or KnownCrawler(Ip) then
       begin
         Exec('DELETE FROM abuse_queue WHERE ip = :i', [Ip]);

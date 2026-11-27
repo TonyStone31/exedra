@@ -292,10 +292,12 @@ end;
   browser send these, so they say nothing about the visitor. }
 function BrowsersOwn(ARequest: TRequest): boolean;
 var
-  Dest: string;
+  Dest, Site: string;
 begin
   Dest := LowerCase(ARequest.GetFieldByName('Sec-Fetch-Dest'));
-  Result := SameText(ARequest.GetFieldByName('Sec-Fetch-Site'), 'cross-site') or ((Dest <> '') and (Dest <> 'document') and (Dest <> 'empty'));
+  Site := LowerCase(ARequest.GetFieldByName('Sec-Fetch-Site'));
+  // a page's own requests and links followed from a page; typed addresses come as none
+  Result := ((Site <> '') and (Site <> 'none')) or ((Dest <> '') and (Dest <> 'document') and (Dest <> 'empty'));
 end;
 
 procedure RefuseAdmin(ARequest: TRequest; AResponse: TResponse);
@@ -358,7 +360,7 @@ function NeverBlocked(const Ip: string): boolean;
 var
   Allowed: string;
 begin
-  Result := Ip.StartsWith('127.') or (Ip = '::1') or (Pos(' ' + Ip + ' ', ' ' + UnlistedProxies + ' ') > 0);
+  Result := Ip.StartsWith('127.') or (Ip = '::1');
   for Allowed in Setting('allowed_ips', '').Split([',', ' '], TStringSplitOptions.ExcludeEmpty) do
     if Ip = CanonicalIp(Allowed) then
       Result := True;
