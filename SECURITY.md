@@ -54,11 +54,12 @@ knowing before you rely on it.
   script of their own. To catch a swapped key, each locked conversation
   shows a safety code. Both members see the same code, and can compare
   it some other way, by a call or in person. The code is made from the
-  keys the server gives out, so it shows a key swapped on one side. It
-  does not yet show a server that swaps them on both, which I am working
-  on. The browser also remembers
+  other member's key and your own, and your browser checks that the one
+  given out as yours really is yours, so a key swapped on either side
+  shows as a different code. The browser also remembers
   the key it saw for each member and warns when another one comes, which
-  happens after a password reset. Nothing can catch a changed script, so
+  happens after a password reset. It writes nothing to the new key until
+  you have seen that warning. Nothing can catch a changed script, so
   the people who run the site are trusted not to do that. This is true
   of every web page that encrypts in the browser.
 - The password stays on the member's device in the browser and in the

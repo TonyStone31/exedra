@@ -391,7 +391,10 @@ begin
   KeepCookie(AResponse, 'oauthback', HTTPEncode(LocalReturn(ARequest.QueryFields.Values['return'])));
   App := '';
   // a program that sends no state of its own is not sent the outcome
-  if (ARequest.QueryFields.Values['app'] <> '') and (StrToIntDef(ARequest.QueryFields.Values['port'], 0) > 0) and StateOK(ARequest.QueryFields.Values['state']) then
+  // and only when the browser was sent here by the program itself, to a port a program may listen on
+  if (ARequest.QueryFields.Values['app'] <> '') and (StrToIntDef(ARequest.QueryFields.Values['port'], 0) >= 1024) and
+    (StrToIntDef(ARequest.QueryFields.Values['port'], 0) <= 65535) and StateOK(ARequest.QueryFields.Values['state']) and
+    ((ARequest.GetFieldByName('Sec-Fetch-Site') = '') or SameText(ARequest.GetFieldByName('Sec-Fetch-Site'), 'none')) then
     App := StringReplace(Copy(ARequest.QueryFields.Values['app'], 1, 60), '|', ' ', [rfReplaceAll]) + '|' +
       IntToStr(StrToIntDef(ARequest.QueryFields.Values['port'], 0)) + '|' + ARequest.QueryFields.Values['state'];
   KeepCookie(AResponse, 'oauthapp', App);

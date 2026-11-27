@@ -10,7 +10,10 @@
 #
 # Options, after the word:
 #   --dir /some/folder    install there instead
-#   --from file.tar.gz    use this release file instead of downloading one
+#   --from file.tar.gz    use this release file instead of downloading one;
+#                         its signature file.tar.gz.sig has to be beside it
+#   --unsigned            with --from: take a file that has no signature
+#   --older               put an older release over a newer one
 #   --no-service          only the files: no user, no service, no start
 #
 # An update replaces the program and the page files (static, templates,
@@ -36,6 +39,8 @@ case "$OS-$(uname -m)" in
 esac
 FROM=
 SERVICE=1
+UNSIGNED=0
+OLDER=0
 WHAT=install
 
 case "${1:-}" in
@@ -46,7 +51,9 @@ while [ $# -gt 0 ]; do
     --dir) DIR=$2; shift 2 ;;
     --from) FROM=$2; shift 2 ;;
     --no-service) SERVICE=0; shift ;;
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --unsigned) UNSIGNED=1; shift ;;
+    --older) OLDER=1; shift ;;
+    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "install.sh: unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -84,14 +91,33 @@ service_do() { # start or stop; on FreeBSD also one started by hand, not switche
 # it writes, and reads the config file through its group
 owners() {
   mkdir -p "$DIR/data" "$DIR/wiki-images"
-  chown -R 0:0 "$DIR"
-  chown -R exedra:exedra "$DIR/data" "$DIR/wiki-images"
+  chown 0:0 "$DIR"
+  # everything but the two folders the service writes: those are never walked
+  # as root, where a file could be a link to one of the system's
+  for item in "$DIR"/* "$DIR"/.[!.]*; do
+    case "$item" in "$DIR/data"|"$DIR/wiki-images") ;; *) [ -e "$item" ] && chown -R 0:0 "$item" ;; esac
+  done
+  chown exedra:exedra "$DIR/data" "$DIR/wiki-images"
   chown 0:exedra "$DIR/exedra.ini"
   chmod 640 "$DIR/exedra.ini"
 }
+# whether a is a later version than b: numbers between dots, compared in turn
+later() {
+  [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)" = "$1" ]
+}
 
+# the version installed, from the file a release leaves beside the program.
+# The program itself is asked only where root does not run it, or owns it:
+# an older install's program belonged to the service.
 here=
-[ -x "$DIR/exedra" ] && here=$("$DIR/exedra" --version 2>/dev/null | sed 's/^Exedra //') || true
+if [ -f "$DIR/VERSION" ]; then
+  here=$(cat "$DIR/VERSION")
+elif [ -x "$DIR/exedra" ]; then
+  if [ "$(id -u)" != 0 ] || [ "$(ls -ln "$DIR/exedra" | awk '{print $3}')" = 0 ]; then
+    here=$("$DIR/exedra" --version 2>/dev/null | sed 's/^Exedra //') || true
+  fi
+  [ -n "$here" ] || here="an older release"
+fi
 
 newest() { # the newest release's name without its v, from GitHub
   download "https://api.github.com/repos/$REPO/releases/latest" "$TMP/latest.json" 2>/dev/null || return 0
@@ -128,9 +154,11 @@ if [ -n "$FROM" ]; then
     have=$(checksum "$TMP/release.tar.gz")
     [ "$want" = "$have" ] || die "$FROM does not match $FROM.sha256; nothing was changed"
   fi
-  # and its signature, the same way
+  # and its signature, which has to be there unless --unsigned says otherwise
   if [ -f "$FROM.sig" ]; then
     signed "$TMP/release.tar.gz" "$FROM.sig" || die "$FROM is not signed by Exedra's release key; nothing was changed"
+  elif [ "$UNSIGNED" != 1 ]; then
+    die "$FROM has no signature file ($FROM.sig) beside it; add --unsigned to install it anyway"
   fi
 else
   version=$(newest)
@@ -148,7 +176,7 @@ else
   want=$(cut -d' ' -f1 "$TMP/release.sha256")
   have=$(checksum "$TMP/release.tar.gz")
   [ "$want" = "$have" ] || die "the download does not match its checksum; nothing was changed"
-  # the checksum comes from the same place as the file; the signature does not
+  # the checksum only says the download is whole; the signature is checked with the key in this script
   download "https://github.com/$REPO/releases/download/v$version/$name.sig" "$TMP/release.sig" || die "the release has no signature; nothing was changed"
   signed "$TMP/release.tar.gz" "$TMP/release.sig" || die "the download is not signed by Exedra's release key; nothing was changed"
 fi
@@ -158,6 +186,13 @@ tar -xzf "$TMP/release.tar.gz" -C "$TMP/new" --strip-components=1
 [ -x "$TMP/new/exedra" ] && [ -d "$TMP/new/site/static" ] || die "that file is not an Exedra release"
 # the version, read from its file: nothing downloaded runs before it is installed
 new=$(cat "$TMP/new/VERSION" 2>/dev/null) || true
+# a download is the release that was asked for, and nothing older goes over what is here unasked
+if [ -z "$FROM" ] && [ -n "$new" ] && [ "$new" != "$version" ]; then
+  die "the download says it is $new, not $version; nothing was changed"
+fi
+if [ "$OLDER" != 1 ] && [ -n "$new" ] && [ -n "$here" ] && later "$here" "$new"; then
+  die "$here is installed and this is the older $new; add --older to put it there anyway"
+fi
 [ -n "$new" ] || new="the new version"
 
 running=0
@@ -177,6 +212,7 @@ done
 # moved into place: the copy that may be running this update is left whole
 cp "$TMP/new/install.sh" "$DIR/install.sh.new" 2>/dev/null && mv "$DIR/install.sh.new" "$DIR/install.sh" || true
 [ -f "$TMP/new/exedra.ini.example" ] && cp "$TMP/new/exedra.ini.example" "$DIR/exedra.ini.example"
+[ -f "$TMP/new/VERSION" ] && cp "$TMP/new/VERSION" "$DIR/VERSION"
 first=0
 if [ ! -f "$DIR/exedra.ini" ]; then
   first=1
@@ -198,10 +234,15 @@ if [ "$SERVICE" = 1 ]; then
       sysrc exedra_enable=YES >/dev/null
     fi
   elif command -v systemctl >/dev/null 2>&1; then
+    sed "s#/opt/exedra#$DIR#g" "$TMP/new/exedra.service" > "$TMP/exedra.service"
     if [ ! -f /etc/systemd/system/exedra.service ]; then
-      sed "s#/opt/exedra#$DIR#g" "$TMP/new/exedra.service" > /etc/systemd/system/exedra.service
+      cp "$TMP/exedra.service" /etc/systemd/system/exedra.service
       systemctl daemon-reload
       systemctl enable exedra >/dev/null 2>&1 || true
+    elif ! cmp -s "$TMP/exedra.service" /etc/systemd/system/exedra.service; then
+      # yours may hold changes of your own: the new one is put beside it
+      cp "$TMP/exedra.service" /etc/systemd/system/exedra.service.new
+      say "the service file of this release differs from yours: compare /etc/systemd/system/exedra.service.new"
     fi
   fi
   if [ "$running" = 1 ]; then

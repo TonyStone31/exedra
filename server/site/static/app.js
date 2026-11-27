@@ -344,6 +344,9 @@
     menu.style.left = Math.min(r.left, innerWidth - 220) + 'px';
     menu.style.top = (r.bottom + 4) + 'px';
     document.body.appendChild(menu);
+    // no room below, as beside the message box: it opens above the button
+    const shown = window.visualViewport ? visualViewport.height : innerHeight;
+    if (r.bottom + 4 + menu.offsetHeight > shown) menu.style.top = Math.max(4, r.top - 4 - menu.offsetHeight) + 'px';
     setTimeout(function () {
       document.addEventListener('click', function close(e) {
         if (menu.contains(e.target)) return;

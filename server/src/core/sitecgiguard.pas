@@ -12,7 +12,7 @@ function AcceptCgiRequest: boolean;
 
 implementation
 
-uses SysUtils, StrUtils, custcgi, SiteDb, SiteGuard, SiteGuardRules;
+uses SysUtils, StrUtils, custcgi, SiteDb, SiteGuard, SiteGuardRules, SiteUsers;
 
 type
   { As the server's TGuardRequest: uploads under random names, deleted
@@ -36,6 +36,37 @@ end;
 function TGuardCgiRequest.GetTempUploadFileName(const AName, AFileName: string; ASize: int64): string;
 begin
   Result := UploadTempName(RequestUploadDir);
+end;
+
+{ Whether the request carries the sign-in of a member who is not banned.
+  Asked before a large body is read, as the server does: nobody else makes
+  this program hold megabytes. }
+function MemberSends: boolean;
+var
+  Token, Cookie: string;
+  P: integer;
+begin
+  Result := False;
+  Token := GetEnvironmentVariable('HTTP_AUTHORIZATION');
+  Cookie := GetEnvironmentVariable('HTTP_COOKIE');
+  P := Pos('sid=', Cookie);
+  if StartsText('Bearer ', Token) then
+    Token := Trim(Copy(Token, 8, MaxInt))
+  else if P > 0 then
+    Token := Copy(Cookie, P + 4, 64)
+  else
+    Exit;
+  if Length(Token) <> 64 then
+    Exit;
+  try
+    CheckConnection;
+    Result := IntValue('SELECT COUNT(*) FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = :t AND s.expires > NOW() AND u.banned = 0',
+      [Sha256Hex(Token)]) > 0;
+  except
+    // no database to ask: the body is not read
+    on E: Exception do
+      Result := False;
+  end;
 end;
 
 function AcceptCgiRequest: boolean;
@@ -67,7 +98,7 @@ begin
     if GetEnvironmentVariable('CONTENT_LENGTH') <> '' then
       Code := 400;
   end;
-  if (Size < 0) or (Size > MaxCGIContentLength) then
+  if (Size < 0) or (Size > MaxCGIContentLength) or ((Size > 64 * 1024) and not MemberSends) then
     Code := 413;
   if not SafeRequestPath(Path) then
     Code := 404;

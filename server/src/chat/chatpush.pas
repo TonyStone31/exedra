@@ -21,7 +21,7 @@ uses
   ClpBigInteger, ClpECParameters, ClpIECParameters, ClpIECCommon, ClpISigner, ClpSignerUtilities,
   ClpISecureRandom, ClpSecureRandom, ClpGeneratorUtilities, ClpIAsymmetricCipherKeyPair,
   ClpIAsymmetricCipherKeyPairGenerator,
-  SiteDb, SiteSql, SiteUsers, SiteBell, SiteMarkup, ChatMissed, ChatPrivate, SiteTls, SiteNotices;
+  SiteDb, SiteSql, SiteUsers, SiteBell, SiteMarkup, ChatMissed, ChatPrivate, SiteTls, SiteNotices, SiteGuard;
 
 type
   { One round of pushes, sent off the request's thread. }
@@ -226,8 +226,14 @@ begin
     SendText(AResponse, 403, 'Sign in first.')
   else if not PushService(Endpoint) or (Length(Endpoint) > 500) then
     SendText(AResponse, 400, 'That is not a push address.')
+  // a member has a handful of devices, not hundreds of addresses to be written to
+  else if (ARequest.ContentFields.Values['off'] <> '1') and (IntValue('SELECT COUNT(*) FROM push_subs WHERE user_id = :u AND endpoint <> :e', [Me.Id, Endpoint]) >= 20) then
+    SendText(AResponse, 409, 'This account has notifications on twenty devices already. Turn one off first.')
   else
   begin
+    // The address is the device's own secret, which the site never shows: who
+    // sends it may stop its notifications or take them over, as the next
+    // member on a shared browser does.
     if ARequest.ContentFields.Values['off'] = '1' then
       Exec('DELETE FROM push_subs WHERE endpoint = :e', [Endpoint])
     else
@@ -311,5 +317,7 @@ initialization
     ' created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, last_push DATETIME NULL, INDEX (user_id))');
   HTTPRouter.RegisterRoute('/api/push/key', rmGet, @ShowKey);
   HTTPRouter.RegisterRoute('/api/push', rmPost, @Subscribe);
+  RegisterRequestLimit('push', 'Notification sign-ups', 30, 30, 1);
+  LimitRoute('push', '/api/push', 'POST');
   HTTPRouter.RegisterRoute('/api/notes', rmGet, @ShowNotes);
 end.

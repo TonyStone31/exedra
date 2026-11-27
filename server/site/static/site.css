@@ -465,6 +465,8 @@ pre code .warning { color: var(--amber); }
 /* a file on its way up: the chip fills from the left, with the share beside the name */
 .chip.busy { background: linear-gradient(to right, var(--accent-soft) var(--up, 0%), transparent var(--up, 0%)); box-shadow: inset 0 0 0 1px var(--accent-soft); opacity: 1; }
 .chip .share { font-weight: 400; font-variant-numeric: tabular-nums; }
+.options .whole { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--dim); white-space: nowrap; }
+.options .whole input { width: auto; margin: 0; }
 .chip button { border: 0; background: none; color: inherit; font-size: 16px; line-height: 1; padding: 0 4px; }
 .complete {
   position: absolute; bottom: calc(100% + 4px); left: 0; right: 0; max-width: 520px; background: var(--bg);

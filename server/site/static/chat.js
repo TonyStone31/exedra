@@ -1443,6 +1443,25 @@
     return (area.value.slice(0, area.selectionStart).match(/```/g) || []).length % 2 === 1;
   }
 
+  // A camera photo made smaller before it goes up: 2560 on its long side
+  // shows as much on a screen and is a fraction of the bytes.  Anything
+  // else, and a photo that would not get smaller, goes as it is.
+  async function smaller(file) {
+    if (file.type !== 'image/jpeg' || file.size < 1500000 || !window.createImageBitmap) return file;
+    try {
+      const picture = await createImageBitmap(file, {imageOrientation: 'from-image'});
+      const scale = Math.min(1, 2560 / Math.max(picture.width, picture.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(picture.width * scale);
+      canvas.height = Math.round(picture.height * scale);
+      canvas.getContext('2d').drawImage(picture, 0, 0, canvas.width, canvas.height);
+      const made = await new Promise(function (done) { canvas.toBlob(done, 'image/jpeg', 0.85); });
+      return made && made.size < file.size ? new File([made], file.name, {type: 'image/jpeg'}) : file;
+    } catch (e) {
+      return file;
+    }
+  }
+
   // Sends one file; told(share) hears how much of it has gone up, 0 to 1.
   function upload(file, expire, sealedFor, told) {
     if (sealedFor) return Keys.sealFile(sealedFor, file, expire);
@@ -1507,7 +1526,7 @@
     if (S.answer && S.answer.key !== draftKey && (!parent || S.answer.key.startsWith('thread '))) S.answer = null;
     if (dm) {
       const beam = iconButton('beam', t('Beam a file: straight to them, never stored here'));
-      beam.addEventListener('click', function () { beamPick.click(); });
+      beam.addEventListener('click', function () { pick(beamPick, beam); });
       row.appendChild(beam);
     }
     row.appendChild(send);
@@ -1527,6 +1546,13 @@
       expire.appendChild(opt);
     });
     options.appendChild(expire);
+    // photos go up smaller unless this is ticked
+    const whole = el('input');
+    whole.type = 'checkbox';
+    const wholeLabel = el('label', 'whole', '');
+    wholeLabel.append(whole, ' ' + t('Photos at full size'));
+    wholeLabel.title = t('A camera photo is made smaller before it is sent, which is much quicker on a phone. Tick this to send it as it is.');
+    options.appendChild(wholeLabel);
     options.appendChild(el('span', 'hints', t('Enter sends · Shift+Enter new line · ``` for code · / for commands')));
     form.append(answering, files, row, options, filePick, beamPick);
     area.appendChild(form);
@@ -1540,36 +1566,53 @@
 
     const add = function (list) {
       const run = (async function () {
-        for (const file of list) {
+        // two files go up side by side; the chips show in the order they were chosen
+        const waiting = Array.from(list).map(function (file) {
           const chip = el('span', 'chip busy', file.name || t('picture'));
-          const share = el('span', 'share', '');
-          chip.appendChild(share);
           files.appendChild(chip);
-          try {
-            const done = await upload(file, expire.value, dm && S.dmLocked ? dm : '', function (part) {
-              share.textContent = Math.round(part * 100) + '%';
-              chip.style.setProperty('--up', Math.round(part * 100) + '%');
-            });
-            share.remove();
-            chip.style.removeProperty('--up');
-            pending.push(done);
-            chips.set(done, chip);
-            chip.classList.remove('busy');
-            const x = el('button', '', '×');
-            x.type = 'button';
-            x.addEventListener('click', function () { pending.splice(pending.indexOf(done), 1); chip.remove(); });
-            chip.appendChild(x);
-          } catch (err) {
-            chip.remove();
-            failed(err);
+          return {file: file, chip: chip};
+        });
+        const worker = async function () {
+          while (waiting.length) {
+            const next = waiting.shift(), file = next.file, chip = next.chip;
+            const share = el('span', 'share', '');
+            chip.appendChild(share);
+            try {
+              const done = await upload(whole.checked ? file : await smaller(file), expire.value, dm && S.dmLocked ? dm : '', function (part) {
+                share.textContent = Math.round(part * 100) + '%';
+                chip.style.setProperty('--up', Math.round(part * 100) + '%');
+              });
+              share.remove();
+              chip.style.removeProperty('--up');
+              pending.push(done);
+              chips.set(done, chip);
+              chip.classList.remove('busy');
+              const x = el('button', '', '×');
+              x.type = 'button';
+              x.addEventListener('click', function () { pending.splice(pending.indexOf(done), 1); chip.remove(); });
+              chip.appendChild(x);
+            } catch (err) {
+              chip.remove();
+              failed(err);
+            }
           }
-        }
+        };
+        await Promise.all([worker(), worker()]);
       })();
       busy.add(run);
       run.then(function () { busy.delete(run); });
     };
 
-    attach.addEventListener('click', function () { filePick.click(); });
+    // Android's chooser has the camera and the file browser, and the gallery
+    // only for an input that asks for pictures and videos alone: there the
+    // button asks which first.
+    const pick = function (input, button) {
+      if (!/Android/.test(navigator.userAgent)) { input.click(); return; }
+      const open = function (accept) { input.accept = accept; input.click(); };
+      popMenu(button, [[t('Photos and videos'), function () { open('image/*,video/*'); }],
+        [t('Camera or file'), function () { open(''); }]]);
+    };
+    attach.addEventListener('click', function () { pick(filePick, attach); });
     filePick.addEventListener('change', function () { add(Array.from(filePick.files)); filePick.value = ''; });
     beamPick.addEventListener('change', function () {
       if (beamPick.files[0]) beamFile(dm, beamPick.files[0]);
@@ -1940,7 +1983,10 @@
       ok.addEventListener('click', function () { Keys.trust(who.name).then(function () { warn.remove(); }).catch(failed); });
       warn.appendChild(ok);
       titles.appendChild(warn);
-    }).catch(function () { });
+    }).catch(function (err) {
+      // only this one is said here: a conversation not opened on this device yet is asked for elsewhere
+      if (err && err.notOwn) titles.appendChild(el('p', 'topic problem', err.message));
+    });
     head.append(menu, titles);
     if (Me.name) {
       // The same as the arrow on its row in the room list, where a phone

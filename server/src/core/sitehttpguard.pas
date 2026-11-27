@@ -285,11 +285,76 @@ begin
   end;
 end;
 
+{ Large bodies being read at one time: a member may have about three of the
+  largest at once, and all members together no more than the server can hold. }
+const
+  MemberBodyBytes = 100 * 1024 * 1024;
+  AllBodyBytes = 512 * 1024 * 1024;
+
+var
+  RoomLock: TRTLCriticalSection;
+  RoomTaken: int64 = 0;
+  RoomOf: array of record
+    Member: integer;
+    Bytes: int64;
+    end;
+
+{ Counts Bytes for Member, unless that is more than their share or the server's. }
+function TakeRoom(Member: integer; Bytes: int64): boolean;
+var
+  I, At: integer;
+begin
+  EnterCriticalSection(RoomLock);
+  try
+    At := -1;
+    for I := 0 to High(RoomOf) do
+      if RoomOf[I].Member = Member then
+        At := I;
+    if At < 0 then
+    begin
+      SetLength(RoomOf, Length(RoomOf) + 1);
+      At := High(RoomOf);
+      RoomOf[At].Member := Member;
+      RoomOf[At].Bytes := 0;
+    end;
+    Result := (RoomOf[At].Bytes + Bytes <= MemberBodyBytes) and (RoomTaken + Bytes <= AllBodyBytes);
+    if Result then
+    begin
+      Inc(RoomOf[At].Bytes, Bytes);
+      Inc(RoomTaken, Bytes);
+    end;
+  finally
+    LeaveCriticalSection(RoomLock);
+  end;
+end;
+
+procedure GiveRoom(Member: integer; Bytes: int64);
+var
+  I: integer;
+begin
+  EnterCriticalSection(RoomLock);
+  try
+    Dec(RoomTaken, Bytes);
+    for I := High(RoomOf) downto 0 do
+      if RoomOf[I].Member = Member then
+      begin
+        Dec(RoomOf[I].Bytes, Bytes);
+        // a member with nothing on the way is forgotten
+        if RoomOf[I].Bytes <= 0 then
+          Delete(RoomOf, I, 1);
+      end;
+  finally
+    LeaveCriticalSection(RoomLock);
+  end;
+end;
+
 { TGuardConnection }
 
 procedure TGuardConnection.ReadRequestContent(ARequest: TFPHTTPConnectionRequest);
 var
   Want, Have, Room: int64;
+  Large: boolean;
+  One: string;
   Got, Ahead: TBytes;
   Deadline, Now64: QWord;
   Got1: integer;
@@ -313,43 +378,56 @@ begin
     CheckConnection;
     Me := SignedInMember(ARequest);
     Permission := AdminRoutePermission(ARequest.PathInfo);
-    if (Me.Id = 0) or Me.Banned or ((Permission <> '') and not Can(Me, Permission)) then
+    // a route may name several permissions, any one of which opens it
+    Large := Permission = '';
+    for One in Permission.Split(['|'], TStringSplitOptions.ExcludeEmpty) do
+      if Can(Me, One) then
+        Large := True;
+    if (Me.Id = 0) or Me.Banned or not Large then
       raise RefusedWith(413, 'The request body is too large.');
+    if not TakeRoom(Me.Id, Want) then
+      raise RefusedWith(429, 'Too much is being sent at once. Try again in a moment.');
   end;
-  // FPC reads a body with a time limit on each read only, so a client that
-  // sends a byte now and then holds the connection for ever; and when the
-  // connection ends early it hands on the body with zeros for the missing
-  // part. Here the whole body has a deadline and must arrive in full.
-  // (Bytes past the body stay unread: this server closes after each request.)
-  Ahead := ResidualBytes;
-  Have := Length(Ahead);
-  if Have > Want then
-    Have := Want;
-  SetLength(Got, Have);
-  if Have > 0 then
-    Move(Ahead[0], Got[0], Have);
-  Deadline := GetTickCount64 + QWord(BodySeconds + Want div BodyBytesPerSecond) * 1000;
-  while Have < Want do
-  begin
-    Now64 := GetTickCount64;
-    if Now64 >= Deadline then
-      raise RefusedWith(408, 'The request body came too slowly.');
-    if not Socket.CanRead(integer(Deadline - Now64)) then
-      raise RefusedWith(408, 'The request body came too slowly.');
-    Room := Want - Have;
-    if Room > 256 * 1024 then
-      Room := 256 * 1024;
-    SetLength(Got, Have + Room);
-    Got1 := Socket.Read(Got[Have], Room);
-    if Got1 <= 0 then
-      raise RefusedWith(400, 'The request body ended early.');
-    Have := Have + Got1;
+  Large := Want > OpenBodyBytes;
+  try
+    // FPC reads a body with a time limit on each read only, so a client that
+    // sends a byte now and then holds the connection for ever; and when the
+    // connection ends early it hands on the body with zeros for the missing
+    // part. Here the whole body has a deadline and must arrive in full.
+    // (Bytes past the body stay unread: this server closes after each request.)
+    Ahead := ResidualBytes;
+    Have := Length(Ahead);
+    if Have > Want then
+      Have := Want;
     SetLength(Got, Have);
+    if Have > 0 then
+      Move(Ahead[0], Got[0], Have);
+    Deadline := GetTickCount64 + QWord(BodySeconds + Want div BodyBytesPerSecond) * 1000;
+    while Have < Want do
+    begin
+      Now64 := GetTickCount64;
+      if Now64 >= Deadline then
+        raise RefusedWith(408, 'The request body came too slowly.');
+      if not Socket.CanRead(integer(Deadline - Now64)) then
+        raise RefusedWith(408, 'The request body came too slowly.');
+      Room := Want - Have;
+      if Room > 256 * 1024 then
+        Room := 256 * 1024;
+      SetLength(Got, Have + Room);
+      Got1 := Socket.Read(Got[Have], Room);
+      if Got1 <= 0 then
+        raise RefusedWith(400, 'The request body ended early.');
+      Have := Have + Got1;
+      SetLength(Got, Have);
+    end;
+    Problem := MultipartProblem(ARequest.ContentType, Got, MultipartParts, MultipartHeaderBytes);
+    if Problem <> '' then
+      raise RefusedWith(400, 'Refused: ' + Problem + '.');
+    ARequest.ContentBytes := Got;
+  finally
+    if Large then
+      GiveRoom(Me.Id, Want);
   end;
-  Problem := MultipartProblem(ARequest.ContentType, Got, MultipartParts, MultipartHeaderBytes);
-  if Problem <> '' then
-    raise RefusedWith(400, 'Refused: ' + Problem + '.');
-  ARequest.ContentBytes := Got;
 end;
 
 procedure TGuardConnection.HandleRequestError(E: Exception);
@@ -390,5 +468,6 @@ begin
 end;
 
 initialization
+  InitCriticalSection(RoomLock);
   AskedForHeaders := @HeadersAlone;
 end.

@@ -116,8 +116,11 @@ sh install.sh --dir ~/exedra --no-service --from exedra-0.1.1-linux-x86_64.tar.g
 
 You start and stop the program yourself then, and after
 `install.sh update --dir ~/exedra --no-service` you start it again
-yourself. A release file given with `--from` is checked against the
-`.sha256` and `.sig` files beside it when they are there.
+yourself. A release file given with `--from` needs its `.sig` file beside
+it, and is checked against it and against its `.sha256` file when that is
+there. `--unsigned` takes a file without a signature, which you should
+only do with one you built yourself. An older release is not put over a
+newer one unless you add `--older`.
 
 The release files are named for their system:
 `exedra-<version>-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` and

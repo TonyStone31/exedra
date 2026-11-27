@@ -274,13 +274,39 @@ window.Keys = (function () {
   // The server hands out public keys, so it could hand out its own. This
   // browser remembers the key it saw for each member and says when another
   // one comes, and both sides can compare a code made from the two keys.
+  // The key seen for a member is kept under the name this browser asked
+  // for, not a name the server answers with.  An older record under the
+  // answered name is still read.
+  async function seenKey(other, pair) {
+    const seen = await keyStore('readonly', function (s) { return s.get('seen:' + other.toLowerCase()); });
+    return seen || await keyStore('readonly', function (s) { return s.get('seen:' + pair.other.toLowerCase()); });
+  }
+
+  // Whether a public key belongs to the private key this browser holds:
+  // both sides of an exchange with a throwaway key come out the same only
+  // then.  So the server cannot pass another key off as the member's own.
+  async function ownsKey(pub) {
+    const me = await myKey();
+    const curve = {name: 'ECDH', namedCurve: 'P-256'};
+    const once = await crypto.subtle.generateKey(curve, false, ['deriveBits']);
+    const claimed = await crypto.subtle.importKey('spki', unb64(pub), curve, false, []);
+    const mine = await crypto.subtle.deriveBits({name: 'ECDH', public: once.publicKey}, me.key, 256);
+    const theirs = await crypto.subtle.deriveBits({name: 'ECDH', public: claimed}, once.privateKey, 256);
+    return hex(mine) === hex(theirs);
+  }
+
   async function partner(other) {
     const pair = await pairKey(other);
-    const spot = 'seen:' + pair.other.toLowerCase();
-    const seen = await keyStore('readonly', function (s) { return s.get(spot); });
-    if (!seen) await keyStore('readwrite', function (s) { return s.put(pair.pub, spot); });
+    const seen = await seenKey(other, pair);
+    if (!seen) await keyStore('readwrite', function (s) { return s.put(pair.pub, 'seen:' + other.toLowerCase()); });
     const me = await (await fetch('/api/me')).json();
     const mine = JSON.parse(await (await fetch('/api/key?name=' + encodeURIComponent(me.name))).text());
+    // a code made with a key that is not this member's would prove nothing
+    if (!mine.pub || !(await ownsKey(mine.pub))) {
+      const e = new Error(t('The key this site gives out for you is not your own. Do not rely on this conversation being private.'));
+      e.notOwn = true;
+      throw e;
+    }
     const both = [pair.pub, mine.pub].sort().join('|');
     const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(both)));
     let code = '';
@@ -291,7 +317,7 @@ window.Keys = (function () {
   // The member looked at the code: the key seen now is the one to expect.
   async function trust(other) {
     const pair = await pairKey(other);
-    await keyStore('readwrite', function (s) { return s.put(pair.pub, 'seen:' + pair.other.toLowerCase()); });
+    await keyStore('readwrite', function (s) { return s.put(pair.pub, 'seen:' + other.toLowerCase()); });
   }
 
   // Who sent it to whom is sealed in with it, so the server cannot turn a
@@ -309,6 +335,15 @@ window.Keys = (function () {
       } catch (e) { }
     }
     const pair = await pairKey(other);
+    // a key other than the one this browser saw before: nothing is written
+    // to it until the member has looked at the warning and said so
+    const seen = await seenKey(other, pair);
+    if (seen && seen !== pair.pub) {
+      const e = new Error(t('Their key has changed. Open the conversation again and look at the warning before you write.'));
+      e.keyChanged = true;
+      throw e;
+    }
+    if (!seen) await keyStore('readwrite', function (s) { return s.put(pair.pub, 'seen:' + other.toLowerCase()); });
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const data = await crypto.subtle.encrypt({name: 'AES-GCM', iv: iv, additionalData: between(pair.me, pair.other)},
       pair.key, enc.encode(JSON.stringify(payload)));

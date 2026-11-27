@@ -136,6 +136,11 @@ const
   { users.verified for a member let in while the site had no mail: they may
     write, and no mail goes to the address, which nobody confirmed. }
   UNCHECKED = 2;
+  { The same, for an address an older version marked confirmed although the
+    site had no mail to confirm it with.  UPDATE users SET verified = 1
+    WHERE verified = 3 puts them back, for a site whose mail was only
+    switched off for a while. }
+  HELD_BACK = 3;
   { The name of an account closed without one, before its number. }
   FormerMember = 'Former member';
 
@@ -596,6 +601,10 @@ end;
 { Behind a proxy the config names ([site] proxies), the proxy names the
   visitor.  Anyone else could write that header, so it counts only from
   there. }
+threadvar
+  { Set by ClientIp: this thread's request reached a named proxy over TLS. }
+  SeenTls: boolean;
+
 function ClientIp(ARequest: TRequest): string;
 var
   Forwarded, Proxy, Candidate: string;
@@ -604,6 +613,12 @@ var
   Trusted: boolean;
 begin
   Result := CanonicalIp(ARequest.RemoteAddress);
+  // a named proxy that says the visitor came over TLS is believed, for the cookies
+  SeenTls := False;
+  if SameText(ARequest.GetCustomHeader('X-Forwarded-Proto'), 'https') then
+    for Proxy in Config.ReadString('site', 'proxies', '127.0.0.1').Split([',', ' '], TStringSplitOptions.ExcludeEmpty) do
+      if Result = CanonicalIp(Proxy) then
+        SeenTls := True;
   Forwarded := ARequest.GetCustomHeader('X-Forwarded-For');
   if Forwarded = '' then
     Exit;
@@ -843,7 +858,8 @@ end;
 
 function SecureCookies: boolean;
 begin
-  Result := (Setting('https', '0') = '1') or StartsText('https://', Setting('url', ''));
+  // the config's word, or the proxy's for this request: neither ever takes the mark away
+  Result := (Setting('https', '0') = '1') or StartsText('https://', Setting('url', '')) or SeenTls;
 end;
 
 procedure SetSessionCookie(AResponse: TResponse; const Token: string; Days: integer);
@@ -1088,11 +1104,12 @@ begin
     SendText(AResponse, 429, 'Three links an hour is the most. Look in your spam folder too.')
   else if (MailReady or (Email <> '')) and not ValidEmail(Email) then
     SendText(AResponse, 400, 'That does not look like an email address.')
-  else if (Email <> '') and EmailTaken(Email, Me.Id) then
-    SendText(AResponse, 409, 'Another account uses that address.')
   else if not OwnPassword(ARequest, AResponse, Me.Id) then
     Exit
-  else if IntValue('SELECT COUNT(*) FROM users WHERE id = :u AND email = :e AND verified <> :v', [Me.Id, Email, UNCHECKED]) > 0 then
+  // asked only of who gave the password: whether an address has an account is not for everyone
+  else if (Email <> '') and EmailTaken(Email, Me.Id) then
+    SendText(AResponse, 409, 'Another account uses that address.')
+  else if IntValue('SELECT COUNT(*) FROM users WHERE id = :u AND email = :e AND verified = 1', [Me.Id, Email]) > 0 then
     SendText(AResponse, 200, 'That is your address already.')
   else if MailReady then
   begin
@@ -1106,8 +1123,30 @@ begin
   begin
     // nobody confirmed this one: no mail goes to it until a link to it is opened
     Exec('UPDATE users SET email = :e, verified = :v WHERE id = :u', [Email, UNCHECKED, Me.Id]);
+    Exec('DELETE FROM email_checks WHERE user_id = :u', [Me.Id]);
     SendText(AResponse, 200, 'Saved.');
   end;
+end;
+
+{ Once, on a site that has no mail: addresses that count as confirmed were
+  never confirmed by anyone, since older versions marked them so.  They are
+  held back, so no password link goes to them should mail be switched on. }
+procedure HoldUnprovenAddresses;
+var
+  Held: integer;
+begin
+  // asked of the database itself: a restore may have brought an older table
+  if VarToStr(Value('SELECT value FROM settings WHERE name = :n', ['addresses_held'])) <> '' then
+    Exit;
+  // decided once: a site that has mail today is left alone for good, so
+  // taking its mail away for a while later holds nothing back
+  SaveSetting('addresses_held', '1');
+  if MailReady then
+    Exit;
+  Held := IntValue('SELECT COUNT(*) FROM users WHERE verified = 1 AND email <> ''''', []);
+  Exec('UPDATE users SET verified = :v WHERE verified = 1 AND email <> ''''', [HELD_BACK]);
+  if Held > 0 then
+    Log(Format('%d addresses were never confirmed, since this site has no mail: their accounts work as before, and no mail goes to them until each is confirmed', [Held]));
 end;
 
 { POST /api/signup  name, email, auth, pub, wrapped [, app] }
@@ -1762,6 +1801,7 @@ begin
 end;
 
 initialization
+  RegisterStartup(@HoldUnprovenAddresses);
   RegisterRequestLimit('signuptry', 'Account signup', 10, 10, 1);
   LimitRoute('signuptry', '/api/signup', 'POST');
   RegisterRequestLimit('tokens', 'Token changes', 30, 10, 1);
