@@ -91,7 +91,9 @@ member limit, nothing held back.
   with a few lines of plain Pascal that add your own fields and filters.
   The catalog of Pascal projects on pascal.chat is built that way.
 - **One search** over all four, showing each reader only what they may
-  see. Private conversations are never searched.
+  see, with suggestions while you type. It runs on
+  [Ferret](https://github.com/TonyStone31/Ferret), a search engine in
+  Pascal made for it. Private conversations are never searched.
 - **A chat on every page.** A button in the corner of any page opens the
   talk about that page. One line of HTML puts it on another web site's
   pages too.
@@ -132,7 +134,10 @@ small and quick.
   and the WebSockets are fcl-web. The databases go through fcl-db's
   SQLDB. JSON, Markdown and syntax coloring are FCL packages too. On top
   of that are four Pascal libraries by one author for cryptography and
-  TLS, and nothing else.
+  TLS, and [Ferret](https://github.com/TonyStone31/Ferret), the
+  full-text search engine written for Exedra. A copy of Ferret comes
+  with the source in `server/src/ferret`, so there is nothing more to
+  fetch for it.
 - **Quick to build.** The server is about 47,000 lines of Pascal, and a
   full rebuild takes about five seconds.
 - **Plain pages.** The server sends finished HTML and CSS, and the
@@ -363,6 +368,9 @@ younger than the server, so take it as a preview for now.
   [SimpleBaseLib4Pascal](https://github.com/Xor-el/SimpleBaseLib4Pascal)
   and [TlsLib4Pascal](https://github.com/Xor-el/TlsLib4Pascal). All four
   are MIT licensed.
+  The search engine, [Ferret](https://github.com/TonyStone31/Ferret)
+  (0BSD), is already in the source as `server/src/ferret`, a copy of
+  its own repository kept as it is.
 - **To change the page scripts:** pas2js 3.3.1 as well (it comes with
   Free Pascal's main branch) and its RTL units.
   `server/src/pages/build.sh` builds them. The built files are in the
