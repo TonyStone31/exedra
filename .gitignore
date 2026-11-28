@@ -3,6 +3,7 @@
 **/.*
 **/*.md
 !/.gitignore
+!/.gitattributes
 !/README.md
 !/INSTALL.md
 !/ROADMAP.md

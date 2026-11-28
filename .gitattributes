@@ -1,0 +1,8 @@
+# How GitHub counts the languages. The .inc files are Pascal (the search
+# engine's Unicode tables), and the page scripts in server/site/static are
+# compiled from the Pascal in server/src/pages, all but three.
+*.inc linguist-language=Pascal
+server/site/static/*.js linguist-generated=true
+server/site/static/embed.js -linguist-generated
+server/site/static/live-embed.js -linguist-generated
+server/site/static/sw.js -linguist-generated
