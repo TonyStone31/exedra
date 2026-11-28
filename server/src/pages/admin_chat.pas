@@ -33,7 +33,7 @@ var
 
   procedure AddRow(Channel: TJSObject);
   var
-    Tr, Slug, Topic, Policy, AsSent, AsSentLabel, ArchivedLabel, Archived, IconCell, Img, Pick, Save, O, Td: TJSHTMLElement;
+    Tr, Slug, Topic, Policy, AsSent, AsSentLabel, ArchivedLabel, Archived, IconCell, Img, Pick, Save, Gone, Tools, O, Td: TJSHTMLElement;
     Choices, Cells: TJSArray;
     N: NativeInt;
 
@@ -64,6 +64,18 @@ var
         C.toast(await(JSValue, C.post('/api/admin/channel', new(['slug', TJSObject(Slug)['value'], 'topic', TJSObject(Topic)['value'],
           'policy', TJSObject(Policy)['value'], 'archived', IsArchived, 'as_sent', IsAsSent]))));
         if not Truthy(Channel['slug']) then C.route('/admin', False);
+      except
+        C.failed(JSExceptValue);
+      end;
+    end;
+
+    // the channel taken away with everything said in it, after a question
+    procedure DeleteClick(E: TJSEvent); async;
+    begin
+      if not window.confirm(T('Delete #%s with every message in it? This cannot be undone.', Channel['slug'])) then Exit;
+      try
+        C.toast(await(JSValue, C.post('/api/admin/channel/delete', new(['slug', Channel['slug']]))));
+        Tr.remove;
       except
         C.failed(JSExceptValue);
       end;
@@ -121,7 +133,17 @@ var
     if Truthy(Channel['slug']) then Save := C.el('button', '', T('Save')) else Save := C.el('button', '', T('Create'));
     TJSObject(Save)['type'] := 'button';
     Save.addEventListener('click', TJSRawEventHandler(@SaveClick));
-    Cells := Items(IconCell, Slug, Topic, Policy, AsSentLabel, ArchivedLabel, Save);
+    Tools := C.el('span', 'tools', '');
+    Tools.appendChild(Save);
+    if Truthy(Channel['slug']) then
+    begin
+      Gone := C.el('button', 'danger', T('Delete'));
+      TJSObject(Gone)['type'] := 'button';
+      Gone.title := T('Delete the channel and every message in it');
+      Gone.addEventListener('click', TJSRawEventHandler(@DeleteClick));
+      Tools.appendChild(Gone);
+    end;
+    Cells := Items(IconCell, Slug, Topic, Policy, AsSentLabel, ArchivedLabel, Tools);
     for N := 0 to Cells.length - 1 do
     begin
       Td := C.el('td');

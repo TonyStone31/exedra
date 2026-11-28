@@ -234,6 +234,27 @@ begin
   end;
 end;
 
+{ POST /api/admin/channel/delete  slug - a public channel taken away, whole,
+  by whoever looks after the channels }
+procedure DeletePublicChannel(ARequest: TRequest; AResponse: TResponse);
+var
+  Me: TMember;
+  Room: TRoom;
+begin
+  if not NeedPermission(ARequest, AResponse, 'manage-channels', Me) then
+    Exit;
+  Room := FindRoom(LowerCase(Trim(ARequest.ContentFields.Values['slug'])));
+  if (Room.Id = 0) or (Room.Kind <> 'channel') then
+    SendText(AResponse, 404, 'No channel by that name.')
+  else if Room.Private then
+    SendText(AResponse, 403, 'A private channel is deleted from the Private tab.')
+  else
+  begin
+    DeleteChannel(Room);
+    SendText(AResponse, 200, 'Deleted #' + Room.Slug + ', with everything said in it.');
+  end;
+end;
+
 initialization
   RegisterAdminRoute('/api/admin/private', 'manage-private');
   RegisterAdminRoute('/api/admin/private/delete', 'manage-private');
@@ -242,4 +263,6 @@ initialization
   HTTPRouter.RegisterRoute('/api/admin/private', rmGet, @ShowPrivate);
   HTTPRouter.RegisterRoute('/api/admin/private/delete', rmPost, @DeletePrivate);
   HTTPRouter.RegisterRoute('/api/room/delete', rmPost, @DeleteOwnChannel);
+  RegisterAdminRoute('/api/admin/channel/delete', 'manage-channels');
+  HTTPRouter.RegisterRoute('/api/admin/channel/delete', rmPost, @DeletePublicChannel);
 end.

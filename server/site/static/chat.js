@@ -3661,6 +3661,35 @@ rtl.module("chat_sidebar",["System","JS","Web","chat_shared"],function () {
       Nav.appendChild(A);
       Unread = Unread + D.unread;
     };
+    function AddPeople() {
+      var J = 0;
+      var K = 0;
+      var Name = "";
+      var Known = false;
+      var A = null;
+      var Shown = false;
+      Shown = false;
+      for (var $l = 0, $end = $impl.People.length - 1; $l <= $end; $l++) {
+        J = $l;
+        Name = "" + $impl.People[J]["name"];
+        Known = Name === pas.chat_shared.Me.name;
+        for (var $l1 = 0, $end1 = pas.chat_shared.S.dms.length - 1; $l1 <= $end1; $l1++) {
+          K = $l1;
+          if (pas.chat_shared.S.dms[K].name === Name) Known = true;
+        };
+        if (Known) continue;
+        if (!Shown) {
+          Head = pas.chat_shared.El("div","group",undefined);
+          Head.appendChild(pas.chat_shared.El("span","",window.t("Start a private chat")));
+          Nav.appendChild(Head);
+          Shown = true;
+        };
+        A = pas.chat_shared.Link("/dm/" + pas.chat_shared.Enc(Name),"room person",undefined);
+        A.append(pas.chat_shared.Avatar(Name,$impl.People[J]["avatar"],"tiny"),pas.chat_shared.El("span","name",Name));
+        A.title = window.t("Start a private chat with %s",Name);
+        Nav.appendChild(A);
+      };
+    };
     function AddNotice(N) {
       var A = null;
       A = pas.chat_shared.Link($impl.NoticePath(N.link),"room notice unread",undefined);
@@ -3699,6 +3728,7 @@ rtl.module("chat_sidebar",["System","JS","Web","chat_shared"],function () {
         AddDm(pas.chat_shared.S.dms[I]);
       };
     };
+    if ((Words !== "") && ($impl.PeopleFor === Words) && ($impl.People !== null)) AddPeople();
     if (Boolean(pas.chat_shared.Notices.unseen)) {
       Head = pas.chat_shared.El("div","group",undefined);
       Head.appendChild(pas.chat_shared.El("span","",window.t("Notices")));
@@ -3796,6 +3826,7 @@ rtl.module("chat_sidebar",["System","JS","Web","chat_shared"],function () {
     }]));
     pas.chat_shared.Find("#jump",undefined).addEventListener("input",function (E) {
       $mod.RenderSidebar();
+      $impl.LookForPeople(pas.chat_shared.Find("#jump",undefined).value.toLowerCase().trim());
     });
     pas.chat_shared.Find("#jump",undefined).addEventListener("keydown",function (E) {
       var First = null;
@@ -3804,6 +3835,7 @@ rtl.module("chat_sidebar",["System","JS","Web","chat_shared"],function () {
       if (First !== null) {
         pas.chat_shared.Route(window.SiteBase.strip(First.getAttribute("href")),true);
         E.currentTarget.value = "";
+        $impl.LookForPeople("");
         $mod.RenderSidebar();
       };
     });
@@ -3855,6 +3887,34 @@ rtl.module("chat_sidebar",["System","JS","Web","chat_shared"],function () {
     $impl.HOLD_SLIP = 10;
     $impl.Groups = null;
     $impl.Hold = null;
+    $impl.People = null;
+    $impl.PeopleFor = "";
+    $impl.PeopleAsked = 0;
+    $impl.PeopleTimer = 0;
+    $impl.LookForPeople = function (Words) {
+      var Turn = 0;
+      window.clearTimeout($impl.PeopleTimer);
+      $impl.PeopleAsked += 1;
+      Turn = $impl.PeopleAsked;
+      if ((Words === "") || (pas.chat_shared.Me.name === "")) {
+        $impl.People = null;
+        $impl.PeopleFor = "";
+        return;
+      };
+      $impl.PeopleTimer = window.setTimeout(function () {
+        pas.chat_shared.Get("/api/users?q=" + pas.chat_shared.Enc(Words)).then(function (Found) {
+          var Result = undefined;
+          if (Turn !== $impl.PeopleAsked) return Result;
+          $impl.People = Found;
+          $impl.PeopleFor = Words;
+          $mod.RenderSidebar();
+          return Result;
+        }).catch(function (Why) {
+          var Result = undefined;
+          return Result;
+        });
+      },200);
+    };
     $impl.NoticePath = function (Path) {
       var Result = undefined;
       if ((typeof(Path) === "string") && (Path.charAt(0) === "/") && (Path.charAt(1) !== "/") && (Path.charAt(1) !== "\\")) {

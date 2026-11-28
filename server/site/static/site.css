@@ -610,6 +610,8 @@ pre code .warning { color: var(--amber); }
 .grid { border-collapse: collapse; width: 100%; font-size: 14px; }
 .grid th, .grid td { padding: 5px 8px 5px 0; }
 .grid td.dim { color: var(--faint); font-size: 13px; }
+.grid .tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.grid button.danger { color: var(--red); }
 .admin > .part > input[type=search] { width: 100%; max-width: 360px; margin-bottom: 10px; }
 .admin .hint { color: var(--faint); font-size: 13px; margin: 0 0 12px; }
 .admin .problem { color: var(--red); border-left: 3px solid var(--red); padding-left: 10px; }

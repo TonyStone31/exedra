@@ -99,6 +99,7 @@ when a newer `rev` arrives. `read` marks the channel read up to a message id.
 | `POST /api/follow` | room, on (1 or 0); off is leaving the channel |
 | `POST /api/follow/notify` | room, mode: `all`, `mentions` or `none`. How much a followed channel may bother the member. Silenced (`none`) means no push and no mail about mentions there, and the page shows no badge; `mentions` shows the mention badge alone. The sidebar carries each room's `notify`. |
 | `POST /api/room/delete` | slug: a private channel, by a member in it who holds the room permission `delete-channel` (its owner does); everything in it goes and its members get the ring `gone`. A public channel is refused. |
+| `POST /api/admin/channel/delete` | slug: a public channel, by someone with `manage-channels`; everything in it goes and its members get the ring `gone`. A private channel is refused here. |
 | `POST /api/topic` | room, topic |
 | `POST /api/typing` | room |
 | `GET /api/messages?room=&before=` | 50 messages, newest first, before an id |

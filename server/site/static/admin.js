@@ -4391,6 +4391,8 @@ rtl.module("Admin_Chat",["System","JS","Web","Admin_List"],function () {
       var Img = null;
       var Pick = null;
       var Save = null;
+      var Gone = null;
+      var Tools = null;
       var O = null;
       var Td = null;
       var Choices = null;
@@ -4422,6 +4424,15 @@ rtl.module("Admin_Chat",["System","JS","Web","Admin_List"],function () {
            else IsAsSent = "0";
           pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/channel",pas.JS.New(["slug",Slug["value"],"topic",Topic["value"],"policy",Policy["value"],"archived",IsArchived,"as_sent",IsAsSent])));
           if (!Boolean(Channel["slug"])) pas.Admin_List.C.route("/admin",false);
+        } catch ($e) {
+          pas.Admin_List.C.failed($e);
+        };
+      };
+      async function DeleteClick(E) {
+        if (!window.confirm(window.t("Delete #%s with every message in it? This cannot be undone.",Channel["slug"]))) return;
+        try {
+          pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/channel/delete",pas.JS.New(["slug",Channel["slug"]])));
+          Tr.remove();
         } catch ($e) {
           pas.Admin_List.C.failed($e);
         };
@@ -4479,7 +4490,16 @@ rtl.module("Admin_Chat",["System","JS","Web","Admin_List"],function () {
        else Save = pas.Admin_List.C.el("button","",window.t("Create"));
       Save["type"] = "button";
       Save.addEventListener("click",SaveClick);
-      Cells = Array.of(IconCell,Slug,Topic,Policy,AsSentLabel,ArchivedLabel,Save);
+      Tools = pas.Admin_List.C.el("span","tools","");
+      Tools.appendChild(Save);
+      if (Boolean(Channel["slug"])) {
+        Gone = pas.Admin_List.C.el("button","danger",window.t("Delete"));
+        Gone["type"] = "button";
+        Gone.title = window.t("Delete the channel and every message in it");
+        Gone.addEventListener("click",DeleteClick);
+        Tools.appendChild(Gone);
+      };
+      Cells = Array.of(IconCell,Slug,Topic,Policy,AsSentLabel,ArchivedLabel,Tools);
       for (var $l1 = 0, $end1 = Cells.length - 1; $l1 <= $end1; $l1++) {
         N = $l1;
         Td = pas.Admin_List.C.el("td");

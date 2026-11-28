@@ -72,11 +72,43 @@ const
 var
   Groups: TJSArray;
   Hold: THold;
+  // Members found for the words in the jump box, to start a private chat with.
+  People: TJSArray;
+  PeopleFor: string;
+  PeopleAsked, PeopleTimer: NativeInt;
   Permission: string; external name 'Notification.permission';
 
 function Hypot(A, B: double): double; external name 'Math.hypot';
 
 procedure SetNotify(R: TRoom; const Mode: string); async; forward;
+
+// The members whose names start with the words typed, asked a moment after the
+// typing stops; an answer for words no longer there is dropped.
+procedure LookForPeople(const Words: string);
+var
+  Turn: NativeInt;
+begin
+  window.clearTimeout(PeopleTimer);
+  Inc(PeopleAsked);
+  Turn := PeopleAsked;
+  if (Words = '') or (Me.name = '') then
+  begin
+    People := nil;
+    PeopleFor := '';
+    Exit;
+  end;
+  PeopleTimer := window.setTimeout(procedure
+    begin
+      Get('/api/users?q=' + Enc(Words))._then(function(Found: JSValue): JSValue
+        begin
+          if Turn <> PeopleAsked then Exit;
+          People := TJSArray(Found);
+          PeopleFor := Words;
+          RenderSidebar;
+        end).catch(function(Why: JSValue): JSValue begin end);
+    end, 200);
+end;
+
 procedure LeaveRoom(R: TRoom); async; forward;
 procedure DeleteRoom(R: TRoom); async; forward;
 
@@ -224,6 +256,36 @@ var
     Unread := Unread + D.unread;
   end;
 
+  procedure AddPeople;
+  var
+    J, K: NativeInt;
+    Name: string;
+    Known: boolean;
+    A: TJSHTMLAnchorElement;
+    Shown: boolean;
+  begin
+    Shown := False;
+    for J := 0 to People.length - 1 do
+    begin
+      Name := string(TJSObject(People[J])['name']);
+      Known := Name = Me.name;
+      for K := 0 to S.dms.length - 1 do
+        if TDm(S.dms[K]).name = Name then Known := True;
+      if Known then Continue;
+      if not Shown then
+      begin
+        Head := El('div', 'group');
+        Head.appendChild(El('span', '', T('Start a private chat')));
+        Nav.appendChild(Head);
+        Shown := True;
+      end;
+      A := Link('/dm/' + Enc(Name), 'room person');
+      A.append(Avatar(Name, TJSObject(People[J])['avatar'], 'tiny'), El('span', 'name', Name));
+      A.title := T('Start a private chat with %s', Name);
+      Nav.appendChild(A);
+    end;
+  end;
+
   procedure AddNotice(N: TNotice);
   var
     A: TJSHTMLAnchorElement;
@@ -257,6 +319,8 @@ begin
     Nav.appendChild(Head);
     for I := 0 to S.dms.length - 1 do AddDm(TDm(S.dms[I]));
   end;
+  // members found by name, after the channels and conversations: a new private chat
+  if (Words <> '') and (PeopleFor = Words) and (People <> nil) then AddPeople;
   // what the site itself has to tell the member: a release that failed, a claim
   if Truthy(Notices.unseen) then
   begin
@@ -423,7 +487,11 @@ begin
     new(['title', 'Shelves', 'sigil', '~', 'test',
       function(R: JSValue; Index: NativeInt; All: TJSArray): boolean begin Result := TRoom(R).kind = 'shelf'; end]));
 
-  Find('#jump').addEventListener('input', TJSRawEventHandler(procedure(E: TJSEvent) begin RenderSidebar; end));
+  Find('#jump').addEventListener('input', TJSRawEventHandler(procedure(E: TJSEvent)
+    begin
+      RenderSidebar;
+      LookForPeople(TJSString(TJSString(TCtl(Find('#jump')).value).toLowerCase).trim);
+    end));
   Find('#jump').addEventListener('keydown', TJSRawEventHandler(procedure(E: TJSEvent)
     var
       First: TEl;
@@ -434,6 +502,7 @@ begin
       begin
         Route(SiteBase.strip(First.getAttribute('href')), True);
         TCtl(E.currentTarget).value := '';
+        LookForPeople('');
         RenderSidebar;
       end;
     end));

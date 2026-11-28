@@ -243,6 +243,7 @@ begin
   finally
     SysUtils.FindClose(R);
   end;
+  SiteStatic.CurrentVersion := @StaticVersion;
   ServeFolder('static', FilesRoot + 'static');
   ForceDirectories(LookDir);
   ServeFolder('site', LookDir);

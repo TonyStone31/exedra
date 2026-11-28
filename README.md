@@ -17,9 +17,13 @@ PostgreSQL or SQLite, your choice.
 There are ready-built releases for Linux (x86_64 and 64-bit ARM, so a
 Raspberry Pi works) and FreeBSD.
 
-It runs [pascal.chat](https://pascal.chat), a community for Free Pascal,
-Lazarus and Delphi developers, with a wiki of nearly 7,000 pages and a
-catalog of nearly 30,000 projects.
+It runs [pascal.chat](https://pascal.chat), an unofficial community for
+Pascal developers. The wiki there holds nearly 7,000 pages recovered from
+an archive of the official Free Pascal wiki, kept as a large set of real
+data to test with. The catalog lists nearly 30,000 projects we gathered
+ourselves for the same reason. Some day it may grow into part of a
+package manager, or a directory of applications you can install and try
+out in a container. For now those are ideas.
 
 | | |
 |---|---|
