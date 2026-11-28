@@ -1,205 +1,313 @@
-// The Interesting button on catalog cards and entry pages: pressed without
-// leaving the page, every button for the same entry following the answer.
-// Without scripts the form posts and the entry page comes back.
-(function () {
-  'use strict';
-  const t = window.t || function (s) { return s; };
+if (!pas.interest) {
+rtl.module("interest",["System"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  $mod.$implcode = function () {
+    $impl.Reduce = false;
+    $impl.Leaving = false;
+    $impl.Say = function (Text) {
+      var Result = "";
+      if (Boolean(window["t"])) {
+        Result = window.t(Text)}
+       else Result = Text;
+      return Result;
+    };
+    $impl.Cheer = function (Button) {
+      var Plus = null;
+      var Width = 0.0;
+      if (Boolean(window["matchMedia"]) && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      Button.classList.remove("pop");
+      Width = Button.offsetWidth;
+      Button.classList.add("pop");
+      Plus = pas.PageKit.MakeElement("span","plus-one");
+      Plus.setAttribute("aria-hidden","true");
+      Plus.textContent = "+1";
+      Button.appendChild(Plus);
+      window.setTimeout(function () {
+        Plus.remove();
+      },900);
+    };
+    $impl.Invite = function () {
+      var Note = null;
+      var Join = null;
+      var Close = null;
+      if (!document.body.classList.contains("guest")) return;
+      try {
+        if (Boolean(window.sessionStorage.getItem("interest-invited"))) return;
+        window.sessionStorage.setItem("interest-invited","1");
+      } catch ($e) {
+        return;
+      };
+      Note = pas.PageKit.MakeElement("div","interest-invite");
+      Note.setAttribute("role","status");
+      Note.appendChild(document.createTextNode($impl.Say("Thanks! Members can also rate entries.") + " "));
+      Join = pas.PageKit.MakeElement("a","");
+      Join.href = "/signin?return=" + encodeURIComponent(window.location.pathname + window.location.search);
+      Join.textContent = $impl.Say("Join");
+      Note.appendChild(Join);
+      Close = pas.PageKit.MakeElement("button","");
+      Close.type = "button";
+      Close.textContent = "×";
+      Close.setAttribute("aria-label",$impl.Say("Hide"));
+      Close.addEventListener("click",function (E) {
+        Note.remove();
+      });
+      Note.appendChild(Close);
+      document.body.appendChild(Note);
+      window.setTimeout(function () {
+        Note.classList.add("gone");
+      },9000);
+      window.setTimeout(function () {
+        Note.remove();
+      },9600);
+    };
+    $impl.Show = function (Entry, Answer, Pressed) {
+      var Forms = null;
+      var Form = null;
+      var Button = null;
+      var I = 0;
+      Forms = document.querySelectorAll('.interest-form[data-entry="' + Entry + '"]');
+      for (var $l = 0, $end = Forms.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Form = Forms.item(I);
+        Button = Form.querySelector(".interest-button");
+        if (Boolean(Answer["mine"]) && (Form === Pressed)) $impl.Cheer(Button);
+        Button.classList["toggle"].call(Button.classList,"on",Answer["mine"]);
+        if (Boolean(Answer["mine"])) {
+          Button.setAttribute("aria-pressed","true");
+          Button.title = $impl.Say("You find this interesting. Press again to take it back.");
+        } else {
+          Button.setAttribute("aria-pressed","false");
+          Button.title = $impl.Say("Tell others this looks interesting");
+        };
+        Form.querySelector(".interest-count").textContent = "" + Answer["interest"];
+      };
+    };
+    $impl.Press = async function (E) {
+      var Form = null;
+      var Button = null;
+      var Answer = null;
+      var Data = null;
+      Form = pas.PageKit.Closest(E.target,".interest-form");
+      if (Form === null) return;
+      E.preventDefault();
+      Button = Form.querySelector(".interest-button");
+      if (Button.disabled) return;
+      Button.disabled = true;
+      try {
+        try {
+          Answer = await window.fetch(Form.action,pas.JS.New(["method","POST","credentials","same-origin","headers",pas.JS.New(["Accept","application/json"])]));
+          if (Answer.ok) {
+            Data = await Answer.json();
+            $impl.Show(Form.dataset["entry"],Data,Form);
+            if (Boolean(Data["mine"])) $impl.Invite();
+          } else Button.title = (await Answer.text()).slice(0,200);
+        } catch ($e) {
+          Form.submit();
+        };
+      } finally {
+        Button.disabled = false;
+      };
+    };
+    $impl.ByHand = function (Url) {
+      var Result = "";
+      Result = Url;
+      if ((new RegExp("[?&]hand=1")).test(Url)) return Result;
+      if (Url.indexOf("?",0) >= 0) {
+        Result = Url + "&hand=1"}
+       else Result = Url + "?hand=1";
+      return Result;
+    };
+    $impl.HandField = function (Form) {
+      var Field = null;
+      if (Form.querySelector('input[name="hand"]') !== null) return;
+      Field = pas.PageKit.MakeElement("input","");
+      Field.type = "hidden";
+      Field.name = "hand";
+      Field.value = "1";
+      Form.appendChild(Field);
+    };
+    $impl.Leave = function (How, Go) {
+      var Button = null;
+      var Entry = null;
+      var Burst = null;
+      var Star = null;
+      var Drawn = null;
+      var Spark = null;
+      var At = null;
+      var Box = null;
+      var X = 0.0;
+      var Y = 0.0;
+      var Width = 0.0;
+      var Height = 0.0;
+      var I = 0;
+      var Delay = 0;
+      if ($impl.Leaving) return;
+      $impl.Leaving = true;
+      if ($impl.Reduce) {
+        Go();
+        return;
+      };
+      document.body.classList.add("leaving","leaving-" + How);
+      if (How === "yes") {
+        Button = document.querySelector(".discover-yes");
+        X = window.innerWidth / 2;
+        Y = window.innerHeight / 2;
+        Width = 0;
+        Height = 0;
+        if (Button !== null) {
+          At = Button.getBoundingClientRect();
+          X = At.left;
+          Y = At.top;
+          Width = At.width;
+          Height = At.height;
+        };
+        X = X + (Width / 2);
+        Y = Y + (Height / 2);
+        Entry = document.querySelector(".catalog-entry");
+        if (Entry !== null) {
+          Box = Entry.getBoundingClientRect();
+          Entry.style.setProperty("transform-origin","" + (X - Box.left) + "px " + ("" + (Y - Box.top)) + "px");
+        };
+        Burst = pas.PageKit.MakeElement("div","star-burst");
+        Burst.setAttribute("aria-hidden","true");
+        Burst.style.setProperty("left","" + X + "px");
+        Burst.style.setProperty("top","" + Y + "px");
+        Star = pas.PageKit.MakeElement("span","fly-star");
+        Drawn = document.querySelector(".discover-yes .star-icon");
+        if (Drawn !== null) {
+          Star.appendChild(Drawn.cloneNode(true))}
+         else Star.textContent = "★";
+        Burst.appendChild(Star);
+        for (I = 0; I <= 6; I++) {
+          Spark = pas.PageKit.MakeElement("i","");
+          Spark.style.setProperty("--a","" + ((I * 51) + 20) + "deg");
+          Spark.style.setProperty("--d","" + (70 + ((I % 3) * 30)) + "px");
+          Burst.appendChild(Spark);
+        };
+        document.body.appendChild(Burst);
+        if (Boolean(window.navigator["vibrate"])) try {
+          window.navigator.vibrate(18);
+        } catch ($e) {
+        };
+      };
+      Entry = document.querySelector(".catalog-entry");
+      if (Entry !== null) Entry.classList.remove("arrive-yes","arrive-no");
+      if (How === "yes") {
+        Delay = 950}
+       else Delay = 520;
+      window.setTimeout(Go,Delay);
+    };
+    $impl.Narrow = function (Form) {
+      var Go = null;
+      Go = Form.querySelector("button");
+      if (Go !== null) Go.hidden = true;
+      Form.addEventListener("change",function (E) {
+        $impl.HandField(Form);
+        if (Boolean(Form["requestSubmit"])) {
+          Form.requestSubmit()}
+         else Form.submit();
+      });
+    };
+    $impl.Start = function () {
+      var Forms = null;
+      var I = 0;
+      document.addEventListener("submit",$impl.Press);
+      $impl.Reduce = Boolean(window["matchMedia"]) && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      $impl.Leaving = false;
+      window.addEventListener("pageshow",function (E) {
+        var Bursts = null;
+        var Done = null;
+        var N = 0;
+        if (!Boolean(E["persisted"])) return;
+        $impl.Leaving = false;
+        document.body.classList.remove("leaving","leaving-yes","leaving-no");
+        Bursts = document.querySelectorAll(".star-burst");
+        for (var $l = 0, $end = Bursts.length - 1; $l <= $end; $l++) {
+          N = $l;
+          Bursts.item(N).remove();
+        };
+        Done = document.querySelector(".discover-yes.done");
+        if (Done !== null) Done.classList.remove("done");
+      });
+      document.addEventListener("click",function (E) {
+        var Link = null;
+        Link = pas.PageKit.Closest(E.target,'a[href^="/catalog-random"]');
+        if (Link !== null) Link.href = $impl.ByHand(Link.getAttribute("href"));
+      },true);
+      document.addEventListener("submit",function (E) {
+        var Form = null;
+        var Button = null;
+        var Count = null;
+        var Value = 0.0;
+        Form = pas.PageKit.Closest(E.target,".discover-bar form");
+        if ((Form === null) || (Form.querySelector(".discover-yes") === null)) return;
+        E.preventDefault();
+        $impl.HandField(Form);
+        Button = Form.querySelector(".discover-yes");
+        if (Button !== null) {
+          Button.classList.add("done");
+          Count = document.querySelector(".catalog-entry .interest-count");
+          if (Count !== null) {
+            if (Count.textContent === "") {
+              Value = 0}
+             else Value = Number(Count.textContent);
+            Count.textContent = "" + (Value + 1);
+          };
+        };
+        $impl.Leave("yes",function () {
+          Form.submit();
+        });
+      });
+      document.addEventListener("click",function (E) {
+        var Link = null;
+        var Click = null;
+        Link = pas.PageKit.Closest(E.target,".discover-bar .discover-no");
+        Click = E;
+        if ((Link === null) || Click.metaKey || Click.ctrlKey || (Click.button !== 0)) return;
+        E.preventDefault();
+        $impl.Leave("no",function () {
+          window.location.href = Link.href;
+        });
+      });
+      Forms = document.querySelectorAll(".discover-choice");
+      for (var $l = 0, $end = Forms.length - 1; $l <= $end; $l++) {
+        I = $l;
+        $impl.Narrow(Forms.item(I));
+      };
+      document.addEventListener("keydown",function (E) {
+        var Key = null;
+        var Target = null;
+        var Control = null;
+        Key = E;
+        if (Key.altKey || Key.ctrlKey || Key.metaKey || Key.shiftKey) return;
+        if ((new URLSearchParams(window.location.search)).get("discover") !== "1") return;
+        Target = E.target;
+        if ((Target !== null) && (Target.isContentEditable || (new RegExp("^(INPUT|TEXTAREA|SELECT)$")).test(Target.tagName))) return;
+        if (pas.PageKit.Closest(Target,".catalog-readme, pre, table") !== null) return;
+        Control = document.querySelector('.discover-bar [data-key="' + Key.key + '"]');
+        if (Control === null) return;
+        E.preventDefault();
+        Control.click();
+      });
+      document.addEventListener("error",function (E) {
+        var Picture = null;
+        var Thumb = null;
+        Picture = E.target;
+        if ((Picture !== null) && (Picture.tagName === "IMG") && (Picture.closest(".catalog-icon, .catalog-thumb, .catalog-readme") !== null)) {
+          Thumb = Picture.closest(".catalog-thumb");
+          if (Thumb !== null) {
+            Thumb.remove()}
+           else Picture.remove();
+        };
+      },true);
+    };
+  };
+  $mod.$init = function () {
+    $impl.Start();
+  };
+},["JS","Web","PageKit","PageGlobals"]);
 
-  // the press answered: a small lift and a +1 that floats away
-  function cheer(button) {
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    button.classList.remove('pop');
-    void button.offsetWidth;
-    button.classList.add('pop');
-    const plus = document.createElement('span');
-    plus.className = 'plus-one';
-    plus.setAttribute('aria-hidden', 'true');
-    plus.textContent = '+1';
-    button.appendChild(plus);
-    setTimeout(function () { plus.remove(); }, 900);
-  }
-
-  // Once a visit, someone not signed in hears what joining adds.
-  function invite() {
-    if (!document.body.classList.contains('guest')) return;
-    try {
-      if (sessionStorage.getItem('interest-invited')) return;
-      sessionStorage.setItem('interest-invited', '1');
-    } catch (e) { return; }
-    const note = document.createElement('div');
-    note.className = 'interest-invite';
-    note.setAttribute('role', 'status');
-    note.appendChild(document.createTextNode(t('Thanks! Members can also rate entries.') + ' '));
-    const join = document.createElement('a');
-    join.href = '/signin?return=' + encodeURIComponent(location.pathname + location.search);
-    join.textContent = t('Join');
-    note.appendChild(join);
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.textContent = '×';
-    close.setAttribute('aria-label', t('Hide'));
-    close.addEventListener('click', function () { note.remove(); });
-    note.appendChild(close);
-    document.body.appendChild(note);
-    setTimeout(function () { note.classList.add('gone'); }, 9000);
-    setTimeout(function () { note.remove(); }, 9600);
-  }
-
-  function show(entry, answer, pressed) {
-    for (const form of document.querySelectorAll('.interest-form[data-entry="' + entry + '"]')) {
-      const button = form.querySelector('.interest-button');
-      if (answer.mine && form === pressed) cheer(button);
-      button.classList.toggle('on', answer.mine);
-      button.setAttribute('aria-pressed', answer.mine ? 'true' : 'false');
-      button.title = answer.mine ? t('You find this interesting. Press again to take it back.') : t('Tell others this looks interesting');
-      form.querySelector('.interest-count').textContent = String(answer.interest);
-    }
-  }
-
-  document.addEventListener('submit', async function (event) {
-    const form = event.target.closest && event.target.closest('.interest-form');
-    if (!form) return;
-    event.preventDefault();
-    const button = form.querySelector('.interest-button');
-    if (button.disabled) return;
-    button.disabled = true;
-    try {
-      const answer = await fetch(form.action, {method: 'POST', credentials: 'same-origin', headers: {Accept: 'application/json'}});
-      if (answer.ok) {
-        const data = await answer.json();
-        show(form.dataset.entry, data, form);
-        if (data.mine) invite();
-      }
-      else button.title = (await answer.text()).slice(0, 200);
-    } catch (e) {
-      form.submit();
-    } finally {
-      button.disabled = false;
-    }
-  });
-
-  // Discovering: the left arrow is Not for me, the right arrow Interesting,
-  // both on to the next project; not while typing in a box.
-  // Discovering: the page changes at once, so a tap would show nothing.
-  // Interesting pops a +1 first; Not for me slides the project away; then
-  // the next one comes.  Without scripts the form and the link work as is.
-  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // Back to a page the browser kept as it was left: shown again, ready again
-  window.addEventListener('pageshow', function (event) {
-    if (!event.persisted) return;
-    leaving = false;
-    document.body.classList.remove('leaving', 'leaving-yes', 'leaving-no');
-    for (const burst of document.querySelectorAll('.star-burst')) burst.remove();
-    const done = document.querySelector('.discover-yes.done');
-    if (done) done.classList.remove('done');
-  });
-  // A person's click says so (hand=1) for the admin's numbers; a crawler
-  // following the same link does not run this.
-  function byHand(url) { return /[?&]hand=1/.test(url) ? url : url + (url.indexOf('?') >= 0 ? '&' : '?') + 'hand=1'; }
-  function handField(form) {
-    if (form.querySelector('input[name="hand"]')) return;
-    const field = document.createElement('input');
-    field.type = 'hidden'; field.name = 'hand'; field.value = '1';
-    form.appendChild(field);
-  }
-  // every Random project link: the catalog's, the entry's, the guide's
-  document.addEventListener('click', function (event) {
-    const link = event.target.closest && event.target.closest('a[href^="/catalog-random"]');
-    if (link) link.href = byHand(link.getAttribute('href'));
-  }, true);
-  let leaving = false;
-  function leave(how, go) {
-    if (leaving) return;
-    leaving = true;
-    if (reduce) { go(); return; }
-    document.body.classList.add('leaving', 'leaving-' + how);
-    if (how === 'yes') {
-      // a star bursts from the button under the thumb, with sparks, and the
-      // project shrinks into that spot as the star flies off the top
-      const button = document.querySelector('.discover-yes');
-      const at = button ? button.getBoundingClientRect() : {left: innerWidth / 2, top: innerHeight / 2, width: 0, height: 0};
-      const x = at.left + at.width / 2, y = at.top + at.height / 2;
-      const entry = document.querySelector('.catalog-entry');
-      if (entry) {
-        const box = entry.getBoundingClientRect();
-        entry.style.transformOrigin = (x - box.left) + 'px ' + (y - box.top) + 'px';
-      }
-      const burst = document.createElement('div');
-      burst.className = 'star-burst';
-      burst.setAttribute('aria-hidden', 'true');
-      burst.style.left = x + 'px';
-      burst.style.top = y + 'px';
-      const star = document.createElement('span');
-      star.className = 'fly-star';
-      // the button's own star, drawn the same everywhere
-      const drawn = document.querySelector('.discover-yes .star-icon');
-      if (drawn) star.appendChild(drawn.cloneNode(true)); else star.textContent = '\u2605';
-      burst.appendChild(star);
-      for (let i = 0; i < 7; i++) {
-        const spark = document.createElement('i');
-        spark.style.setProperty('--a', (i * 51 + 20) + 'deg');
-        spark.style.setProperty('--d', (70 + (i % 3) * 30) + 'px');
-        burst.appendChild(spark);
-      }
-      document.body.appendChild(burst);
-      if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) { } }
-    }
-    // the arrival's animation, if still running, must not hold the page in place
-    const entry = document.querySelector('.catalog-entry');
-    if (entry) entry.classList.remove('arrive-yes', 'arrive-no');
-    setTimeout(go, how === 'yes' ? 950 : 520);
-  }
-  document.addEventListener('submit', function (event) {
-    const form = event.target.closest && event.target.closest('.discover-bar form');
-    // only the Interesting form; the narrowing's form goes its own way
-    if (!form || !form.querySelector('.discover-yes')) return;
-    event.preventDefault();
-    handField(form);
-    const button = form.querySelector('.discover-yes');
-    if (button) {
-      button.classList.add('done');
-      const count = document.querySelector('.catalog-entry .interest-count');
-      if (count) count.textContent = String(Number(count.textContent || '0') + 1);
-    }
-    leave('yes', function () { form.submit(); });
-  });
-  document.addEventListener('click', function (event) {
-    const link = event.target.closest && event.target.closest('.discover-bar .discover-no');
-    if (!link || event.metaKey || event.ctrlKey || event.button !== 0) return;
-    event.preventDefault();
-    leave('no', function () { location.href = link.href; });
-  });
-
-  // the narrowing: a change fetches a project of that kind at once, and the
-  // Go button is only for a page without scripts
-  for (const form of document.querySelectorAll('.discover-choice')) {
-    const go = form.querySelector('button');
-    if (go) go.hidden = true;
-    form.addEventListener('change', function () { handField(form); form.requestSubmit ? form.requestSubmit() : form.submit(); });
-  }
-
-  // Only while discovering (the random button's pages), and never from
-  // inside the README, whose code and tables the arrows scroll.
-  document.addEventListener('keydown', function (event) {
-    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    if (new URLSearchParams(location.search).get('discover') !== '1') return;
-    const target = event.target;
-    if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
-    if (target && target.closest && target.closest('.catalog-readme, pre, table')) return;
-    const control = document.querySelector('.discover-bar [data-key="' + event.key + '"]');
-    if (!control) return;
-    event.preventDefault();
-    // a click sends the button with its form everywhere, older Safari too
-    control.click();
-  });
-
-  // A picture from another site that does not come, as a project's icon or in
-  // its README, goes quietly rather than showing as broken.
-  document.addEventListener('error', function (event) {
-    const picture = event.target;
-    if (picture && picture.tagName === 'IMG' && picture.closest('.catalog-icon, .catalog-thumb, .catalog-readme')) {
-      const thumb = picture.closest('.catalog-thumb');
-      (thumb || picture).remove();
-    }
-  }, true);
-})();
+rtl.run('interest');
+}

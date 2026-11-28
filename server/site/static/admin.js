@@ -1,2614 +1,5378 @@
-// The site's admin page, loaded when it is opened.  It runs with the chat off
-// too: window.Chat is the site's shell under its first name (also window.Site).
-(function () {
-  'use strict';
-
-  const C = window.Chat;
-  const $ = C.$, stream = C.stream, Site = C.Site, Me = C.me, S = C.state, Extras = C.extras,
-    el = C.el, link = C.link, get = C.get, post = C.post, enc = C.enc, toast = C.toast,
-    failed = C.failed, route = C.route, ago = C.ago, subTabs = C.subTabs, facts = C.facts,
-    chip = C.chip, waiting = C.waiting, iconButton = C.iconButton, sizeText = C.sizeText,
-    syncNow = C.syncNow, toggleMenu = C.toggleMenu, locale = C.locale, clock = C.clock,
-    shared = C.shared, loadScript = C.loadScript;
-
-  // ------------------------------------------------------------------ admin
-
-  async function openAdmin() {
-    const generation = S.generation;
+if (!pas.AdminPage) {
+rtl.module("Admin_List",["System","JS","Web"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.C = null;
+  this.Me = null;
+  this.Extras = null;
+  this.S = null;
+  this.Stream = null;
+  this.Locale = undefined;
+  this.SiteName = undefined;
+  this.FilePaths = null;
+  this.Same = function (A, B) {
+    var Result = false;
+    Result = (typeof(A) === typeof(B)) && (A == B);
+    return Result;
+  };
+  this.IsUndef = function (V) {
+    var Result = false;
+    Result = typeof(V) === "undefined";
+    return Result;
+  };
+  this.Either = function (A, B) {
+    var Result = undefined;
+    if (Boolean(A)) {
+      Result = A}
+     else Result = B;
+    return Result;
+  };
+  this.LocaleNumber = function (V) {
+    var Result = "";
+    Result = V.toLocaleString($mod.Locale);
+    return Result;
+  };
+  this.Fixed = function (V, Digits) {
+    var Result = "";
+    Result = V.toFixed(Digits);
+    return Result;
+  };
+  this.Toggle = function (Node, Name, Force) {
+    var Result = false;
+    Result = Node.classList.toggle(Name,Force);
+    return Result;
+  };
+  this.FindIn = function (List, Test) {
+    var Result = undefined;
+    Result = List.find(Test);
+    return Result;
+  };
+  this.SortBy = function (List, Compare) {
+    var Result = null;
+    Result = List.sort(Compare);
+    return Result;
+  };
+  this.Regex = function (Pattern, Value) {
+    var Result = false;
+    Result = (new RegExp(Pattern)).test(String(Value));
+    return Result;
+  };
+  this.MostOf = function (Values) {
+    var Result = 0.0;
+    Result = Math.max.apply(null,Values.concat(Array.of(1)));
+    return Result;
+  };
+  this.AdminTable = function (Box, Headings, Rows) {
+    var Wrap = null;
+    var Table = null;
+    var Head = null;
+    var Row = null;
+    var Cell = null;
+    var Values = null;
+    var Value = undefined;
+    var I = 0;
+    var J = 0;
+    Wrap = $mod.C.el("div","gridwrap");
+    Table = $mod.C.el("table","grid");
+    Head = $mod.C.el("tr");
+    for (var $l = 0, $end = Headings.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Head.appendChild($mod.C.el("th","",Headings[I]));
+    };
+    Table.appendChild(Head);
+    for (var $l1 = 0, $end1 = Rows.length - 1; $l1 <= $end1; $l1++) {
+      I = $l1;
+      Row = $mod.C.el("tr");
+      Values = Rows[I];
+      for (var $l2 = 0, $end2 = Values.length - 1; $l2 <= $end2; $l2++) {
+        J = $l2;
+        Value = Values[J];
+        Cell = $mod.C.el("td");
+        if (typeof(Value) === "object") {
+          Cell.appendChild(Value)}
+         else Cell.textContent = String(Value);
+        Row.appendChild(Cell);
+      };
+      Table.appendChild(Row);
+    };
+    Wrap.appendChild(Table);
+    Box.appendChild(Wrap);
+  };
+  this.Stat = function (Holder, Value, Caption, Note, Cls) {
+    var Result = null;
+    var Box = null;
+    if (Boolean(Cls)) {
+      Box = $mod.C.el("div","stat " + ("" + Cls))}
+     else Box = $mod.C.el("div","stat");
+    if (typeof(Value) === "number") {
+      Box.appendChild($mod.C.el("b","",$mod.LocaleNumber(Value)))}
+     else Box.appendChild($mod.C.el("b","",Value));
+    Box.appendChild($mod.C.el("span","",Caption));
+    if (Boolean(Note)) Box.appendChild($mod.C.el("small","",Note));
+    Holder.appendChild(Box);
+    Result = Box;
+    return Result;
+  };
+  this.Bars = function (Holder, Rows, Format) {
+    var Most = 0.0;
+    var Grid = null;
+    var Bar = null;
+    var Fill = null;
+    var Values = null;
+    var R = null;
+    var I = 0;
+    Values = new Array();
+    for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Values.push(Rows[I]["value"]);
+    };
+    Most = $mod.MostOf(Values);
+    Grid = $mod.C.el("div","bars");
+    for (var $l1 = 0, $end1 = Rows.length - 1; $l1 <= $end1; $l1++) {
+      I = $l1;
+      R = Rows[I];
+      Grid.appendChild($mod.C.el("span","name",R["name"]));
+      if (Boolean(R["other"])) {
+        Bar = $mod.C.el("span","bar other")}
+       else Bar = $mod.C.el("span","bar");
+      Fill = $mod.C.el("i");
+      Fill.style["width"] = String(Math.max(1,Math.round((100 * Number(R["value"])) / Most))) + "%";
+      Bar.appendChild(Fill);
+      Bar.title = "" + R["name"] + ": " + ("" + Format(R["value"]));
+      Grid.appendChild(Bar);
+      Grid.appendChild($mod.C.el("span","num",Format(R["value"])));
+    };
+    Holder.appendChild(Grid);
+  };
+  this.BrowserOf = function (Agent) {
+    var Result = undefined;
+    var A = "";
+    var Name = "";
+    var System = "";
+    A = "" + $mod.Either(Agent,"");
+    if ($mod.Regex("Edg\\/",A)) {
+      Name = "Edge"}
+     else if ($mod.Regex("OPR\\/|Opera",A)) {
+      Name = "Opera"}
+     else if ($mod.Regex("SamsungBrowser",A)) {
+      Name = "Samsung Internet"}
+     else if ($mod.Regex("Firefox\\/",A)) {
+      Name = "Firefox"}
+     else if ($mod.Regex("Chrome\\/",A)) {
+      Name = "Chrome"}
+     else if ($mod.Regex("Version\\/[\\d.]+.*Safari",A)) {
+      Name = "Safari"}
+     else Name = "";
+    if ($mod.Regex("Android",A)) {
+      System = "Android"}
+     else if ($mod.Regex("iPhone|iPad|iPod",A)) {
+      System = "iOS"}
+     else if ($mod.Regex("Windows",A)) {
+      System = "Windows"}
+     else if ($mod.Regex("Mac OS X|Macintosh",A)) {
+      System = "macOS"}
+     else if ($mod.Regex("CrOS",A)) {
+      System = "ChromeOS"}
+     else if ($mod.Regex("Linux|X11",A)) {
+      System = "Linux"}
+     else System = "";
+    if ((Name !== "") && (System !== "")) return window.t("%s on %s",Name,System);
+    if (Name !== "") {
+      Result = Name}
+     else if (System !== "") {
+      Result = System}
+     else Result = A.slice(0,32);
+    return Result;
+  };
+  this.HostOf = function (Url) {
+    var Result = "";
     try {
-      for (const extra of Extras.adminScripts) await loadScript(extra.src);
-    } catch (err) { failed(err); return; }
-    if (generation !== S.generation) return;
-    const data = await get('/api/admin');
-    if (generation !== S.generation) return;
-    S.title = t('Admin');
-    const can = function (p) { return data.can.indexOf(p) >= 0; };
-    const head = $('#roomhead');
-    const menu = iconButton('menu', t('Channels'), 'menubtn');
-    menu.addEventListener('click', toggleMenu);
-    head.append(menu, el('div', 'titles'));
-    $('.titles', head).appendChild(el('h1', '', t('Running %s', Site)));
-    if (data.members_total !== undefined)
-      $('.titles', head).appendChild(el('p', 'topic', tn(data.members_total, '%d members', '%d members')));
-    const page = el('div', 'admin');
-    // a page read from the top: the stream is not held at its bottom, as a room's is
-    stream.noPin = true;
-    stream.pinned = false;
-    stream.appendChild(page);
-    stream.scrollTop = 0;
-
-    // The page's list: one part of the page at a time, chosen on the left
-    // where a room list would be, under the group it belongs to.
-    const body = document.body;
-    let nav = $('#adminnav');
-    if (!nav) {
-      nav = el('nav');
-      nav.id = 'adminnav';
-      const rooms = $('#roomlist');
-      if (rooms && rooms.after) rooms.after(nav);
-      else page.appendChild(nav);
-    }
-    nav.hidden = false;
-    nav.setAttribute('aria-label', t('Admin'));
-    nav.replaceChildren();
-    body.classList.add('admin-view');
-    const parts = [];
-    const tab = function (title, build, caption, count, group) {
-      const b = el('button', 'room');
-      b.type = 'button';
-      b.appendChild(el('span', 'name', caption || {Members: t('Members'), Permissions: t('Permissions'), Settings: t('Settings'),
-        Look: t('Look'), Channels: t('Channels'), Private: t('Private'), Reports: t('Reports'), Blocked: t('Blocked')}[title] || title));
-      // how many things wait there, when the tab knows
-      const badge = el('span', 'badge mention');
-      badge.hidden = true;
-      b.appendChild(badge);
-      const setCount = function (n) { badge.hidden = !(n > 0); badge.textContent = n > 0 ? String(n) : ''; };
-      if (typeof count === 'number') setCount(count);
-      else if (typeof count === 'function') Promise.resolve().then(count).then(setCount).catch(function () { });
-      const holder = el('section', 'part');
-      holder.hidden = true;
-      page.appendChild(holder);
-      // a tab is built the first time it is opened: one tab's requests at a time, not all of them at once
-      let built = false;
-      b.addEventListener('click', function () {
-        parts.forEach(function (p) { p.button.classList.remove('active'); p.holder.hidden = true; });
-        b.classList.add('active');
-        holder.hidden = false;
-        if (!built) { built = true; build(holder); }
-        // on a phone the list is a drawer over the page: it closes on a choice
-        if (body.classList.contains('menu')) toggleMenu();
-        stream.scrollTop = 0;
-        try { localStorage.setItem('admin-tab', title); } catch (e) { }
+      Result = (new URL(String(Url))).hostname.replace(new RegExp("^www\\."),"");
+    } catch ($e) {
+      Result = "";
+    };
+    return Result;
+  };
+  this.IsPagePath = function (Path) {
+    var Result = false;
+    var P = "";
+    var I = 0;
+    P = ("" + $mod.Either(Path,"/")).toLowerCase().split("?")[0];
+    if ($mod.Regex("^\\/(static|api|images|files|f\\/|avatar|ws|sitemap|favicon|manifest)",P) || (P === "/robots.txt") || (P === "/words.js") || (P === "/sw.js")) return false;
+    for (var $l = 0, $end = $mod.FilePaths.length - 1; $l <= $end; $l++) {
+      I = $l;
+      if (P.startsWith("" + $mod.FilePaths[I])) return false;
+    };
+    Result = !$mod.Regex("\\.(css|js|png|jpe?g|gif|svg|ico|webp|woff2?|xml|txt|json|map)$",P);
+    return Result;
+  };
+  this.PageLink = function (Path) {
+    var Result = null;
+    var Shown = undefined;
+    Path = $mod.Either(Path,"/");
+    Shown = Path;
+    try {
+      Shown = decodeURIComponent("" + Path);
+    } catch ($e) {
+    };
+    if (!$mod.Regex("^\\/(?!\\/)",Path)) return $mod.C.el("span","visit-path",Shown);
+    Result = $mod.C.el("a","visit-path",Shown);
+    Result["href"] = Path;
+    Result["target"] = "_blank";
+    Result["rel"] = "noopener";
+    Result["title"] = Path;
+    return Result;
+  };
+  this.ListView = function (Box, O) {
+    var Result = null;
+    var View = null;
+    var Bar = null;
+    var Scroller = null;
+    var Table = null;
+    var Thead = null;
+    var Tbody = null;
+    var Foot = null;
+    var Count = null;
+    var More = null;
+    var Detail = null;
+    var Head = null;
+    var Find = null;
+    var KeyOf = null;
+    var TextOf = null;
+    var Step = 0.0;
+    var Limit = 0.0;
+    var Page = 0.0;
+    var Asked = 0.0;
+    var Total = undefined;
+    var Picked = undefined;
+    var Trouble = undefined;
+    var Rows = null;
+    var Shown = null;
+    var Selects = null;
+    var Ths = null;
+    var Columns = null;
+    var Given = null;
+    var Q = "";
+    var Sort = "";
+    var Loading = false;
+    var Filters = null;
+    var Saved = null;
+    var Timer = 0;
+    var Api = null;
+    var I = 0;
+    function ValueOf(Col, R) {
+      var Result = undefined;
+      if (Boolean(Col["value"])) {
+        Result = Col.value(R)}
+       else Result = R["" + Col["key"]];
+      if ($mod.IsUndef(Result) || (Result == null)) Result = "";
+      return Result;
+    };
+    function PlainSort() {
+      var Result = "";
+      Result = Sort.replace(new RegExp("^-"),"");
+      return Result;
+    };
+    function Save() {
+      if (Boolean(O["id"])) try {
+        window.localStorage.setItem("lv-" + ("" + O["id"]),JSON.stringify(pas.JS.New(["sort",Sort])));
+      } catch ($e) {
+      };
+    };
+    function AddFind() {
+      Find = $mod.C.el("input","lv-find");
+      Find.type = "search";
+      Find.placeholder = "" + $mod.Either(O["search"],window.t("Search"));
+      Find.setAttribute("aria-label",Find.placeholder);
+      Find.addEventListener("input",function (E) {
+        var Wait = 0;
+        window.clearTimeout(Timer);
+        if (Boolean(O["remote"])) {
+          Wait = 250}
+         else Wait = 60;
+        Timer = window.setTimeout(function () {
+          Q = Find.value.trim();
+          Refresh();
+        },Wait);
       });
-      parts.push({button: b, holder: holder, title: title, setCount: setCount, group: group || 'More'});
-    };
-
-    filePaths = data.file_paths || [];
-    const on = String(data.parts || '').split(' ');
-    // a group of settings belongs to the part that registered it, and is shown with that part
-    const partOfGroup = Object.assign({Chat: 'Chat', Wiki: 'Wiki', Forum: 'Forum'}, Extras.settingGroups);
-    // every module the site knows, on or off
-    const modules = (data.settings || []).filter(function (s) { return s.group === 'Parts'; }).map(function (s) { return s.name; });
-    const partSettings = function (group) {
-      return (data.settings || []).some(function (s) { return partOfGroup[s.group] === group; });
-    };
-    if (data.settings || can('view-admin')) tab('Overview', function (box) { adminOverview(box, data, can); }, t('Overview'), undefined, 'Site');
-    for (const extra of Extras.adminTabs)
-      if (extra.first && extra.permission && can(extra.permission)) tab(extra.title, extra.build, t(extra.title), extra.badge, extra.group || 'Site');
-    if (data.settings && can('manage-settings')) tab('Settings', function (box) {
-      adminSettings(box, data, function (group) { return group !== 'Parts' && !partOfGroup[group]; });
-    }, undefined, undefined, 'Site');
-    if (data.settings && can('manage-settings')) tab('Look', adminLook, undefined, undefined, 'Site');
-    if (data.members) tab('Members', function (box) { adminMembers(box, data, can); }, undefined, undefined, 'Site');
-    if (data.permissions) tab('Permissions', function (box) { adminPermissions(box, data); }, undefined, undefined, 'Site');
-    if (can('read-reports')) tab('Reports', adminReports, undefined, data.open_reports || 0, 'Site');
-    if (can('view-visitors') || can('manage-blocks')) tab('Visitors', adminVisitors, t('Visitors'), undefined, 'Server');
-    if (can('view-storage')) tab('Storage', adminStorage, t('Storage'), undefined, 'Server');
-    if (can('manage-backups')) tab('Backup', adminBackup, t('Backup'), undefined, 'Server');
-    if (data.channels) tab('Channels', function (box) { adminChannels(box, data); }, undefined, undefined, 'Chat');
-    if (on.indexOf('chat') >= 0 && can('manage-private')) tab('Private', adminPrivate, undefined, undefined, 'Chat');
-    // tabs other scripts bring: title, the permission that shows it, what
-    // builds it into the box, and the group it is listed under
-    for (const extra of Extras.adminTabs)
-      if (!extra.first && extra.permission && can(extra.permission) && (!extra.part || on.indexOf(extra.part) >= 0))
-        tab(extra.title, extra.build, t(extra.title), extra.badge, extra.group);
-    // each part's own settings, last in its group
-    if (data.settings)
-      for (const group of ['Chat', 'Wiki', 'Forum'].concat(Object.values(Extras.settingGroups)).filter(function (g, i, all) { return all.indexOf(g) === i; }))
-        if (partSettings(group) && (modules.indexOf(group.toLowerCase()) < 0 || on.indexOf(group.toLowerCase()) >= 0)) tab(group + ' settings', function (box) {
-          adminSettings(box, data, function (g) { return partOfGroup[g] === group; }, group);
-        }, t('Settings'), undefined, group);
-
-    // the list on the left: the site first, then the server, then each part
-    const order = ['Site', 'Server', 'Chat', 'Wiki', 'Forum'];
-    for (const p of parts) if (order.indexOf(p.group) < 0) order.push(p.group);
-    for (const group of order) {
-      const members = parts.filter(function (p) { return p.group === group; });
-      if (!members.length) continue;
-      nav.appendChild(el('div', 'group', t(group)));
-      for (const p of members) nav.appendChild(p.button);
-    }
-
-    // what this admin may do, for panels built later (the address panel's block buttons)
-    S.adminCan = can;
-    // another tab opened from a row (an address looked up from anywhere), and a tab's count changed
-    S.adminTab = function (title) {
-      const p = parts.find(function (x) { return x.title === title; });
-      if (p) p.button.click();
-      return !!p;
-    };
-    S.adminCount = function (title, n) {
-      const p = parts.find(function (x) { return x.title === title; });
-      if (p) p.setCount(n);
-    };
-    let last = parts.length ? parts[0].title : 'Overview';
-    try { last = localStorage.getItem('admin-tab') || last; } catch (e) { }
-    const selected = parts.find(function (p) { return p.title === last; }) || parts[0];
-    if (selected) selected.button.click();
-    syncNow(true);
-  }
-
-  function adminTable(box, headings, rows) {
-    const wrap = el('div', 'gridwrap');
-    const table = el('table', 'grid');
-    const head = el('tr');
-    for (const heading of headings) head.appendChild(el('th', '', heading));
-    table.appendChild(head);
-    for (const values of rows) {
-      const row = el('tr');
-      for (const value of values) {
-        // a cell is words, or something already built (a link, a chip)
-        const cell = el('td');
-        if (typeof value === 'object') cell.appendChild(value);
-        else cell.textContent = String(value);
-        row.appendChild(cell);
-      }
-      table.appendChild(row);
-    }
-    wrap.appendChild(table);
-    box.appendChild(wrap);
-  }
-
-  // a number as a tile: the figure, its caption, a small note under it
-  function stat(holder, value, caption, note, cls) {
-    const box = el('div', 'stat' + (cls ? ' ' + cls : ''));
-    box.appendChild(el('b', '', typeof value === 'number' ? value.toLocaleString(locale) : value));
-    box.appendChild(el('span', '', caption));
-    if (note) box.appendChild(el('small', '', note));
-    holder.appendChild(box);
-    return box;
-  }
-
-  // sizes or counts as plain bars, the longest filling the row
-  function bars(holder, rows, format) {
-    const most = Math.max.apply(null, rows.map(function (r) { return r.value; }).concat([1]));
-    const grid = el('div', 'bars');
-    for (const r of rows) {
-      grid.appendChild(el('span', 'name', r.name));
-      const bar = el('span', 'bar' + (r.other ? ' other' : ''));
-      const fill = el('i'); fill.style.width = Math.max(1, Math.round(100 * r.value / most)) + '%'; bar.appendChild(fill);
-      bar.title = r.name + ': ' + format(r.value);
-      grid.appendChild(bar);
-      grid.appendChild(el('span', 'num', format(r.value)));
-    }
-    holder.appendChild(grid);
-  }
-
-  // a browser string in a few words: "Firefox on Linux"
-  function browserOf(agent) {
-    const a = agent || '';
-    const name = /Edg\//.test(a) ? 'Edge' : /OPR\/|Opera/.test(a) ? 'Opera' : /SamsungBrowser/.test(a) ? 'Samsung Internet' :
-      /Firefox\//.test(a) ? 'Firefox' : /Chrome\//.test(a) ? 'Chrome' : /Version\/[\d.]+.*Safari/.test(a) ? 'Safari' : '';
-    const system = /Android/.test(a) ? 'Android' : /iPhone|iPad|iPod/.test(a) ? 'iOS' : /Windows/.test(a) ? 'Windows' :
-      /Mac OS X|Macintosh/.test(a) ? 'macOS' : /CrOS/.test(a) ? 'ChromeOS' : /Linux|X11/.test(a) ? 'Linux' : '';
-    if (name && system) return t('%s on %s', name, system);
-    return name || system || a.slice(0, 32);
-  }
-  function hostOf(url) {
-    try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
-  }
-  // addresses the server's units named as files, from /api/admin
-  let filePaths = [];
-  // a page someone reads: not a picture, script, style, API call or feed (as the report has it)
-  function isPagePath(path) {
-    const p = (path || '/').toLowerCase().split('?')[0];
-    if (/^\/(static|api|images|files|f\/|avatar|ws|sitemap|favicon|manifest)/.test(p) ||
-      p === '/robots.txt' || p === '/words.js' || p === '/sw.js') return false;
-    for (const prefix of filePaths) if (p.startsWith(prefix)) return false;
-    return !/\.(css|js|png|jpe?g|gif|svg|ico|webp|woff2?|xml|txt|json|map)$/.test(p);
-  }
-  function pageLink(path) {
-    path = path || '/';
-    let shown = path;
-    try { shown = decodeURIComponent(path); } catch (e) { }
-    // a link only for a path of this site: one slash, not two (which would name another host)
-    if (!/^\/(?!\/)/.test(path)) return el('span', 'visit-path', shown);
-    const a = el('a', 'visit-path', shown);
-    a.href = path; a.target = '_blank'; a.rel = 'noopener'; a.title = path;
-    return a;
-  }
-
-  // ------------------------------------------------------------ list views
-
-  // Searchable, sortable lists with keyboard selection and a detail panel.
-  // Rows may be local or fetched a page at a time; set() replaces them and
-  // failed(words) reports a load failure. The listView options are in
-  // docs/CODE-MAP.md.
-  function listView(box, o) {
-    const view = el('div', 'listview' + (o.cls ? ' ' + o.cls : ''));
-    const bar = el('div', 'lv-bar'), scroller = el('div', 'lv-scroll'), table = el('table', 'lv-table');
-    const thead = el('thead'), tbody = el('tbody');
-    table.append(thead, tbody);
-    scroller.appendChild(table);
-    const foot = el('div', 'lv-foot'), count = el('span', 'lv-count');
-    const more = el('button', 'small-link', t('Show more'));
-    more.type = 'button'; more.hidden = true;
-    foot.append(count, more);
-    const detail = el('div', 'lv-detail');
-    detail.hidden = true;
-    view.append(bar, scroller, foot, detail);
-    box.appendChild(view);
-
-    const keyOf = o.key || function (r) { return JSON.stringify(r); };
-    const valueOf = function (c, r) { const v = c.value ? c.value(r) : r[c.key]; return v === undefined || v === null ? '' : v; };
-    const textOf = o.text || function (r) { return o.columns.map(function (c) { return String(valueOf(c, r)); }).join(' '); };
-    const step = o.page || 100;
-    let rows = o.rows || [], shown = [], total = 0, limit = step, page = 0, picked = null, q = '', asked = 0;
-    // waiting for the rows: from the server, or from whoever made the list
-    let loading = !!o.remote || o.rows === undefined, trouble = '';
-    let sort = o.sort || '';
-    const filters = {};
-    let saved = {};
-    try { saved = o.id ? JSON.parse(localStorage.getItem('lv-' + o.id) || '{}') : {}; } catch (e) { }
-    if (saved.sort && o.columns.some(function (c) { return !c.nosort && c.key === saved.sort.replace(/^-/, ''); })) sort = saved.sort;
-    const save = function () {
-      // the sort is kept; a filter is not, so a list never opens narrowed by an old choice
-      if (o.id) try { localStorage.setItem('lv-' + o.id, JSON.stringify({sort: sort})); } catch (e) { }
-    };
-
-    let find = null, timer = 0;
-    if (o.search !== false) {
-      find = el('input', 'lv-find');
-      find.type = 'search';
-      find.placeholder = o.search || t('Search');
-      find.setAttribute('aria-label', find.placeholder);
-      find.addEventListener('input', function () {
-        clearTimeout(timer);
-        timer = setTimeout(function () { q = find.value.trim(); refresh(); }, o.remote ? 250 : 60);
-      });
-      find.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); if (o.enter) o.enter(find.value.trim()); }
-        else if (e.key === 'ArrowDown' && tbody.firstChild && tbody.firstChild.tabIndex === 0) { e.preventDefault(); tbody.firstChild.focus(); }
-      });
-      bar.appendChild(find);
-    }
-    const selects = [];
-    for (const f of o.filters || []) {
-      const s = el('select', 'lv-filter');
-      s.setAttribute('aria-label', f.title);
-      s.title = f.title;
-      filters[f.key] = f.value || '';
-      s.addEventListener('change', function () { filters[f.key] = s.value; s.classList.toggle('on', s.value !== ''); save(); refresh(); });
-      bar.appendChild(s);
-      selects.push({f: f, s: s});
-    }
-    const fillSelects = function () {
-      for (const x of selects) {
-        const options = typeof x.f.options === 'function' ? x.f.options(rows) : x.f.options;
-        const option = function (value, words) { const o2 = el('option', '', words); o2.value = value; return o2; };
-        x.s.replaceChildren(option('', x.f.all || t('All')));
-        for (const pair of options) x.s.appendChild(option(pair[0], pair[1]));
-        const want = filters[x.f.key] || '';
-        x.s.value = want;
-        // a choice these rows do not have shows everything
-        if (x.s.value !== want) x.s.value = '';
-        // a filter that narrows the list stands out
-        x.s.classList.toggle('on', x.s.value !== '');
-      }
-    };
-    if (o.csv) {
-      const csv = el('button', 'small-link lv-csv', t('Download CSV'));
-      csv.type = 'button';
-      csv.addEventListener('click', function () {
-        const cell = function (v) {
-          v = String(v);
-          // text from visitors that a spreadsheet would run as a formula stays text
-          if (/^[=+\-@\t\r]/.test(v) && !/^-?\d+(\.\d+)?$/.test(v)) v = "'" + v;
-          return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+      Find.addEventListener("keydown",function (E) {
+        if (E.key === "Enter") {
+          E.preventDefault();
+          if (Boolean(O["enter"])) O.enter(Find.value.trim());
+        } else if ((E.key === "ArrowDown") && Boolean(Tbody.firstChild) && $mod.Same(Tbody.firstChild["tabIndex"],0)) {
+          E.preventDefault();
+          Tbody.firstChild.focus();
         };
-        const lines = [o.columns.map(function (c) { return cell(c.title); }).join(',')];
-        for (const r of shown) lines.push(o.columns.map(function (c) { return cell(valueOf(c, r)); }).join(','));
-        const a = el('a');
-        a.href = URL.createObjectURL(new Blob([lines.join('\n') + '\n'], {type: 'text/csv'}));
-        a.download = o.csv + '.csv';
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
       });
-      bar.appendChild(csv);
-    }
-    if (!bar.children.length) bar.hidden = true;
-
-    // the headings: a click sorts by it, a second click the other way
-    const head = el('tr'), ths = [];
-    for (const c of o.columns) {
-      const th = el('th', (c.num ? 'num' : '') + (c.wide ? ' wide' : ''));
-      if (c.nosort) th.textContent = c.title;
-      else {
-        const b = el('button', 'lv-sort', c.title);
-        b.type = 'button';
-        b.addEventListener('click', function () {
-          sort = sort === c.key ? '-' + c.key : sort === '-' + c.key ? c.key : (c.num || c.down ? '-' : '') + c.key;
-          save(); refresh();
-        });
-        th.appendChild(b);
-      }
-      ths.push(th);
-      head.appendChild(th);
-    }
-    thead.appendChild(head);
-    const markSort = function () {
-      o.columns.forEach(function (c, i) {
-        const on = sort.replace(/^-/, '') === c.key;
-        ths[i].classList.toggle('sorted', on);
-        ths[i].classList.toggle('down', on && sort[0] === '-');
-        if (on) ths[i].setAttribute('aria-sort', sort[0] === '-' ? 'descending' : 'ascending'); else ths[i].removeAttribute('aria-sort');
+      Bar.appendChild(Find);
+    };
+    function AddFilter(F) {
+      var Choice = null;
+      Choice = $mod.C.el("select","lv-filter");
+      Choice.setAttribute("aria-label","" + F["title"]);
+      Choice.title = "" + F["title"];
+      Filters["" + F["key"]] = $mod.Either(F["value"],"");
+      Choice.addEventListener("change",function (E) {
+        Filters["" + F["key"]] = Choice.value;
+        $mod.Toggle(Choice,"on",Choice.value !== "");
+        Save();
+        Refresh();
       });
+      Bar.appendChild(Choice);
+      Selects.push(pas.JS.New(["f",F,"s",Choice]));
     };
-
-    const blank = function (v) { return v === '' || v === null || v === undefined; };
-    const compare = function (a, b) {
-      if (typeof a === 'number' && typeof b === 'number') return a - b;
-      if (typeof a === 'boolean' || typeof b === 'boolean') return Number(a) - Number(b);
-      return String(a).localeCompare(String(b), locale, {numeric: true, sensitivity: 'base'});
+    function FillSelects() {
+      var N = 0;
+      var M = 0;
+      var F = null;
+      var Choice = null;
+      var Options = null;
+      var Want = undefined;
+      function Option(Value, Words) {
+        var Result = null;
+        Result = $mod.C.el("option","",Words);
+        Result["value"] = Value;
+        return Result;
+      };
+      for (var $l = 0, $end = Selects.length - 1; $l <= $end; $l++) {
+        N = $l;
+        F = Selects[N]["f"];
+        Choice = Selects[N]["s"];
+        if (typeof(F["options"]) === "function") {
+          Options = F.options(Rows)}
+         else Options = F["options"];
+        Choice.replaceChildren(Option("",$mod.Either(F["all"],window.t("All"))));
+        for (var $l1 = 0, $end1 = Options.length - 1; $l1 <= $end1; $l1++) {
+          M = $l1;
+          Choice.appendChild(Option(Options[M][0],Options[M][1]));
+        };
+        Want = $mod.Either(Filters["" + F["key"]],"");
+        Choice["value"] = Want;
+        if (!$mod.Same(Choice.value,Want)) Choice.value = "";
+        $mod.Toggle(Choice,"on",Choice.value !== "");
+      };
     };
-    const local = function () {
-      const words = q.toLowerCase();
-      let list = rows.filter(function (r) {
-        for (const x of selects) {
-          const v = x.s.value;
-          if (v && !x.f.test(r, v)) return false;
-        }
-        return !words || textOf(r).toLowerCase().indexOf(words) >= 0;
+    function AddCsv() {
+      var Csv = null;
+      function Cell(V) {
+        var Result = "";
+        Result = String(V);
+        if ($mod.Regex("^[=+\\-@\\t\\r]",Result) && !$mod.Regex("^-?\\d+(\\.\\d+)?$",Result)) Result = "'" + Result;
+        if ($mod.Regex('[",\\n]',Result)) Result = '"' + Result.replace(new RegExp('"',"g"),'""') + '"';
+        return Result;
+      };
+      function Line(R, Titles) {
+        var Result = "";
+        var Cells = null;
+        var N = 0;
+        Cells = new Array();
+        Columns = O["columns"];
+        for (var $l = 0, $end = Columns.length - 1; $l <= $end; $l++) {
+          N = $l;
+          if (Titles) {
+            Cells.push(Cell(Columns[N]["title"]))}
+           else Cells.push(Cell(ValueOf(Columns[N],R)));
+        };
+        Result = Cells.join(",");
+        return Result;
+      };
+      Csv = $mod.C.el("button","small-link lv-csv",window.t("Download CSV"));
+      Csv["type"] = "button";
+      Csv.addEventListener("click",function (E) {
+        var Lines = null;
+        var A = null;
+        var N = 0;
+        Lines = Array.of(Line(null,true));
+        for (var $l = 0, $end = Shown.length - 1; $l <= $end; $l++) {
+          N = $l;
+          Lines.push(Line(Shown[N],false));
+        };
+        A = $mod.C.el("a");
+        A.href = URL.createObjectURL(new Blob(Array.of(Lines.join("\n") + "\n"),pas.JS.New(["type","text/csv"])));
+        A.download = "" + O["csv"] + ".csv";
+        document.body.appendChild(A);
+        A.click();
+        A.remove();
+        window.setTimeout(function () {
+          URL.revokeObjectURL(A.href);
+        },5000);
       });
-      const col = o.columns.find(function (c) { return !c.nosort && c.key === sort.replace(/^-/, ''); });
-      if (col) {
-        const dir = sort[0] === '-' ? -1 : 1;
-        list = list.slice().sort(function (x, y) {
-          const a = valueOf(col, x), b = valueOf(col, y);
-          // the empty ones last, whichever way
-          if (blank(a) || blank(b)) return blank(a) - blank(b);
-          return dir * compare(a, b);
-        });
-      }
-      shown = list;
-      total = rows.length;
+      Bar.appendChild(Csv);
     };
-
-    const rowOf = function (r) {
-      const tr = el('tr');
-      tr.row = r;
-      if (o.rowClass) { const c = o.rowClass(r); if (c) tr.className = c; }
-      for (const c of o.columns) {
-        const td = el('td', (c.num ? 'num' : '') + (c.wide ? ' wide' : '') + (c.cls ? ' ' + c.cls : ''));
-        const v = c.cell ? c.cell(r) : valueOf(c, r);
-        if (v && typeof v === 'object') td.appendChild(v);
-        else td.textContent = typeof v === 'number' ? v.toLocaleString(locale) : String(v === undefined || v === null ? '' : v);
-        tr.appendChild(td);
-      }
-      if (o.detail) {
-        tr.tabIndex = 0;
-        if (picked && keyOf(picked) === keyOf(r)) tr.classList.add('on');
-        tr.addEventListener('click', function (e) {
-          if (e.target.closest('a, button, input, select, label, textarea')) return;
-          pick(r, tr);
+    function AddHeading(Col) {
+      var Th = null;
+      var B = null;
+      var Cls = "";
+      Cls = "";
+      if (Boolean(Col["num"])) Cls = "num";
+      if (Boolean(Col["wide"])) Cls = Cls + " wide";
+      Th = $mod.C.el("th",Cls);
+      if (Boolean(Col["nosort"])) {
+        Th["textContent"] = Col["title"]}
+       else {
+        B = $mod.C.el("button","lv-sort",Col["title"]);
+        B["type"] = "button";
+        B.addEventListener("click",function (E) {
+          var Key = "";
+          Key = "" + Col["key"];
+          if ($mod.Same(Sort,Col["key"])) {
+            Sort = "-" + Key}
+           else if (Sort === ("-" + Key)) {
+            Sort = Key}
+           else if (Boolean(Col["num"]) || Boolean(Col["down"])) {
+            Sort = "-" + Key}
+           else Sort = Key;
+          Save();
+          Refresh();
         });
-        tr.addEventListener('keydown', function (e) {
-          const to = e.key === 'ArrowDown' ? tr.nextElementSibling : e.key === 'ArrowUp' ? tr.previousElementSibling : null;
-          if (to && to.row) { e.preventDefault(); to.focus(); pick(to.row, to, true); }
-          else if (e.key === 'ArrowUp' && find) { e.preventDefault(); find.focus(); }
-          else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(r, tr); }
-          else if (e.key === 'Escape') unpick();
-        });
-      }
-      return tr;
+        Th.appendChild(B);
+      };
+      Ths.push(Th);
+      Head.appendChild(Th);
     };
-    const draw = function () {
-      tbody.replaceChildren();
-      const list = o.remote ? shown : shown.slice(0, limit);
-      for (const r of list) tbody.appendChild(rowOf(r));
-      view.classList.toggle('lv-busy', loading && list.length > 0);
-      if (!list.length && (loading || trouble)) {
-        const tr = el('tr', trouble ? 'lv-none lv-trouble' : 'lv-none lv-loading'), td = el('td');
-        if (trouble) td.textContent = trouble;
-        else td.append(el('span', 'lv-spinner'), ' ' + t('Loading…'));
-        td.colSpan = o.columns.length;
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-        count.textContent = '';
-        more.hidden = true;
+    function MarkSort() {
+      var N = 0;
+      var Here = false;
+      var Down = false;
+      var Th = null;
+      Columns = O["columns"];
+      for (var $l = 0, $end = Columns.length - 1; $l <= $end; $l++) {
+        N = $l;
+        Here = $mod.Same(PlainSort(),Columns[N]["key"]);
+        Down = Sort.charAt(0) === "-";
+        Th = Ths[N];
+        $mod.Toggle(Th,"sorted",Here);
+        $mod.Toggle(Th,"down",Here && Down);
+        if (Here) {
+          if (Down) {
+            Th.setAttribute("aria-sort","descending")}
+           else Th.setAttribute("aria-sort","ascending");
+        } else Th.removeAttribute("aria-sort");
+      };
+    };
+    function Blank(V) {
+      var Result = false;
+      Result = $mod.Same(V,"") || (V == null) || $mod.IsUndef(V);
+      return Result;
+    };
+    function Compare(A, B) {
+      var Result = 0.0;
+      if ((typeof(A) === "number") && (typeof(B) === "number")) return rtl.getNumber(A) - rtl.getNumber(B);
+      if ((typeof(A) === "boolean") || (typeof(B) === "boolean")) return Number(A) - Number(B);
+      Result = String(A).localeCompare(String(B),$mod.Locale,pas.JS.New(["numeric",true,"sensitivity","base"]));
+      return Result;
+    };
+    function Local() {
+      var Words = "";
+      var List = null;
+      var N = 0;
+      var M = 0;
+      var R = undefined;
+      var V = undefined;
+      var Keep = false;
+      var Col = null;
+      var Dir = 0.0;
+      Words = Q.toLowerCase();
+      List = new Array();
+      for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+        N = $l;
+        R = Rows[N];
+        Keep = true;
+        for (var $l1 = 0, $end1 = Selects.length - 1; $l1 <= $end1; $l1++) {
+          M = $l1;
+          V = Selects[M]["s"]["value"];
+          if (Boolean(V) && !Boolean(Selects[M]["f"].test(R,V))) {
+            Keep = false;
+            break;
+          };
+        };
+        if (Keep && ((Words === "") || (TextOf(R).toLowerCase().indexOf(Words,0) >= 0))) List.push(R);
+      };
+      Col = null;
+      Columns = O["columns"];
+      for (var $l2 = 0, $end2 = Columns.length - 1; $l2 <= $end2; $l2++) {
+        N = $l2;
+        if (!Boolean(Columns[N]["nosort"]) && $mod.Same(Columns[N]["key"],PlainSort())) {
+          Col = Columns[N];
+          break;
+        };
+      };
+      if (Col !== null) {
+        if (Sort.charAt(0) === "-") {
+          Dir = -1}
+         else Dir = 1;
+        $mod.SortBy(List,function (X, Y) {
+          var Result = 0.0;
+          var A = undefined;
+          var B = undefined;
+          A = ValueOf(Col,X);
+          B = ValueOf(Col,Y);
+          if (Blank(A) || Blank(B)) return Number(Blank(A)) - Number(Blank(B));
+          Result = Dir * Compare(A,B);
+          return Result;
+        });
+      };
+      Shown = List;
+      Total = Rows.length;
+    };
+    function RowOf(R) {
+      var Result = null;
+      var Tr = null;
+      var Td = null;
+      var Col = null;
+      var Cls = "";
+      var V = undefined;
+      var N = 0;
+      Tr = $mod.C.el("tr");
+      Tr["row"] = R;
+      if (Boolean(O["rowClass"])) {
+        V = O.rowClass(R);
+        if (Boolean(V)) Tr["className"] = V;
+      };
+      Columns = O["columns"];
+      for (var $l = 0, $end = Columns.length - 1; $l <= $end; $l++) {
+        N = $l;
+        Col = Columns[N];
+        Cls = "";
+        if (Boolean(Col["num"])) Cls = "num";
+        if (Boolean(Col["wide"])) Cls = Cls + " wide";
+        if (Boolean(Col["cls"])) Cls = Cls + " " + ("" + Col["cls"]);
+        Td = $mod.C.el("td",Cls);
+        if (Boolean(Col["cell"])) {
+          V = Col.cell(R)}
+         else V = ValueOf(Col,R);
+        if (Boolean(V) && (typeof(V) === "object")) {
+          Td.appendChild(V)}
+         else if (typeof(V) === "number") {
+          Td.textContent = $mod.LocaleNumber(V)}
+         else if ($mod.IsUndef(V) || (V == null)) {
+          Td.textContent = String("")}
+         else Td.textContent = String(V);
+        Tr.appendChild(Td);
+      };
+      if (Boolean(O["detail"])) {
+        Tr.tabIndex = 0;
+        if (Boolean(Picked) && $mod.Same(KeyOf(Picked),KeyOf(R))) Tr.classList.add("on");
+        Tr.addEventListener("click",function (E) {
+          if (Boolean(E.target.closest("a, button, input, select, label, textarea"))) return;
+          Pick(R,Tr,false);
+        });
+        Tr.addEventListener("keydown",function (E) {
+          var Key = "";
+          var Goal = null;
+          Key = E.key;
+          if (Key === "ArrowDown") {
+            Goal = Tr.nextElementSibling}
+           else if (Key === "ArrowUp") {
+            Goal = Tr.previousElementSibling}
+           else Goal = null;
+          if (Boolean(Goal) && Boolean(Goal["row"])) {
+            E.preventDefault();
+            Goal.focus();
+            Pick(Goal["row"],Goal,true);
+          } else if ((Key === "ArrowUp") && Boolean(Find)) {
+            E.preventDefault();
+            Find.focus();
+          } else if ((Key === "Enter") || (Key === " ")) {
+            E.preventDefault();
+            Pick(R,Tr,false);
+          } else if (Key === "Escape") Unpick();
+        });
+      };
+      Result = Tr;
+      return Result;
+    };
+    function Draw() {
+      var List = null;
+      var Tr = null;
+      var Td = null;
+      var All = undefined;
+      var N = 0;
+      Tbody.replaceChildren();
+      if (Boolean(O["remote"])) {
+        List = Shown}
+       else List = Shown.slice(0,pas.System.Trunc(Limit));
+      for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+        N = $l;
+        Tbody.appendChild(RowOf(List[N]));
+      };
+      $mod.Toggle(View,"lv-busy",Loading && (List.length > 0));
+      Columns = O["columns"];
+      if ((List.length === 0) && (Loading || Boolean(Trouble))) {
+        if (Boolean(Trouble)) {
+          Tr = $mod.C.el("tr","lv-none lv-trouble")}
+         else Tr = $mod.C.el("tr","lv-none lv-loading");
+        Td = $mod.C.el("td");
+        if (Boolean(Trouble)) {
+          Td["textContent"] = Trouble}
+         else Td.append($mod.C.el("span","lv-spinner")," " + window.t("Loading…"));
+        Td["colSpan"] = Columns.length;
+        Tr.appendChild(Td);
+        Tbody.appendChild(Tr);
+        Count.textContent = "";
+        More.hidden = true;
         return;
-      }
-      if (!list.length) {
-        const tr = el('tr', 'lv-none'), td = el('td', '', !rows.length && !o.remote ? (o.empty || t('Nothing here yet.')) : t('Nothing matches.'));
-        td.colSpan = o.columns.length;
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-      }
-      const all = o.remote ? total : rows.length;
-      count.textContent = list.length < all ? t('%d of %d shown', list.length, all) : o.noun ? o.noun(all) : tn(all, '%d row', '%d rows');
-      if (loading) count.textContent += ' · ' + t('Loading…');
-      more.hidden = o.remote ? shown.length >= total : shown.length <= limit;
-    };
-    more.addEventListener('click', async function () {
-      if (!o.remote) { limit += step; draw(); return; }
-      const mine = asked, next = page + 1;
-      let a;
-      more.disabled = true;
-      more.textContent = t('Loading…');
-      try { a = await o.remote({q: q, filters: filters, sort: sort, page: next}); } catch (err) { failed(err); return; }
-      finally { more.disabled = false; more.textContent = t('Show more'); }
-      // a newer search or filter since: this page is not part of its list
-      if (mine !== asked) return;
-      page = next;
-      shown = shown.concat(a.rows);
-      total = a.total;
-      draw();
-    });
-    const refresh = async function () {
-      if (o.remote) {
-        page = 0;
-        const mine = ++asked;
-        let a;
-        // the rows there stay, dimmed, until the new ones come
-        loading = true;
-        trouble = '';
-        markSort();
-        draw();
-        try { a = await o.remote({q: q, filters: filters, sort: sort, page: 0}); }
-        catch (err) {
-          if (mine !== asked) return;
-          loading = false;
-          trouble = err.message || t('The list could not be read.');
-          shown = [];
-          draw();
-          return;
-        }
-        if (mine !== asked) return;
-        loading = false;
-        rows = shown = a.rows;
-        total = a.total;
-        // the picked row as the server has it now, its box drawn again
-        if (picked) {
-          const k = keyOf(picked), fresh = rows.find(function (r) { return keyOf(r) === k; });
-          // gone from the list (unhidden while hidden ones show): its box goes too
-          picked = fresh || null;
-          markSort(); draw(); showDetail();
-          return;
-        }
-      } else {
-        limit = step;
-        local();
-      }
-      markSort();
-      draw();
-    };
-
-    const showDetail = function () {
-      detail.replaceChildren();
-      if (!picked) { detail.hidden = true; return; }
-      detail.hidden = false;
-      const close = el('button', 'lv-close', '×');
-      close.type = 'button';
-      close.title = t('Close');
-      close.setAttribute('aria-label', t('Close'));
-      close.addEventListener('click', unpick);
-      const inner = el('div', 'lv-detail-body');
-      detail.append(close, inner);
-      o.detail(picked, inner, api);
-    };
-    const pick = function (r, tr, keepFocus) {
-      picked = r;
-      for (const x of tbody.children) x.classList.toggle('on', x === tr);
-      showDetail();
-      // the box in sight, the list where it was
-      if (!keepFocus && detail.getBoundingClientRect) {
-        const top = detail.getBoundingClientRect().top, sh = window.innerHeight || 800;
-        if (top > sh - 120) detail.scrollIntoView({block: 'nearest', behavior: 'smooth'});
-      }
-    };
-    const unpick = function () {
-      picked = null;
-      for (const x of tbody.children) x.classList.remove('on');
-      showDetail();
-    };
-    const api = {
-      // new rows, the picked one kept when it is still there
-      set: function (list) {
-        rows = list;
-        loading = false;
-        trouble = '';
-        if (picked) { const k = keyOf(picked); picked = rows.find(function (r) { return keyOf(r) === k; }) || null; }
-        fillSelects();
-        refresh();
-        showDetail();
-      },
-      reload: function () { return refresh(); },
-      // the rows are coming again (a list someone else fills), or could not be had
-      loading: function () { loading = true; trouble = ''; draw(); },
-      failed: function (words) { loading = false; trouble = words || t('The list could not be read.'); rows = shown = []; draw(); },
-      // a row changed in place: its line and its box drawn again
-      changed: function (r) {
-        for (const tr of tbody.children)
-          if (tr.row && keyOf(tr.row) === keyOf(r)) { const n = rowOf(r); if (tr.classList.contains('on')) n.classList.add('on'); tr.replaceWith(n); }
-        if (picked && keyOf(picked) === keyOf(r)) { picked = r; showDetail(); }
-      },
-      pick: function (match) {
-        const r = (o.remote ? shown : rows).find(match);
-        if (!r) return false;
-        picked = r;
-        draw();
-        showDetail();
-        return true;
-      },
-      // a thing that need not be a row, an address looked up, in the box
-      show: function (r) { picked = r; for (const x of tbody.children) x.classList.toggle('on', !!x.row && keyOf(x.row) === keyOf(r)); showDetail(); },
-      unpick: unpick,
-      search: function (words) { if (find) { find.value = words; q = words; refresh(); } },
-      rows: function () { return rows; },
-      element: view
-    };
-    fillSelects();
-    refresh();
-    return api;
-  }
-
-  // the guard's names for what it counts against an address
-  function strikeKinds() {
-    return Object.assign({'g-miss': t('missing pages'), 'g-password': t('wrong passwords or tokens'), 'g-admin': t('admin pages probed'),
-      signin: t('sign-in tries'), signup: t('sign-up tries'), token: t('token tries'), authtry: t('sign-in requests'),
-      wikilist: t('wiki lists'), search: t('searches')}, Extras.strikeKinds || {});
-  }
-
-  // Lift, Block now, Block for good, Allow: for an admin who manages blocks;
-  // after() runs once the server has it
-  // crawler: what a verified crawler at ip is ('GPTBot · OpenAI'), so a
-  // block of it is asked about first and sent with the server's say-so
-  function blockButtons(holder, ip, b, after, crawler) {
-    if (!S.adminCan || !S.adminCan('manage-blocks')) return;
-    // asked before anything else, so the warning comes ahead of the reason
-    const crawlerOk = function () {
-      return !crawler || confirm(t('%s is %s, checked against the addresses its company publishes. Blocking it keeps the site out of that company’s search and answers. Block it anyway?', ip, crawler));
-    };
-    const act = async function (what, reason) {
-      const blocking = what === 'block' || what === 'forgood';
-      try { await post('/api/blocks', {ip: ip, do: what, reason: reason || '', crawler_ok: blocking && crawler ? '1' : ''}); } catch (err) { failed(err); return; }
-      if (S.blocksChanged) S.blocksChanged();
-      if (after) after();
-    };
-    if (b && b.active) {
-      const lift = el('button', '', t('Lift'));
-      lift.type = 'button';
-      lift.addEventListener('click', function () { act('lift'); });
-      holder.appendChild(lift);
-    }
-    if (!b || !b.for_good) {
-      const forGood = el('button', 'bad', t('Block for good'));
-      forGood.type = 'button';
-      forGood.addEventListener('click', function () { if (crawler ? crawlerOk() : confirm(t('Block %s for good?', ip))) act('forgood'); });
-      holder.appendChild(forGood);
-    }
-    if (!b || !b.active) {
-      const block = el('button', '', t('Block now'));
-      block.type = 'button';
-      block.addEventListener('click', function () {
-        if (!crawlerOk()) return;
-        const reason = prompt(t('Why? (kept with the block)'), '');
-        if (reason !== null) act('block', reason);
-      });
-      holder.appendChild(block);
-    }
-    const allow = el('button', '', t('Allow'));
-    allow.type = 'button';
-    allow.title = t('Never block or limit this address again');
-    allow.addEventListener('click', function () { act('allow'); });
-    holder.appendChild(allow);
-  }
-
-  // Addresses shut out for probing or wrong passwords (src/core/siteguard.pas), a
-  // sub-tab of Visitors: the list, a filter over it, and each row's whole
-  // story in the address panel.  period() is the window the Visitors tab shows.
-  function adminBlocks(box, period) {
-    const tiles = el('div', 'tiles-admin');
-    box.replaceChildren(
-      el('p', 'hint', t('An address that asks for six missing pages in a minute, or gets ten passwords wrong in a quarter hour, is shut out for an hour; after three times, for thirty days. Published crawlers, checked against the addresses their companies publish, are never limited or blocked; a browser string that claims to be one of them from another address is refused. This network and the addresses in Settings, allowed_ips, are never blocked either. Allow adds an address there. With an AbuseIPDB key in Settings, an address that probes or guesses passwords here is looked up on AbuseIPDB and reported back, and blocked for good when its confidence of abuse is at the set level or above. Type an address to see its story, or to block it by hand.')),
-      tiles);
-    const stateOf = function (b) { return b.for_good ? 'forgood' : b.active ? 'blocked' : 'over'; };
-    const stateWords = {forgood: t('For good'), blocked: t('Blocked now'), over: t('Over')};
-    const list = listView(box, {
-      id: 'blocks', key: function (b) { return b.ip; }, sort: '-when', csv: 'blocked',
-      search: t('Filter, or type an address and press Enter to look it up'),
-      enter: function (ip) { if (ip) lookUpAddress(ip); },
-      columns: [
-        {key: 'ip', title: t('Address'), cell: function (b) { return el('b', 'lv-ip', b.ip); }},
-        {key: 'state', title: t('State'), value: function (b) { return stateWords[stateOf(b)]; },
-          cell: function (b) { const s = stateOf(b); return chip(stateWords[s], s === 'over' ? '' : 'bad'); }},
-        {key: 'reason', title: t('Why')},
-        {key: 'times', title: t('Times'), num: true},
-        {key: 'when', title: t('Last change'), down: true, wide: true, cell: function (b) { return dateTimeText(b.when); }},
-        {key: 'until', title: t('Until'), wide: true, cell: function (b) { return b.for_good ? t('for good') : dateTimeText(b.until); }}
-      ],
-      filters: [
-        {key: 'state', title: t('State'), all: t('Every state'), options: [['blocked', t('Blocked now')], ['forgood', t('For good')], ['over', t('Over')]],
-          test: function (b, v) { return v === 'forgood' ? b.for_good : v === 'blocked' ? b.active : !b.active; }},
-        {key: 'reason', title: t('Why'), all: t('Every reason'), test: function (b, v) { return b.reason === v; },
-          options: function (rows) {
-            const seen = new Map();
-            for (const b of rows) seen.set(b.reason, (seen.get(b.reason) || 0) + 1);
-            return Array.from(seen).sort(function (a, b) { return b[1] - a[1]; }).map(function (x) { return [x[0], x[0] + ' (' + x[1] + ')']; });
-          }}
-      ],
-      rowClass: function (b) { return b.active ? '' : 'done'; },
-      noun: function (n) { return tn(n, '%d address', '%d addresses'); }, empty: t('Nobody is blocked.'),
-      detail: function (b, holder) { addressPanel(b.ip, holder, period); }
-    });
-    const show = async function () {
-      const rows = await get('/api/blocks');
-      tiles.replaceChildren();
-      const active = rows.filter(function (b) { return b.active; }).length;
-      stat(tiles, active, t('Blocked right now'));
-      stat(tiles, rows.filter(function (b) { return b.for_good; }).length, t('For good'));
-      stat(tiles, rows.length - active, t('Over, still listed'));
-      list.set(rows);
-    };
-    S.blocksChanged = function () { show().catch(function () { }); };
-    show().catch(function (err) { list.failed(err.message); });
-  }
-
-  // Backups of the whole site: made, checked, downloaded, uploaded and
-  // restored here (src/core/sitebackup.pas).  The page says plainly whether a
-  // fresh, whole backup exists, here and on the other machine.
-  function adminBackup(box) {
-    let timer = null;
-    const hours = function (iso) { return iso ? (Date.now() - new Date(iso)) / 36e5 : Infinity; };
-    const show = async function () {
-      let data;
-      try { data = await get('/api/admin/backup'); } catch (err) { failed(err); return; }
-      box.replaceChildren();
-      box.appendChild(el('p', 'hint', t('A backup is one zip file with every table of the database, the data folder with members’ files, and the program’s config file. The pictures are large: the wiki’s hold what members uploaded, so they belong in a whole backup. The access logs are only history. Each goes in when asked. Backups are kept on the server in %s.', data.folder)));
-      // what needs saying first
-      const list = (data.backups || []).slice().sort(function (a, b) { return a.when < b.when ? 1 : -1; });
-      const newest = list.length ? list[0] : null;
-      const outside = data.outside && typeof data.outside === 'object' ? data.outside : null;
-      const worries = [];
-      if (!newest) worries.push(t('No backup has been made here yet.'));
-      else if (hours(newest.when) > 36) worries.push(t('The newest backup here is %s old.', ago(newest.when)));
-      if (newest && newest.about && newest.about.whole === false) worries.push(t('The newest backup here did not pass its check: %s', newest.about.note || ''));
-      if (!outside) worries.push(t('No copy on another machine has been recorded. A script that copies backups elsewhere writes backup-status.json beside the program.'));
-      else if (outside.ok === false) worries.push(t('The last copy to another machine failed (%s).', outside.failed || t('see its log')));
-      else if (hours(outside.when) > 36) worries.push(t('The last copy to another machine is %s old.', ago(outside.when)));
-      if (data.free_bytes >= 0 && data.free_bytes < 2 * 1024 * 1024 * 1024) worries.push(t('Only %s is free on the disk that holds the backups.', sizeText(data.free_bytes)));
-      if (worries.length) {
-        const w = el('div', 'notice bad');
-        for (const line of worries) w.appendChild(el('div', '', line));
-        box.appendChild(w);
-      } else box.appendChild(el('p', 'notice good', t('A whole backup from the last day and a half is here, and the copy on the other machine is fresh.')));
-      // the job running, or how the last one ended
-      if (data.busy) {
-        const line = el('p', 'notice working');
-        const word = data.doing === 'restore' ? t('Restoring…') : data.doing === 'check' ? t('Checking…') : t('Making a backup…');
-        line.append(el('b', '', word), ' ', el('span', '', data.step || ''), ' ', el('span', 'dim', t('started %s by %s', dateTimeText(data.started), data.by || '')));
-        box.appendChild(line);
-        if (!timer) timer = setInterval(show, 2000);
-      } else {
-        if (timer) { clearInterval(timer); timer = null; }
-        if (data.error) box.appendChild(el('p', 'notice bad', t('The last job failed: %s', data.error)));
-        else if (data.last) box.appendChild(el('p', 'notice good', data.last));
-      }
-      const far = el('div', 'backup-outside');
-      far.appendChild(el('h3', '', t('Copy on another machine')));
-      if (!outside) far.appendChild(el('p', 'dim', t('None recorded.')));
-      else {
-        const bits = [dateTimeText(outside.when), outside.ok ? t('complete') : t('FAILED') + (outside.failed ? ' (' + outside.failed + ')' : '')];
-        if (outside.database_bytes) bits.push(t('database %s', sizeText(outside.database_bytes)));
-        if (outside.config_bytes) bits.push(t('config and files %s', sizeText(outside.config_bytes)));
-        if (outside.images_bytes) bits.push(t('pictures %s', sizeText(outside.images_bytes)));
-        if (outside.kept) bits.push(tn(outside.kept, '%d dump kept', '%d dumps kept'));
-        far.appendChild(el('p', outside.ok ? '' : 'bad', bits.join(' · ')));
-        if (outside.where) far.appendChild(el('p', 'dim', outside.where));
-      }
-      box.appendChild(far);
-      const make = el('form', 'backup-make');
-      const tickOf = function (name, words) {
-        const label = el('label');
-        const tick = el('input');
-        tick.type = 'checkbox';
-        tick.name = name;
-        tick.value = '1';
-        label.append(tick, ' ', words);
-        return {label: label, tick: tick};
       };
-      const pictures = tickOf('pictures', t('Include the pictures (%s): slow and large, but whole', data.pictures || t('none registered')));
-      pictures.tick.checked = true;
-      const logs = tickOf('logs', t('Include the access logs (the last %d days)', data.log_days || 0));
-      const go = el('button', '', t('Make a backup now'));
-      go.disabled = !!data.busy;
-      make.append(go, pictures.label, logs.label);
-      make.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        try { toast(await post('/api/admin/backup/make', {pictures: pictures.tick.checked ? '1' : '0', logs: logs.tick.checked ? '1' : '0'})); show(); } catch (err) { failed(err); }
-      });
-      box.appendChild(make);
-      // what is kept
-      box.appendChild(el('h3', '', tn(list.length, '%d backup kept here', '%d backups kept here') + ' · ' + t('the newest %d made here stay', data.keep)));
-      if (!list.length) box.appendChild(el('p', 'dim', t('No backups yet.')));
-      for (const b of list) {
-        const row = el('div', 'person backup-row');
-        const name = el('a', 'backup-name', b.name);
-        name.href = '/api/admin/backup/file/' + encodeURIComponent(b.name);
-        name.setAttribute('download', b.name);
-        row.append(name, el('span', 'dim', sizeText(b.bytes) + ' · ' + dateTimeText(b.when) + (b.uploaded ? ' · ' + t('uploaded') : '')));
-        // what it holds, from its manifest; and whether it was proven whole
-        const about = b.about || {}, m = about.manifest;
-        const holds = [];
-        if (m) {
-          if (m.site) holds.push(m.site);
-          if (m.tables) holds.push(tn(m.tables, '%d table', '%d tables') + ', ' + tn(m.rows || 0, '%d row', '%d rows'));
-          if (m.files) holds.push(tn(m.files, '%d file', '%d files'));
-          holds.push(m.pictures ? t('with pictures') : t('no pictures'));
-          holds.push(m.logs ? t('with access logs') : t('no access logs'));
-        } else if (about.manifest === null) holds.push(t('no manifest inside: an early backup or not one made here'));
-        const detail = el('div', 'backup-holds dim', holds.join(' · '));
-        if (m && m.counts) {
-          const more = el('a', 'small-link', t('Tables'));
-          more.href = '#';
-          const tableList = el('div', 'backup-tables dim');
-          tableList.hidden = true;
-          const names = Object.keys(m.counts).sort();
-          tableList.textContent = names.map(function (n) { return n + ' ' + m.counts[n]; }).join(' · ');
-          more.addEventListener('click', function (e) { e.preventDefault(); tableList.hidden = !tableList.hidden; });
-          detail.append(' ', more);
-          row.append(detail, tableList);
-        } else row.appendChild(detail);
-        if (about.checked) row.appendChild(el('div', about.whole ? 'backup-check good' : 'backup-check bad', (about.whole ? t('Checked %s: whole.', dateTimeText(about.checked)) : t('Checked %s: NOT whole.', dateTimeText(about.checked))) + ' ' + (about.note || '')));
-        else row.appendChild(el('div', 'backup-check warn', t('Not checked yet.')));
-        const down = el('a', 'small-link', t('Download'));
-        down.href = name.href;
-        down.setAttribute('download', b.name);
-        row.appendChild(down);
-        const check = el('button', 'small-link', t('Check'));
-        check.type = 'button';
-        check.disabled = !!data.busy;
-        check.addEventListener('click', async function () {
-          try { toast(await post('/api/admin/backup/check', {name: b.name})); show(); } catch (err) { failed(err); }
-        });
-        row.appendChild(check);
-        const restore = el('button', 'small-link', t('Restore…'));
-        restore.type = 'button';
-        restore.disabled = !!data.busy;
-        restore.addEventListener('click', async function () {
-          const word = prompt(t('Restoring %s replaces every table with the backup’s (a table the backup does not have is emptied) and writes its files over the data folder and the pictures; files added since stay. Everyone else sees a "back in a minute" page while it runs, and a restart afterwards is wise. Type RESTORE to go ahead.', b.name));
-          if (word === null) return;
-          try { toast(await post('/api/admin/backup/restore', {name: b.name, confirm: word.trim()})); show(); } catch (err) { failed(err); }
-        });
-        row.appendChild(restore);
-        const del = el('button', 'small-link', t('Delete'));
-        del.type = 'button';
-        del.addEventListener('click', async function () {
-          if (!confirm(t('Delete %s?', b.name))) return;
-          try { toast(await post('/api/admin/backup/delete', {name: b.name})); show(); } catch (err) { failed(err); }
-        });
-        row.appendChild(del);
-        box.appendChild(row);
-      }
-      // one from elsewhere
-      const up = el('form', 'backup-upload');
-      const pick = el('input');
-      pick.type = 'file';
-      pick.accept = '.zip,application/zip';
-      pick.required = true;
-      const send = el('button', '', t('Upload a backup'));
-      const progress = el('span', 'dim');
-      progress.setAttribute('role', 'status');
-      up.append(el('label', '', t('A backup file from another day or another server, of any size:')), pick, send, progress);
-      // in pieces of 8 MB, each sent again when it does not arrive; however
-      // large the file, the server never holds more than one piece
-      up.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        if (!pick.files.length) return;
-        const file = pick.files[0], piece = 8 * 1024 * 1024;
-        const where = '/api/admin/backup/chunk?name=' + enc(file.name);
-        send.disabled = true;
-        let offset = 0, tries = 0;
-        try {
-          for (;;) {
-            const last = offset + piece >= file.size;
-            const url = where + '&offset=' + offset + (last ? '&size=' + file.size : '');
-            let answer;
-            try {
-              const r = await fetch(url, {method: 'POST', body: file.slice(offset, offset + piece), headers: {'Content-Type': 'application/octet-stream'}});
-              const text = await r.text();
-              if (!r.ok) throw new Error(text);
-              answer = JSON.parse(text);
-            } catch (err) {
-              if (++tries > 4) throw err;
-              await new Promise(function (go) { setTimeout(go, 2000 * tries); });
-              continue;
-            }
-            tries = 0;
-            if (answer.done) { progress.textContent = ''; toast(t('Kept as %s.', answer.name)); break; }
-            offset = answer.have;
-            progress.textContent = t('Sending: %s', Math.floor(100 * offset / Math.max(1, file.size)) + '%');
-          }
-          show();
-        } catch (err) { progress.textContent = ''; failed(err); } finally { send.disabled = false; }
-      });
-      box.appendChild(up);
-      // moving the site
-      const move = el('details', 'backup-move');
-      move.appendChild(el('summary', '', t('Moving the site to another machine')));
-      const steps = el('ol');
-      for (const line of [
-        t('Make a backup here with the pictures, and download it (or copy it from the folder above).'),
-        t('On the new machine: install MariaDB and the client library, make an empty database, and put the program, its static, templates and lang folders and a config file naming that database in one folder, with a data folder the service’s user owns.'),
-        t('With the service stopped, as that user, run the program with its config file and --restore and the path of the backup file. It builds the tables, loads every table, puts the data folder and the pictures back (where it may write), and leaves the old config file beside the backups to compare.'),
-        t('Start the service. The site is as it was; members stay signed in from the old sessions only if they sign in again.')
-      ]) steps.appendChild(el('li', '', line));
-      move.appendChild(steps);
-      move.appendChild(el('p', 'dim', 'exedra site.ini --restore /path/site-20260101-000000.zip · exedra site.ini --backup --pictures --logs'));
-      box.appendChild(move);
+      if (List.length === 0) {
+        Tr = $mod.C.el("tr","lv-none");
+        if ((Rows.length === 0) && !Boolean(O["remote"])) {
+          Td = $mod.C.el("td","",$mod.Either(O["empty"],window.t("Nothing here yet.")))}
+         else Td = $mod.C.el("td","",window.t("Nothing matches."));
+        Td["colSpan"] = Columns.length;
+        Tr.appendChild(Td);
+        Tbody.appendChild(Tr);
+      };
+      if (Boolean(O["remote"])) {
+        All = Total}
+       else All = Rows.length;
+      if (List.length < Number(All)) {
+        Count["textContent"] = window.t("%d of %d shown",List.length,All)}
+       else if (Boolean(O["noun"])) {
+        Count["textContent"] = O.noun(All)}
+       else Count["textContent"] = window.tn(All,"%d row","%d rows");
+      if (Loading) Count.textContent = Count.textContent + " · " + window.t("Loading…");
+      if (Boolean(O["remote"])) {
+        More.hidden = Shown.length >= Number(Total)}
+       else More.hidden = Shown.length <= Limit;
     };
-    show();
-  }
-
-  // Bug reports as a mail client lists mail: the newest first, unread in
-  // bold, a state each and a note for why; the one picked shown whole below.
-  function adminReports(box) {
-    const states = [['new', t('New')], ['read', t('Read')], ['needs-info', t('Needs more information')], ['resolved', t('Resolved')], ['closed', t('Closed')], ['spam', t('Spam')]];
-    const stateName = function (s) { const x = states.find(function (p) { return p[0] === s; }); return x ? x[1] : s; };
-    let rows = [];
-    const openCount = function () { if (S.adminCount) S.adminCount('Reports', rows.filter(function (r) { return !r.done; }).length); };
-    const save = async function (r, fields, view) {
-      try { await post('/api/bugs', Object.assign({id: r.id}, fields)); } catch (err) { failed(err); return false; }
-      if (fields.state) { r.state = fields.state; r.done = fields.state === 'resolved' || fields.state === 'closed' || fields.state === 'spam'; }
-      if (fields.note !== undefined) r.note = fields.note;
-      view.changed(r);
-      openCount();
-      return true;
-    };
-    const detail = function (r, holder, view) {
-      const head = el('div', 'lv-detail-head');
-      head.append(el('b', '', r.name), el('span', 'dim', dateTimeText(r.at)));
-      holder.appendChild(head);
-      // the page the reporter named: a link only when it is a path of this site
-      const local = /^\/(?!\/)/.test(r.page || '');
-      const page = el(local ? 'a' : 'span', '', r.page);
-      if (local) { page.href = r.page; page.target = '_blank'; page.rel = 'noopener'; }
-      const ip = el('span');
-      if (r.ip) {
-        ip.append(r.ip + ' ');
-        const look = el('button', 'small-link', t('Look up'));
-        look.type = 'button';
-        look.addEventListener('click', function () { lookUpAddress(r.ip); });
-        ip.appendChild(look);
-      }
-      facts(holder, [[t('Page'), r.page ? page : ''], [t('Address'), r.ip ? ip : ''], [t('Changed'), r.updated ? dateTimeText(r.updated) : '']]);
-      // the state, as a row of buttons: the one it is in pressed
-      const row = el('div', 'lv-actions');
-      row.appendChild(el('span', 'dim', t('State') + ':'));
-      for (const st of states) {
-        const b = el('button', r.state === st[0] ? 'on' : '', st[1]);
-        b.type = 'button';
-        b.setAttribute('aria-pressed', r.state === st[0] ? 'true' : 'false');
-        b.addEventListener('click', function () { if (r.state !== st[0]) save(r, {state: st[0]}, view); });
-        row.appendChild(b);
-      }
-      holder.appendChild(row);
-      holder.appendChild(el('div', 'bugtext', r.text));
-      if (r.info) {
-        const more = el('details', 'buginfo-box');
-        more.appendChild(el('summary', '', t('What the browser sent with it')));
-        more.appendChild(el('pre', 'buginfo', r.info));
-        holder.appendChild(more);
-      }
-      const noteForm = el('form', 'lv-note');
-      const note = el('textarea');
-      note.value = r.note || '';
-      note.rows = 2;
-      note.placeholder = t('A note for the admins: what was done, or why not');
-      note.setAttribute('aria-label', t('Note'));
-      const keep = el('button', '', t('Save the note'));
-      noteForm.append(note, keep);
-      noteForm.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        if (await save(r, {note: note.value}, view)) toast(t('Saved.'));
-      });
-      holder.appendChild(noteForm);
-      // opened is read, as in a mail client
-      if (r.state === 'new') save(r, {state: 'read'}, view);
-    };
-    const view = listView(box, {
-      id: 'reports', key: function (r) { return String(r.id); }, sort: '-at', csv: 'reports',
-      search: t('Search the reports'),
-      columns: [
-        {key: 'at', title: t('Sent'), down: true, cell: function (r) { const s = el('span', '', ago(r.at)); s.title = dateTimeText(r.at); return s; }},
-        {key: 'name', title: t('From')},
-        {key: 'text', title: t('Report'), cls: 'lv-text', cell: function (r) { return r.text.replace(/\s+/g, ' ').slice(0, 120); }},
-        {key: 'page', title: t('Page'), wide: true, cls: 'lv-text', cell: function (r) { return r.page.replace(/^https?:\/\/[^/]+/, ''); }},
-        {key: 'state', title: t('State'), value: function (r) { return stateName(r.state); },
-          cell: function (r) { return chip(stateName(r.state), r.state === 'new' ? 'new' : r.done ? '' : 'open'); }}
-      ],
-      filters: [{key: 'state', title: t('State'), all: t('Every state'), value: 'open',
-        options: [['open', t('Not resolved or closed')]].concat(states),
-        test: function (r, v) { return v === 'open' ? !r.done : r.state === v; }}],
-      rowClass: function (r) { return (r.state === 'new' ? 'unread' : '') + (r.done ? ' done' : ''); },
-      noun: function (n) { return tn(n, '%d report', '%d reports'); }, empty: t('No reports yet.'),
-      detail: detail
-    });
-    get('/api/bugs').then(function (list) {
-      rows = list.map(function (r) { if (!r.state) r.state = r.done ? 'resolved' : 'new'; return r; });
-      view.set(rows);
-      openCount();
-    }).catch(function (err) { view.failed(err.message); });
-  }
-
-  // the part of the site a path is in, by its first word: /wiki, /forum, /p
-  function sectionOf(path) {
-    const first = ((path || '/').split('?')[0].split('/')[1] || '').split('-')[0];
-    return first ? '/' + first : '/';
-  }
-  function sectionOptions(paths) {
-    const seen = new Map();
-    for (const p of paths) { const s = sectionOf(p); seen.set(s, (seen.get(s) || 0) + 1); }
-    return Array.from(seen).sort(function (a, b) { return b[1] - a[1]; }).map(function (x) { return [x[0], x[0] + ' (' + x[1] + ')']; });
-  }
-  // the address panel, from anywhere an address shows: under Visitors, Address
-  function lookUpAddress(ip) {
-    // the Visitors tab in front (built now if it never was), then its panel
-    if (S.adminTab) S.adminTab('Visitors');
-    if (S.showAddress) S.showAddress(ip);
-  }
-  // an address as a button that opens its panel; marked when it is of concern
-  function addressCell(ip, flagged) {
-    const b = el('button', 'lv-ip lv-link', ip);
-    b.type = 'button';
-    b.title = t('Everything about this address');
-    b.addEventListener('click', function () { lookUpAddress(ip); });
-    if (!flagged) return b;
-    const s = el('span', 'lv-flag');
-    const mark = chip('!', 'bad');
-    mark.title = t('Of concern: see the Of concern tab');
-    s.append(b, ' ', mark);
-    return s;
-  }
-
-  // when, for the visitors' lists: the time for today, the date and time before
-  function stamp(at) {
-    const d = new Date(at);
-    if (isNaN(d)) return at || '';
-    return d.toDateString() === new Date().toDateString() ? clock(at) : dateTimeText(at);
-  }
-
-  // a link out of the site, for a referer
-  function outLink(url) {
-    // what a visitor's browser said it came from: a link only when it is a web address
-    if (!/^https?:\/\//i.test(url)) return el('span', 'visit-path', url);
-    const a = el('a', 'visit-path', url);
-    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-    return a;
-  }
-  function lookButton(ip) {
-    const b = el('button', '', t('Everything about this address'));
-    b.type = 'button';
-    b.title = t('Its whole story in the period, the guard\'s facts included, under Address');
-    b.addEventListener('click', function () { lookUpAddress(ip); });
-    return b;
-  }
-
-  // a reason the report gives against an address, in words
-  function reasonWords(x) {
-    const n = x.n || 0;
-    switch (x.kind) {
-      case 'rate': return tn(n, '%d request in one minute', '%d requests in one minute') + (x.text ? ' (' + stamp(x.text) + ')' : '');
-      case 'requests': return tn(n, '%d request', '%d requests');
-      case 'browser-crawl': return t('a browser that read %s pages', n.toLocaleString(locale));
-      case 'agents': return tn(n, '%d browser string', '%d browser strings');
-      case 'pretender': return t('names %s’s crawler from outside its addresses', x.text);
-      case 'fake': return t('claims to be %s; its DNS says no', x.text);
-      case 'missing': return tn(n, '%d page that is not here', '%d pages that are not here');
-      case 'probes': return tn(n, '%d scanner path probed', '%d scanner paths probed');
-      case 'refused': return tn(n, 'turned away %d time', 'turned away %d times');
-      case 'errors': return tn(n, '%d server error', '%d server errors');
-      case 'members': return tn(n, 'signed in as %d member', 'signed in as %d members');
-    }
-    return x.kind;
-  }
-  function reasonKinds() {
-    return {rate: t('Pace'), requests: t('Many requests'), 'browser-crawl': t('A browser crawling'), agents: t('Browser strings'),
-      pretender: t('Pretending to be a crawler'), fake: t('Failed its DNS check'), missing: t('Missing pages'), probes: t('Probing'),
-      refused: t('Turned away'), errors: t('Server errors'), members: t('Many members')};
-  }
-  // a status code as a small mark: errors stand out, a line from before the codes shows none
-  function statusCell(code) {
-    if (!code) return el('span', 'dim', '–');
-    return chip(String(code), code >= 500 ? 'bad' : code >= 400 ? 'open' : '');
-  }
-  function msCell(ms) {
-    if (ms === undefined || ms === null) return '';
-    return el('span', ms >= 2000 ? 'bot-bad' : 'dim', ms >= 1000 ? (ms / 1000).toFixed(1) + ' s' : ms + ' ms');
-  }
-
-  // the window in bars, people apart from bots apart from errors, each row to
-  // its own scale: bots outnumber people a hundred to one here, and one scale
-  // would flatten the people to nothing
-  function timelineChart(box, tl, compact) {
-    if (!tl || !tl.pages || !tl.pages.length) return;
-    const step = tl.step, start = new Date(tl.start).getTime(), n = tl.pages.length;
-    const iso = function (ms) { return new Date(ms).toISOString(); };
-    const when = function (i) {
-      const a = start + i * step * 1000, b = a + step * 1000 - 1000;
-      if (step >= 86400) return dateText(iso(a).slice(0, 10));
-      return (step >= 7200 ? dateTimeText(iso(a)) : stamp(iso(a))) + ' – ' + clock(iso(b));
-    };
-    const stepWords = step < 3600 ? tn(step / 60, 'a bar a minute', 'a bar every %d minutes') :
-      step < 86400 ? tn(step / 3600, 'a bar an hour', 'a bar every %d hours') : tn(step / 86400, 'a bar a day', 'a bar every %d days');
-    const rows = [
-      {title: t('Pages people read, and the rest they asked for'), series: [[tl.pages, 'tl-pages', t('pages')], [tl.other, 'tl-other', t('other requests')]]},
-      {title: t('Bot requests'), series: [[tl.bots, 'tl-bots', t('bot requests')]]},
-      {title: t('Refused, not here, or failed'), series: [[tl.errors, 'tl-errors', t('errors')]]}
-    ];
-    const wrap = el('div', 'timeline' + (compact ? ' compact' : ''));
-    for (const row of rows) {
-      if (!row.series.some(function (ser) { return ser[0] && ser[0].some(Boolean); })) continue;
-      let most = 1, total = 0;
-      for (let i = 0; i < n; i++) {
-        let sum = 0;
-        for (const ser of row.series) sum += (ser[0] || [])[i] || 0;
-        if (sum > most) most = sum;
-        total += sum;
-      }
-      const head = el('div', 'tl-head');
-      head.append(el('span', '', row.title), el('span', 'num', total.toLocaleString(locale)));
-      wrap.appendChild(head);
-      const bars = el('div', 'days tl-row');
-      for (let i = 0; i < n; i++) {
-        const col = el('b');
-        const words = [];
-        for (const ser of row.series) {
-          const v = (ser[0] || [])[i] || 0;
-          const seg = el('i', ser[1]);
-          seg.style.height = Math.round(60 * v / most) + 'px';
-          col.appendChild(seg);
-          words.push(v.toLocaleString(locale) + ' ' + ser[2]);
-        }
-        col.title = when(i) + ': ' + words.join(', ');
-        bars.appendChild(col);
-      }
-      wrap.appendChild(bars);
-    }
-    const cap = el('div', 'days-caption');
-    cap.append(el('span', '', dateTimeText(tl.start)), el('span', '', stepWords), el('span', '', dateTimeText(iso(start + n * step * 1000 - 1000))));
-    wrap.appendChild(cap);
-    box.appendChild(wrap);
-  }
-
-  // One address's whole story in the window (/api/admin/visitors/address):
-  // what it is, how it behaved, the guard's facts and buttons, its browsers,
-  // members, pages, statuses, timeline and the last of its requests.
-  function addressPanel(ip, holder, period) {
-    // period: the window, or a function giving the window shown now (a
-    // button pressed after the picker changed asks for the new one)
-    const win = typeof period === 'function' ? period() : period;
-    const again = function () { addressPanel(ip, holder, period); };
-    waiting(holder, t('Reading the log…'));
-    // an admin who manages blocks but may not see visitors still gets the guard's facts
-    const guardOnly = function (err) {
-      if (!S.adminCan || S.adminCan('view-visitors') || !S.adminCan('manage-blocks')) throw err;
-      return get('/api/blocks/why?ip=' + enc(ip)).then(function (g) { return {ip: g.ip, address: {requests: 0, reasons: []}, guard: g}; });
-    };
-    get('/api/admin/visitors/address?ip=' + enc(ip) + '&from=' + enc(win.from) + '&to=' + enc(win.to)).catch(guardOnly).then(function (r) {
-      holder.replaceChildren();
-      const a = r.address, g = r.guard;
-      const head = el('div', 'lv-detail-head');
-      head.appendChild(el('b', '', r.ip));
-      if (g && g.host) head.appendChild(el('span', 'dim', g.host));
-      // what the rest of the internet knows about it, in a new tab; noreferrer
-      // so those sites are not told about this admin page
-      const look = el('span', 'ip-lookups');
-      for (const x of [['AbuseIPDB', 'https://www.abuseipdb.com/check/', t('Abuse reports about this address')],
-                       ['GreyNoise', 'https://viz.greynoise.io/ip/', t('Whether it scans the whole internet')],
-                       ['ipinfo', 'https://ipinfo.io/', t('Who the address belongs to')]]) {
-        const a2 = link(x[1] + enc(r.ip), '', x[0]);
-        a2.target = '_blank';
-        a2.rel = 'noopener noreferrer';
-        a2.title = x[2];
-        look.appendChild(a2);
-      }
-      head.appendChild(look);
-      const crawlerText = a.crawler ? a.crawler + (a.company ? ' · ' + a.company : '')
-        : g && g.crawler_name ? g.crawler_name + (g.company ? ' · ' + g.company : '')
-        : g && g.crawler ? t('a search engine’s crawler') : '';
-      if (crawlerText) head.appendChild(chip(crawlerText, 'admin'));
-      else if (a.bot) head.appendChild(chip(a.bot, ''));
-      if (g && g.local) head.appendChild(chip(t('This network'), 'admin'));
-      else if (g && g.allowed) head.appendChild(chip(t('Allowed'), 'admin'));
-      if (g && g.block && g.block.active) head.appendChild(chip(g.block.for_good ? t('Blocked for good') : t('Blocked now'), 'bad'));
-      if (a.score > 0) head.appendChild(chip(t('Of concern'), 'open'));
-      holder.appendChild(head);
-      if (!a.requests) holder.appendChild(el('p', 'dim', S.adminCan && S.adminCan('view-visitors') ? t('Nothing from this address in the period.') : t('The log is for those who may view visitors.')));
-      else {
-        const tiles = el('div', 'tiles-admin');
-        stat(tiles, a.requests, t('Requests'), t('%s to %s', stamp(a.first), stamp(a.last)));
-        stat(tiles, a.pages, t('Pages'));
-        if (a.polls) stat(tiles, a.polls, t('Open tab checks'), t('a tab left open, asking what is new'));
-        stat(tiles, a.peak, t('Busiest minute'), a.peak_at ? stamp(a.peak_at) : '', a.peak >= 120 && !a.crawler ? 'warn' : '');
-        stat(tiles, a.agents, t('Browser strings'), '', a.agents >= 5 && !a.crawler ? 'warn' : '');
-        stat(tiles, a.missing, t('Not here (404)'), a.probes ? tn(a.probes, '%d scanner path', '%d scanner paths') : '', a.missing >= 30 || a.probes ? 'warn' : '');
-        stat(tiles, a.refused, t('Turned away'), a.errors ? tn(a.errors, '%d server error', '%d server errors') : '', a.refused >= 20 ? 'warn' : '');
-        holder.appendChild(tiles);
-      }
-      if (a.reasons && a.reasons.length) {
-        const p = el('p', 'lv-reasons');
-        for (const x of a.reasons) p.appendChild(chip(reasonWords(x), 'open'));
-        holder.appendChild(p);
-      }
-      // the guard's facts, and what an admin may do about the address
-      const list = el('ul', 'block-facts');
-      if (!g) list.appendChild(el('li', 'dim', t('The guard’s facts could not be read.')));
-      else {
-        const kinds = strikeKinds();
-        if (g.local) list.appendChild(el('li', 'good', t('This network: never blocked or limited.')));
-        else if (g.allowed) list.appendChild(el('li', 'good', t('On the allowed list (Settings, allowed_ips): never blocked or limited.')));
-        if (g.crawler) list.appendChild(el('li', 'good', t('A published crawler, by the addresses its company publishes or its name pointing back to the address: never limited or blocked by the guard.')));
-        if (g.block && g.block.active) {
-          list.appendChild(el('li', 'bad', g.block.for_good ? t('Blocked for good: %s (%s).', g.block.reason, dateTimeText(g.block.when))
-            : t('Blocked until %s: %s. Blocked %d times so far.', dateTimeText(g.block.until), g.block.reason, g.block.times)));
-        } else if (g.block) {
-          list.appendChild(el('li', '', t('Not blocked now. Last block: %s, over since %s; blocked %d times so far.', g.block.reason, dateTimeText(g.block.until), g.block.times)));
-        } else {
-          list.appendChild(el('li', '', t('Not blocked, and never has been.')));
-        }
-        // what AbuseIPDB said when the site looked it up (unit SiteAbuse)
-        if (g.abuse) {
-          const ab = g.abuse;
-          const words = t('AbuseIPDB: %d%% confidence of abuse, %s from other sites (looked up %s).', ab.score,
-            tn(ab.reports, '%d report', '%d reports'), dateTimeText(ab.checked)) +
-            (ab.usage || ab.isp ? ' ' + [ab.usage, ab.isp, ab.country].filter(Boolean).join(', ') + '.' : '') +
-            (ab.reported ? ' ' + t('We reported it %s.', dateTimeText(ab.reported)) : '');
-          list.appendChild(el('li', ab.score >= 75 ? 'bad' : '', words));
-        }
-        if (g.strikes && g.strikes.length) {
-          const li = el('li', '', t('In the last day:') + ' ');
-          li.appendChild(el('span', '', g.strikes.map(function (x) { return (kinds[x.kind] || x.kind) + ' × ' + x.count; }).join(', ')));
-          list.appendChild(li);
-        } else {
-          list.appendChild(el('li', 'dim', t('Nothing counted against it in the last day.')));
-        }
-      }
-      holder.appendChild(list);
-      const acts = el('div', 'lv-actions');
-      blockButtons(acts, r.ip, g && g.block, again, crawlerText);
-      if (acts.childNodes.length) holder.appendChild(acts);
-      if (!a.requests) return;
-      timelineChart(holder, r.timeline, true);
-      const two = el('div', 'visit-two');
-      const left = el('div'), right = el('div');
-      two.append(left, right);
-      holder.appendChild(two);
-      left.appendChild(el('h3', '', r.paths_count > r.paths.length ? t('What it asked for most (%s paths in all)', r.paths_count.toLocaleString(locale)) : t('What it asked for')));
-      bars(left, r.paths.slice(0, 14).map(function (x) { let name = x.path; try { name = decodeURIComponent(name); } catch (e) { } return {name: name || '/', value: x.count}; }),
-        function (n) { return tn(n, '%d request', '%d requests'); });
-      right.appendChild(el('h3', '', t('How it was answered')));
-      const codes = Object.keys(r.statuses || {}).sort(function (x, y) { return r.statuses[y] - r.statuses[x]; });
-      bars(right, codes.map(function (c) { return {name: c === '0' ? t('before the codes were logged') : c, value: r.statuses[c], other: c === '0' || c < '400'}; }),
-        function (n) { return tn(n, '%d request', '%d requests'); });
-      right.appendChild(el('h3', '', t('Parts of the site')));
-      const parts = Object.keys(r.parts || {}).sort(function (x, y) { return r.parts[y] - r.parts[x]; });
-      bars(right, parts.map(function (k) { return {name: partLabel(k), value: r.parts[k]}; }), function (n) { return tn(n, '%d request', '%d requests'); });
-      if (r.referers && r.referers.length) {
-        right.appendChild(el('h3', '', t('Came by links from')));
-        bars(right, r.referers.slice(0, 8).map(function (x) { return {name: x.host, value: x.requests}; }), function (n) { return tn(n, '%d request', '%d requests'); });
-      }
-      holder.appendChild(el('h3', '', t('Browser strings it used')));
-      listView(holder, {
-        id: 'v-addr-agents', key: function (x) { return x.agent; }, sort: '-requests', search: false, rows: r.agents,
-        columns: [
-          {key: 'browser', title: t('Browser or bot'), value: function (x) { return x.bot || browserOf(x.agent); },
-            cell: function (x) { const s2 = el('span', '', x.bot || browserOf(x.agent)); if (x.claims && !a.crawler) { s2.append(' ', chip(t('claims %s', x.claims), 'bad')); } return s2; }},
-          {key: 'requests', title: t('Requests'), num: true},
-          {key: 'last', title: t('Last seen'), down: true, cell: function (x) { return stamp(x.last); }},
-          {key: 'agent', title: t('The whole string'), wide: true, cls: 'lv-text'}
-        ],
-        noun: function (n) { return tn(n, '%d browser string', '%d browser strings'); }
-      });
-      if (r.members && r.members.length) {
-        holder.appendChild(el('h3', '', t('Signed in from it as')));
-        const ul = el('ul', 'lv-paths');
-        for (const m of r.members) { const li = el('li'); li.append(link('/u/' + enc(m.name), '', m.name), ' ', el('span', 'dim', tn(m.requests, '%d request', '%d requests') + ', ' + stamp(m.last))); ul.appendChild(li); }
-        holder.appendChild(ul);
-      }
-      holder.appendChild(el('h3', '', t('Its last requests in the period')));
-      listView(holder, {
-        id: 'v-addr-trail', key: function (l) { return l.at + l.path; }, sort: '-at', search: t('Filter its requests'), page: 100, rows: r.trail,
-        csv: 'address-' + r.ip.replace(/[^0-9a-z]/gi, '_'),
-        columns: [
-          {key: 'at', title: t('When'), down: true, cell: function (l) { return stamp(l.at); }},
-          {key: 'method', title: t('Method'), wide: true},
-          {key: 'path', title: t('Page'), cell: function (l) { return pageLink(l.path); }},
-          {key: 'status', title: t('Status'), num: true, cell: function (l) { return statusCell(l.status); }},
-          {key: 'ms', title: t('Took'), num: true, wide: true, cell: function (l) { return msCell(l.ms); }},
-          {key: 'member', title: t('Member'), wide: true, cell: function (l) { return l.member ? link('/u/' + enc(l.member), '', l.member) : ''; }},
-          {key: 'browser', title: t('Browser'), wide: true, value: function (l) { return browserOf(l.agent); }}
-        ],
-        filters: [{key: 'kind', title: t('Which'), all: t('Every request'), options: [['pages', t('Pages')], ['other', t('Everything else')], ['errors', t('Errors and refusals')]],
-          test: function (l, k) { return k === 'errors' ? l.status >= 400 : (l.method === 'GET' && isPagePath(l.path) ? 'pages' : 'other') === k; }}],
-        noun: function (n) { return tn(n, '%d request', '%d requests'); }
-      });
-    }).catch(function (err) {
-      const why = err && err.message && err.message.length < 300 && !/[<>]/.test(err.message) ? ' ' + err.message : '';
-      holder.replaceChildren(el('p', 'notice', t('The address could not be looked up.') + why));
-    });
-  }
-
-  // one person's period: who, from where, and every request they made with that browser
-  function personDetail(v, holder, period) {
-    const head = el('div', 'lv-detail-head');
-    head.appendChild(el('b', '', v.ip));
-    if (v.member) head.appendChild(link('/u/' + enc(v.member), '', v.member));
-    head.appendChild(el('span', 'dim', browserOf(v.agent)));
-    if (v.flagged) head.appendChild(chip(t('Of concern'), 'open'));
-    holder.appendChild(head);
-    facts(holder, [[t('First seen'), stamp(v.first)], [t('Last seen'), stamp(v.last)], [t('Pages'), v.pages], [t('Requests'), v.requests], [t('Open tab checks'), v.polls || 0],
-      [t('Came in on'), pageLink(v.entry)], [t('From'), v.referer ? outLink(v.referer) : t('typed in, a bookmark, or not said')], [t('Browser'), v.agent]]);
-    const acts = el('div', 'lv-actions');
-    acts.appendChild(lookButton(v.ip));
-    holder.appendChild(acts);
-    holder.appendChild(el('h3', '', t('What they asked for in the period')));
-    const trail = el('div');
-    holder.appendChild(trail);
-    waiting(trail, t('Reading the log…'));
-    get('/api/admin/access?n=1000&ip=' + enc(v.ip) + '&agent=' + enc(v.agent) + '&from=' + enc(period.from) + '&to=' + enc(period.to)).then(function (a) {
-      trail.replaceChildren();
-      listView(trail, {
-        id: 'v-trail', key: function (l) { return l.at + l.path; }, sort: '-at', search: t('Filter their requests'), page: 200,
-        rows: a.lines,
-        columns: [
-          {key: 'at', title: t('When'), down: true, cell: function (l) { return stamp(l.at); }},
-          {key: 'method', title: t('Method'), wide: true},
-          {key: 'path', title: t('Page'), cell: function (l) { return pageLink(l.path); }},
-          {key: 'status', title: t('Status'), num: true, cell: function (l) { return statusCell(l.status); }},
-          {key: 'ms', title: t('Took'), num: true, wide: true, cell: function (l) { return msCell(l.ms); }},
-          {key: 'from', title: t('From'), wide: true, value: function (l) { return hostOf(l.referer); }}
-        ],
-        filters: [{key: 'kind', title: t('Which'), all: t('Every request'), value: 'people', options: [['people', t('Pages they read')], ['other', t('Everything else')]],
-          test: function (l, k) { return (l.method === 'GET' && isPagePath(l.path) ? 'people' : 'other') === k; }}],
-        noun: function (n) { return tn(n, '%d request', '%d requests'); }
-      });
-    }).catch(function () { trail.replaceChildren(el('p', 'dim', t('The access log could not be read.'))); });
-  }
-
-  // a part of the site by its registered name, in words where they are known
-  // (a site on top names its own parts and search places in Extras.places)
-  function partLabel(part) {
-    return Extras.places[part] || {chat: t('Chat'), api: t('API'), static: t('Static'), other: t('Other')}[part] ||
-      (part.charAt(0).toUpperCase() + part.slice(1));
-  }
-
-  function placeName(where) { return where === 'chat' ? t('Chat') : Extras.places[where] || where; }
-
-  // the day's report in sub-tabs: people apart from bots, what they read,
-  // where from, the crawlers and bots, the latest requests
-  function drawVisitReport(subs, r, pick, hideMe, hiddenSet) {
-    const keys = ['overview', 'people', 'pages', 'searches', 'members', 'crawlers', 'bots', 'concerns', 'latest'];
-    for (const k of keys) subs.holder(k).replaceChildren();
-    if (!r.found) {
-      for (const k of keys) subs.holder(k).appendChild(el('p', 'dim', t('There is no log for that period.')));
-      return;
-    }
-    // the lists stop at the thousand who read most; the badges count everyone
-    subs.count('people', r.visitors_count ?? r.visitors.length);
-    subs.count('pages', r.pages_count ?? r.pages.length);
-    subs.count('searches', r.searches.length);
-    subs.count('members', r.members.length);
-    subs.count('crawlers', r.crawlers.length);
-    subs.count('bots', r.bots.length);
-    subs.count('concerns', r.concerns_count || 0);
-
-    drawVisitOverview(subs, r, hideMe);
-
-    drawPeople(subs.holder('people'), r);
-
-    let box = subs.holder('pages');
-    if (r.pages_count > r.pages.length)
-      box.appendChild(el('p', 'hint', t('The %s pages read most are listed, of %s.', r.pages.length.toLocaleString(locale), r.pages_count.toLocaleString(locale))));
-    listView(box, {
-      id: 'v-pages', key: function (p) { return p.path; }, sort: '-views', csv: 'pages-' + windowName(r), search: t('Filter pages'), rows: r.pages,
-      columns: [
-        {key: 'path', title: t('Page'), cell: function (p) { return pageLink(p.path); }},
-        {key: 'views', title: t('Views'), num: true},
-        {key: 'people', title: t('People'), num: true}
-      ],
-      filters: [{key: 'section', title: t('Part of the site'), all: t('The whole site'), test: function (p, k) { return sectionOf(p.path) === k; },
-        options: function (rows) { return sectionOptions(rows.map(function (p) { return p.path; })); }}],
-      noun: function (n) { return tn(n, '%d page', '%d pages'); }, empty: t('Nothing yet.')
-    });
-
-    box = subs.holder('searches');
-    box.appendChild(el('p', 'hint', t('What people typed in the search boxes and pages. A box that searches as one types counts once, with the words as they ended.') +
-      (hideMe ? ' ' + t('Your own searches are left out while Hide my visits is ticked.') : '')));
-    listView(box, {
-      id: 'v-searches', key: function (s) { return s.where + s.words; }, sort: '-count', search: t('Filter searches'), rows: r.searches,
-      columns: [
-        {key: 'where', title: t('Where'), value: function (s) { return placeName(s.where); }},
-        {key: 'words', title: t('Words')},
-        {key: 'count', title: t('Times'), num: true},
-        {key: 'last', title: t('Last searched'), down: true, cell: function (s) { return stamp(s.last); }}
-      ],
-      filters: [{key: 'where', title: t('Where'), all: t('Everywhere'), test: function (s, k) { return s.where === k; },
-        options: function (rows) { return Array.from(new Set(rows.map(function (s) { return s.where; }))).map(function (w) { return [w, placeName(w)]; }); }}],
-      noun: function (n) { return tn(n, '%d search', '%d searches'); }, empty: t('Nobody searched in that period.')
-    });
-
-    box = subs.holder('members');
-    listView(box, {
-      id: 'v-members', key: function (m) { return m.name; }, sort: '-pages', search: false, rows: r.members,
-      columns: [
-        {key: 'name', title: t('Member'), cell: function (m) { return link('/u/' + enc(m.name), '', m.name); }},
-        {key: 'pages', title: t('Pages'), num: true},
-        {key: 'last', title: t('Last seen'), down: true, cell: function (m) { return stamp(m.last); }}
-      ],
-      noun: function (n) { return tn(n, '%d member', '%d members'); }, empty: t('No member was signed in during that period.')
-    });
-
-    drawCrawlers(subs.holder('crawlers'), r);
-    drawBots(subs.holder('bots'), r);
-  }
-
-  function drawVisitOverview(subs, r, hideMe) {
-    // the overview: the numbers, the hours, where people came from and what they read most
-    const box = subs.holder('overview');
-    const tiles = el('div', 'tiles-admin');
-    stat(tiles, r.people, t('People'), t('a browser that took the page whole, not a bot'));
-    stat(tiles, r.people_pages, t('Pages they read'));
-    stat(tiles, r.bot_requests, t('Bot requests'), tn(r.bots.length, '%d bot or crawler', '%d bots and crawlers'));
-    stat(tiles, r.members_seen, t('Members signed in'));
-    const worry = stat(tiles, r.concerns_count || 0, t('Addresses of concern'), tn(r.addresses || 0, 'of %d address', 'of %d addresses'), r.concerns_count ? 'warn' : '');
-    worry.style.cursor = 'pointer';
-    worry.title = t('See the Of concern tab');
-    worry.addEventListener('click', function () { subs.select('concerns'); });
-    if (hideMe) stat(tiles, r.hidden_requests, t('Your requests left out'), tn(r.hidden_addresses, 'from %d address', 'from %d addresses'));
-    box.appendChild(tiles);
-    const byDay = r.by_day || [];
-    if (byDay.length > 1) {
-      const top = Math.max.apply(null, byDay.map(function (d) { return d.pages; }).concat([1]));
-      const days = el('div', 'days');
-      for (const d of byDay) {
-        const bar = el('i'); bar.style.height = Math.max(2, Math.round(66 * d.pages / top)) + 'px';
-        bar.title = dateText(d.day) + ': ' + tn(d.pages, '%d page', '%d pages') + ', ' + tn(d.people, '%d person', '%d people');
-        days.appendChild(bar);
-      }
-      box.appendChild(days);
-      const dc = el('div', 'days-caption');
-      dc.append(el('span', '', dateText(byDay[0].day)), el('span', '', t('pages people read, day by day')), el('span', '', dateText(byDay[byDay.length - 1].day)));
-      box.appendChild(dc);
-    }
-    timelineChart(box, r.timeline);
-    const two = el('div', 'visit-two');
-    const left = el('div'), right = el('div');
-    two.append(left, right);
-    box.appendChild(two);
-    left.appendChild(el('h3', '', t('What people read most')));
-    if (r.pages.length) bars(left, r.pages.slice(0, 12).map(function (p) { let n = p.path; try { n = decodeURIComponent(n); } catch (e) { } return {name: n, value: p.views}; }),
-      function (n) { return tn(n, '%d view', '%d views'); });
-    else left.appendChild(el('p', 'dim', t('Nothing yet.')));
-    right.appendChild(el('h3', '', t('Where they came from')));
-    if (r.referers.length) bars(right, r.referers.slice(0, 12).map(function (x) { return {name: x.host, value: x.views}; }), function (n) { return tn(n, '%d page', '%d pages'); });
-    else right.appendChild(el('p', 'dim', t('Nobody came by a link in that period.')));
-    if (r.searches.length) {
-      box.appendChild(el('h3', '', t('What they searched for')));
-      bars(box, r.searches.slice(0, 10).map(function (x) { return {name: x.words + '  ·  ' + (placeName(x.where)), value: x.count}; }),
-        function (n) { return tn(n, '%d time', '%d times'); });
-    }
-  }
-
-  function drawPeople(box, r) {
-    box.appendChild(el('p', 'hint', t('Each address with one browser. Bots are counted apart, under Bots. Pick a row for everything they asked for.')));
-    if (r.visitors_count > r.visitors.length)
-      box.appendChild(el('p', 'hint', t('The %s who read the most are listed, of %s.', r.visitors.length.toLocaleString(locale), r.visitors_count.toLocaleString(locale))));
-    listView(box, {
-      id: 'v-people', key: function (v) { return v.ip + ' ' + v.agent; }, sort: '-pages', csv: 'people-' + windowName(r),
-      search: t('Filter by address, page, site or member'), rows: r.visitors,
-      columns: [
-        {key: 'last', title: t('Last seen'), down: true, cell: function (v) { const s = el('span', '', stamp(v.last)); s.title = t('First seen %s', stamp(v.first)); return s; }},
-        {key: 'ip', title: t('Address'), cell: function (v) { return addressCell(v.ip, v.flagged); }},
-        {key: 'member', title: t('Member'), cell: function (v) { return v.member ? link('/u/' + enc(v.member), '', v.member) : ''; }},
-        {key: 'pages', title: t('Pages'), num: true},
-        {key: 'requests', title: t('Requests'), num: true, wide: true},
-        {key: 'entry', title: t('Came in on'), cell: function (v) { return pageLink(v.entry); }},
-        {key: 'from', title: t('From'), wide: true, value: function (v) { return hostOf(v.referer); }},
-        {key: 'browser', title: t('Browser'), wide: true, value: function (v) { return browserOf(v.agent); }}
-      ],
-      filters: [
-        {key: 'who', title: t('Who'), all: t('Everybody'), options: [['members', t('Members signed in')], ['guests', t('Not signed in')], ['concern', t('Of concern')]],
-          test: function (v, k) { return k === 'members' ? !!v.member : k === 'guests' ? !v.member : v.flagged > 0; }},
-        {key: 'browser', title: t('Browser'), all: t('Every browser'), test: function (v, k) { return browserOf(v.agent) === k; },
-          options: function (rows) { return Array.from(new Set(rows.map(function (v) { return browserOf(v.agent); }))).sort().map(function (b) { return [b, b]; }); }},
-        {key: 'from', title: t('From'), all: t('From anywhere'), test: function (v, k) { return k === '-' ? !hostOf(v.referer) : hostOf(v.referer) === k; },
-          options: function (rows) {
-            return [['-', t('No link (typed in or a bookmark)')]].concat(Array.from(new Set(rows.map(function (v) { return hostOf(v.referer); }).filter(Boolean))).sort().map(function (h) { return [h, h]; }));
-          }}
-      ],
-      noun: function (n) { return tn(n, '%d person', '%d people'); }, empty: t('Nobody read a page in that period.'),
-      detail: function (v, holder) { personDetail(v, holder, {from: r.from, to: r.to}); }
-    });
-  }
-
-  function drawCrawlers(box, r) {
-    box.appendChild(el('p', 'hint', tn(r.crawler_sources.length,
-      'Found by the address ranges their companies publish (%d list, read once a day): a request from those addresses is that company\'s crawler, whatever its browser string says.',
-      'Found by the address ranges their companies publish (%d lists, read once a day): a request from those addresses is that company\'s crawler, whatever its browser string says.')));
-    // the parts of the site the crawlers read, as the units register them: the three
-    // they read most by name, the rest together, four colors in all
-    const totals = new Map();
-    for (const c of r.crawlers) for (const k in (c.parts || {})) totals.set(k, (totals.get(k) || 0) + c.parts[k]);
-    const named = Array.from(totals).filter(function (x) { return x[0] !== 'other'; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 3).map(function (x) { return x[0]; });
-    const parts = named.map(function (k) { return [k, partLabel(k)]; }).concat([['other', t('Other')]]);
-    const partOf = function (c, k) {
-      if (k !== 'other') return (c.parts || {})[k] || 0;
-      let n = 0;
-      for (const x in (c.parts || {})) if (named.indexOf(x) < 0) n += c.parts[x];
-      return n;
-    };
-    if (!r.crawlers.length) box.appendChild(el('p', 'dim', t('No known crawler came in that period.')));
-    else {
-      // what each read, part by part: one bar a crawler, the parts side by side in it
-      const legend = el('div', 'crawl-legend');
-      parts.forEach(function (p, i) { const k = el('span'); k.append(el('i', 'crawl-c' + (i + 1)), ' ' + p[1]); legend.appendChild(k); });
-      box.appendChild(legend);
-      const most = Math.max.apply(null, r.crawlers.map(function (c) { return c.requests; }).concat([1]));
-      const chart = el('div', 'crawl-chart');
-      for (const c of r.crawlers.slice(0, 20)) {
-        const name = el('span', 'name', c.name); name.title = c.company;
-        const bar = el('span', 'crawl-bar');
-        bar.style.width = Math.max(2, Math.round(100 * c.requests / most)) + '%';
-        parts.forEach(function (p, i) {
-          if (!partOf(c, p[0])) return;
-          const seg = el('i', 'crawl-c' + (i + 1));
-          seg.style.flexGrow = partOf(c, p[0]);
-          seg.title = p[1] + ': ' + tn(partOf(c, p[0]), '%d request', '%d requests');
-          bar.appendChild(seg);
-        });
-        const track = el('span', 'crawl-track'); track.appendChild(bar);
-        const num = el('span', 'num', c.requests.toLocaleString(locale));
-        num.title = parts.map(function (p) { return p[1] + ' ' + partOf(c, p[0]); }).join(' · ');
-        chart.append(name, track, num);
-      }
-      box.appendChild(chart);
-      listView(box, {
-        id: 'v-crawlers', key: function (c) { return c.name; }, sort: '-requests', csv: 'crawlers-' + windowName(r), search: t('Filter crawlers'), rows: r.crawlers,
-        columns: [
-          {key: 'name', title: t('Crawler')}, {key: 'company', title: t('Company')},
-          {key: 'requests', title: t('Requests'), num: true},
-        ].concat(parts.map(function (p) { return {key: 'part-' + p[0], title: p[1], num: true, wide: true, value: function (c) { return partOf(c, p[0]); }}; })).concat([
-          {key: 'addresses', title: t('Addresses'), num: true}, {key: 'last', title: t('Last seen'), down: true, cell: function (c) { return stamp(c.last); }}
-        ]),
-        filters: [{key: 'company', title: t('Company'), all: t('Every company'), test: function (c, k) { return c.company === k; },
-          options: function (rows) { return Array.from(new Set(rows.map(function (c) { return c.company; }))).sort().map(function (x) { return [x, x]; }); }}],
-        noun: function (n) { return tn(n, '%d crawler', '%d crawlers'); },
-        detail: function (c, holder) {
-          const head = el('div', 'lv-detail-head');
-          head.append(el('b', '', c.name), el('span', 'dim', c.company));
-          holder.appendChild(head);
-          facts(holder, [[t('Requests'), c.requests.toLocaleString(locale)], [t('Addresses'), c.addresses], [t('Last seen'), stamp(c.last)],
-            [t('By part'), Object.keys(c.parts || {}).map(function (k) { return partLabel(k) + ' ' + c.parts[k]; }).join(' · ')]]);
-          holder.appendChild(el('h3', '', t('What it read most')));
-          bars(holder, c.paths.map(function (p) { return {name: p.path || '/', value: p.count}; }), function (n) { return tn(n, '%d request', '%d requests'); });
-        }
-      });
-    }
-    // two weeks of them, a row a crawler, a cell a day, darker for more
-    const cd = r.crawler_days;
-    if (cd && cd.series.length) {
-      box.appendChild(el('h3', '', t('Day by day')));
-      const peak = Math.max.apply(null, cd.series.map(function (s) { return Math.max.apply(null, s.counts); }).concat([1]));
-      const wrap = el('div', 'gridwrap'), table = el('table', 'grid crawl-days'), head = el('tr');
-      head.appendChild(el('th', '', t('Crawler')));
-      for (const d of cd.days) { const th = el('th', '', dateText(d).replace(/[-/.]?\d{4}[-/.]?/, '')); th.title = dateText(d); head.appendChild(th); }
-      table.appendChild(head);
-      const order = cd.series.slice().sort(function (a, b) { return b.counts.reduce(function (x, y) { return x + y; }, 0) - a.counts.reduce(function (x, y) { return x + y; }, 0); });
-      for (const s of order) {
-        const row = el('tr');
-        row.appendChild(el('td', 'name', s.name));
-        s.counts.forEach(function (n, i) {
-          const cell = el('td', 'heat', n ? n.toLocaleString(locale) : '');
-          // a log scale: a crawler that came ten times still shows
-          const share = n ? Math.round(12 + 88 * Math.log(1 + n) / Math.log(1 + peak)) : 0;
-          cell.style.setProperty('--share', share + '%');
-          if (share > 55) cell.classList.add('deep');
-          cell.title = s.name + ', ' + dateText(cd.days[i]) + ': ' + tn(n, '%d request', '%d requests');
-          row.appendChild(cell);
-        });
-        table.appendChild(row);
-      }
-      wrap.appendChild(table); box.appendChild(wrap);
-    }
-    if (r.pretenders.length) {
-      box.appendChild(el('h3', '', t('Pretending to be one of them')));
-      box.appendChild(el('p', 'hint', t('These name a known crawler in their browser string but come from outside its company\'s published addresses.')));
-      listView(box, {
-        id: 'v-pretenders', key: function (p) { return p.name; }, sort: '-requests', search: false, rows: r.pretenders,
-        columns: [
-          {key: 'name', title: t('Says it is')}, {key: 'company', title: t('Company')}, {key: 'requests', title: t('Requests'), num: true},
-          {key: 'addresses', title: t('Addresses'), num: true}, {key: 'last', title: t('Last seen'), down: true, cell: function (p) { return stamp(p.last); }},
-          {key: 'sample', title: t('For example'), wide: true, cell: function (p) { return addressCell(p.sample); }}
-        ],
-        noun: function (n) { return tn(n, '%d pretender', '%d pretenders'); },
-        detail: function (p, holder) {
-          facts(holder, [[t('Says it is'), p.name + ' (' + p.company + ')'], [t('Requests'), p.requests], [t('For example'), addressCell(p.sample)]]);
-        }
-      });
-    }
-    if (r.crawler_sources.length) {
-      const lists = el('details', 'crawl-sources');
-      lists.appendChild(el('summary', '', t('The published lists')));
-      const holder = el('div');
-      lists.appendChild(holder);
-      box.appendChild(lists);
-      listView(holder, {
-        id: 'v-sources', key: function (s) { return s.url; }, sort: 'company', search: false, rows: r.crawler_sources,
-        columns: [
-          {key: 'company', title: t('Company')},
-          {key: 'name', title: t('Crawler'), cell: function (s) { const a = el('a', '', s.name); a.href = s.url; a.target = '_blank'; a.rel = 'noopener'; return a; }},
-          {key: 'ranges', title: t('Ranges'), num: true},
-          {key: 'created', title: t('List dated'), wide: true, cell: function (s) { return s.created ? dateText(s.created) : ''; }},
-          {key: 'fetched', title: t('Read'), wide: true, cell: function (s) { return s.fetched ? dateTimeText(s.fetched) : ''; }},
-          {key: 'error', title: t('Problem')}
-        ],
-        noun: function (n) { return tn(n, '%d list', '%d lists'); }
-      });
-    }
-  }
-
-  function drawBots(box, r) {
-    box.appendChild(el('p', 'hint', t('Known by the name in their browser string, or because they asked for robots.txt. The big search engines are checked against their DNS: one that only claims the name shows as not verified.')));
-    const checks = {listed: '✓ ' + t('Published address'), verified: '✓ ' + t('Verified'), unverified: t('Not verified')};
-    listView(box, {
-      id: 'v-bots', key: function (b) { return b.name; }, sort: '-requests', csv: 'bots-' + windowName(r), search: t('Filter bots'), rows: r.bots,
-      columns: [
-        {key: 'name', title: t('Bot')},
-        {key: 'check', title: t('Checked'), value: function (b) { return checks[b.check] || ''; },
-          cell: function (b) { return b.check ? el('span', b.check === 'unverified' ? 'bot-bad' : 'bot-ok', checks[b.check] || b.check) : ''; }},
-        {key: 'requests', title: t('Requests'), num: true},
-        {key: 'addresses', title: t('Addresses'), num: true},
-        {key: 'last', title: t('Last seen'), down: true, cell: function (b) { return stamp(b.last); }},
-        {key: 'paths', title: t('Pages it asked for most'), wide: true, nosort: true, cls: 'lv-text', value: function (b) { return b.paths.join(' '); },
-          cell: function (b) { return el('span', 'dim', b.paths.slice(0, 3).map(function (p) { return p || '/'; }).join('  ·  ')); }}
-      ],
-      filters: [{key: 'check', title: t('Checked'), all: t('Checked or not'), options: [['listed', t('Published address')], ['verified', t('Verified')], ['unverified', t('Not verified')], ['-', t('Not checked')]],
-        test: function (b, k) { return k === '-' ? !b.check : b.check === k; }}],
-      noun: function (n) { return tn(n, '%d bot', '%d bots'); }, empty: t('No bot came in that period.'),
-      detail: function (b, holder) {
-        const head = el('div', 'lv-detail-head');
-        head.append(el('b', '', b.name), b.check ? el('span', b.check === 'unverified' ? 'bot-bad' : 'bot-ok', checks[b.check]) : '');
-        holder.appendChild(head);
-        facts(holder, [[t('Requests'), b.requests.toLocaleString(locale)], [t('Addresses'), b.addresses], [t('For example'), b.sample ? addressCell(b.sample) : ''], [t('Last seen'), stamp(b.last)]]);
-        holder.appendChild(el('h3', '', t('Pages it asked for most')));
-        const ul = el('ul', 'lv-paths');
-        for (const p of b.paths) { const li = el('li'); li.appendChild(pageLink(p || '/')); ul.appendChild(li); }
-        holder.appendChild(ul);
-      }
-    });
-  }
-
-  // the latest requests of the day, newest first: people's pages, the rest
-  // of what people asked for, and the bots', as the report told them apart
-  function drawLatest(box, r) {
-    box.appendChild(el('p', 'hint', t('The latest thousand requests from people and four hundred from bots in the period, newest first. Pick an address for its whole story.')));
-    const kinds = [['page', t('Pages people read')], ['other', t('Everything else people asked for')], ['bot', t('Bots')]];
-    listView(box, {
-      id: 'v-latest2', key: function (l) { return l.at + l.ip + l.path + l.kind; }, sort: '-at', csv: 'latest-' + windowName(r), page: 200,
-      search: t('Filter by address, page or member'), rows: r.latest || [],
-      columns: [
-        {key: 'at', title: t('When'), down: true, cell: function (l) { return stamp(l.at); }},
-        {key: 'ip', title: t('Address'), cell: function (l) { return addressCell(l.ip); }},
-        {key: 'member', title: t('Member'), cell: function (l) { return l.member ? link('/u/' + enc(l.member), '', l.member) : ''; }},
-        {key: 'path', title: t('Page'), cell: function (l) { return pageLink(l.path); }},
-        {key: 'status', title: t('Status'), num: true, cell: function (l) { return statusCell(l.status); }},
-        {key: 'ms', title: t('Took'), num: true, wide: true, cell: function (l) { return msCell(l.ms); }},
-        {key: 'browser', title: t('Browser or bot'), wide: true, value: function (l) { return l.bot || browserOf(l.agent); },
-          cell: function (l) { const s2 = el('span', 'dim', l.bot || browserOf(l.agent)); s2.title = l.agent; return s2; }}
-      ],
-      filters: [
-        {key: 'kind', title: t('Which'), all: t('Every request'), value: 'page', options: kinds, test: function (l, k) { return l.kind === k; }},
-        {key: 'status', title: t('Status'), all: t('Any status'), options: [['ok', t('Answered')], ['4xx', t('Refused or not here')], ['5xx', t('Failed')]],
-          test: function (l, k) { return k === 'ok' ? !(l.status >= 400) : k === '4xx' ? l.status >= 400 && l.status < 500 : l.status >= 500; }},
-        {key: 'section', title: t('Part of the site'), all: t('The whole site'), test: function (l, k) { return sectionOf(l.path) === k; },
-          options: function (rows) { return sectionOptions(rows.map(function (l) { return l.path; })); }}
-      ],
-      noun: function (n) { return tn(n, '%d request', '%d requests'); }, empty: t('Nothing in that period\'s logs yet.'),
-      detail: function (l, holder) {
-        const head = el('div', 'lv-detail-head');
-        head.append(el('b', '', l.ip), l.member ? link('/u/' + enc(l.member), '', l.member) : '', el('span', 'dim', dateTimeText(l.at)));
-        holder.appendChild(head);
-        facts(holder, [[t('Asked for'), l.method + ' ' + l.path], [t('Page'), pageLink(l.path)], [t('Answered'), l.status ? statusCell(l.status) : ''],
-          [t('Took'), msCell(l.ms)], [t('Bot'), l.bot], [t('From'), l.referer ? outLink(l.referer) : ''], [t('Browser'), l.agent]]);
-        const acts = el('div', 'lv-actions'); acts.appendChild(lookButton(l.ip)); holder.appendChild(acts);
-      }
-    });
-  }
-
-  function drawVisitCounts(box, data) {
-    if (!data.server) box.appendChild(el('p', 'notice', t('Visitor collection requires server mode.')));
-    const today = data.days.length ? data.days[0].day : '';
-    const byDay = new Map();
-    for (const d of data.days) byDay.set(d.day, (byDay.get(d.day) || 0) + d.requests);
-    const days = Array.from(byDay).sort().slice(-30);
-    if (days.length > 1) {
-      const most = Math.max.apply(null, days.map(function (d) { return d[1]; }).concat([1]));
-      const row = el('div', 'days');
-      for (const d of days) {
-        const bar = el('i'); bar.style.height = Math.max(2, Math.round(66 * d[1] / most)) + 'px';
-        bar.title = dateText(d[0]) + ': ' + tn(d[1], '%d request', '%d requests');
-        if (d[0] === today) bar.classList.add('today');
-        row.appendChild(bar);
-      }
-      box.appendChild(row);
-      const cap = el('div', 'days-caption'); cap.append(el('span', '', dateText(days[0][0])), el('span', '', t('requests a day, bots included')), el('span', '', dateText(days[days.length - 1][0]))); box.appendChild(cap);
-    }
-    box.appendChild(el('p', 'hint', t('UTC days. Counts are saved each minute. People are browsers that took the page whole, bots everything else that came; each address counts once in each part and day, and totals add those counts. People are counted from 6 Nov 2026.')));
-    const partName = partLabel;
-    const totals = new Map();
-    for (const day of data.days) {
-      const total = totals.get(day.part) || [0, 0, 0, 0];
-      day.people = Math.min(day.people || 0, day.visitors); day.bots = day.visitors - day.people;
-      total[0] += day.requests; total[1] += day.people; total[2] += day.refused; total[3] += day.bots;
-      totals.set(day.part, total);
-    }
-    const countCols = [
-      {key: 'requests', title: t('Requests'), num: true}, {key: 'people', title: t('People'), num: true}, {key: 'bots', title: t('Bot addresses'), num: true}, {key: 'refused', title: t('Guard refusals'), num: true}];
-    box.appendChild(el('h3', '', t('All days kept')));
-    listView(box, {
-      id: 'v-parts', key: function (x) { return x.part; }, sort: '-requests', search: false,
-      rows: Array.from(totals, function (pair) { return {part: pair[0], requests: pair[1][0], people: pair[1][1], refused: pair[1][2], bots: pair[1][3]}; }),
-      columns: [{key: 'part', title: t('Part'), value: function (x) { return partName(x.part); }}].concat(countCols), noun: function (n) { return tn(n, '%d part', '%d parts'); }
-    });
-    box.appendChild(el('h3', '', t('Day by day')));
-    listView(box, {
-      id: 'v-partdays', key: function (x) { return x.day + x.part; }, sort: '-day', search: false, csv: 'requests-by-day',
-      rows: data.days,
-      columns: [{key: 'day', title: t('Day'), down: true, cell: function (x) { return dateText(x.day); }},
-        {key: 'part', title: t('Part'), value: function (x) { return partName(x.part); }}].concat(countCols),
-      filters: [{key: 'part', title: t('Part'), all: t('Every part'), test: function (x, k) { return x.part === k; },
-        options: function (rows) { return Array.from(new Set(rows.map(function (x) { return x.part; }))).map(function (p) { return [p, partName(p)]; }); }}],
-      noun: function (n) { return tn(n, '%d row', '%d rows'); }
-    });
-    box.appendChild(el('h3', '', t('Busiest paths today')));
-    listView(box, {
-      id: 'v-paths', key: function (x) { return x.path; }, sort: '-requests', search: t('Filter paths'), rows: data.paths,
-      columns: [{key: 'path', title: t('Path'), cell: function (x) { return pageLink(x.path); }}, {key: 'requests', title: t('Requests'), num: true}],
-      noun: function (n) { return tn(n, '%d path', '%d paths'); }
-    });
-  }
-
-  // a window's name for a file: its days
-  function windowName(r) {
-    return String(r.from || '').slice(0, 10) + '-' + String(r.to || '').slice(0, 10);
-  }
-
-  // the addresses the report holds something against, the worst first
-  function drawConcerns(box, r, period) {
-    box.replaceChildren();
-    box.appendChild(el('p', 'hint', t('Every address is judged on its own, whatever it said it was: its busiest minute, how many browser strings and members it used, the pages it asked for that are not here, the scanner paths it probed, how often the guard turned it away, and whether it named a crawler it is not. A published crawler is welcome at any pace; an address on the allowed list (or this network) is not weighed. Pick a row for the whole story and the block buttons.')));
-    if (r.concerns_count > r.concerns.length)
-      box.appendChild(el('p', 'hint', t('The %s weighed heaviest are listed, of %s.', r.concerns.length.toLocaleString(locale), r.concerns_count.toLocaleString(locale))));
-    const kinds = reasonKinds();
-    const blockWords = {forgood: t('For good'), blocked: t('Blocked now'), over: t('Block over')};
-    listView(box, {
-      id: 'v-concerns', key: function (c) { return c.ip; }, sort: '-score', csv: 'concerns-' + windowName(r),
-      search: t('Filter by address, bot or reason'), rows: r.concerns,
-      columns: [
-        {key: 'score', title: t('Weight'), num: true},
-        {key: 'ip', title: t('Address'), cell: function (c) { return el('b', 'lv-ip', c.ip); }},
-        // the guard's state, so a blocked address shows without opening it
-        {key: 'block', title: t('Blocked'), value: function (c) { return blockWords[c.block] || ''; },
-          cell: function (c) { return c.block ? chip(blockWords[c.block], c.block === 'over' ? '' : 'bad') : el('span', '', ''); }},
-        {key: 'what', title: t('Says it is'), value: function (c) { return c.crawler || c.bot || t('a browser'); }},
-        // AbuseIPDB's confidence, once the site has looked the address up
-        {key: 'abuse', title: t('AbuseIPDB'), num: true, value: function (c) { return c.abuse == null ? -1 : c.abuse; },
-          cell: function (c) { return c.abuse == null ? el('span', 'dim', '') : chip(c.abuse + '%', c.abuse >= 75 ? 'bad' : ''); }},
-        {key: 'reasons', title: t('Why'), nosort: true, cls: 'lv-text', value: function (c) { return c.reasons.map(reasonWords).join('; '); },
-          cell: function (c) { const s2 = el('span', 'lv-reasons'); for (const x of c.reasons) s2.appendChild(chip(reasonWords(x), 'open')); return s2; }},
-        {key: 'requests', title: t('Requests'), num: true},
-        {key: 'peak', title: t('Busiest minute'), num: true, wide: true},
-        {key: 'last', title: t('Last seen'), down: true, wide: true, cell: function (c) { return stamp(c.last); }}
-      ],
-      filters: [{key: 'block', title: t('Blocked'), all: t('Blocked or not'),
-        options: [['forgood', t('For good')], ['blocked', t('Blocked now')], ['over', t('Block over')], ['none', t('Never blocked')]],
-        test: function (c, v) { return v === 'none' ? !c.block : c.block === v; }},
-        {key: 'kind', title: t('Reason'), all: t('Every reason'), test: function (c, k) { return c.reasons.some(function (x) { return x.kind === k; }); },
-        options: function (rows) {
-          const seen = new Map();
-          for (const c of rows) for (const x of c.reasons) seen.set(x.kind, (seen.get(x.kind) || 0) + 1);
-          return Array.from(seen).sort(function (a, b) { return b[1] - a[1]; }).map(function (x) { return [x[0], (kinds[x[0]] || x[0]) + ' (' + x[1] + ')']; });
-        }}],
-      noun: function (n) { return tn(n, '%d address', '%d addresses'); }, empty: t('Nothing of concern in that period.'),
-      detail: function (c, holder) { addressPanel(c.ip, holder, period); }
-    });
-  }
-
-  function adminVisitors(box) {
-    // an admin who manages blocks without seeing visitors: the blocked list alone
-    if (S.adminCan && !S.adminCan('view-visitors')) {
-      const utc = function (back) { return new Date(Date.now() - back * 864e5).toISOString().slice(0, 10); };
-      adminBlocks(box, function () { return {from: utc(1), to: utc(0)}; });
-      return;
-    }
-    let hideMe = true;
-    try { hideMe = localStorage.getItem('admin-hide-me') !== 'off'; } catch (e) { }
-    // the window: the last hours back from now, today or yesterday on this
-    // computer's clock, a UTC day (one log), every day kept, or any two
-    // moments; the last 24 hours at first, the choice remembered
-    const utcDay = function (back) { return new Date(Date.now() - back * 864e5).toISOString().slice(0, 10); };
-    const iso = function (ms) { return new Date(ms).toISOString().slice(0, 19) + 'Z'; };
-    // midnight on this computer's clock, back days ago: today and yesterday
-    // are the admin's own days, not UTC ones (those start at 7 PM in New York)
-    const localMidnight = function (back) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - back); return d.getTime(); };
-    let choice = '24h';
-    try { choice = localStorage.getItem('admin-visit-window') || '24h'; } catch (e) { }
-    let days = [];
-    const controls = el('div', 'visit-controls');
-    const pickLabel = el('label', '', t('Period') + ' ');
-    const pick = el('select'); pickLabel.appendChild(pick);
-    const custom = el('span', 'visit-custom');
-    const fromBox = el('input'), toBox = el('input');
-    fromBox.type = toBox.type = 'datetime-local';
-    fromBox.setAttribute('aria-label', t('From'));
-    toBox.setAttribute('aria-label', t('To'));
-    const local = function (ms) { const d = new Date(ms); return new Date(ms - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
-    fromBox.value = local(Date.now() - 864e5);
-    toBox.value = local(Date.now());
-    custom.append(fromBox, ' – ', toBox);
-    custom.hidden = choice !== 'custom';
-    const option = function (value, words) { const o2 = el('option', '', words); o2.value = value; return o2; };
-    const fillPeriods = function () {
-      const oldest = days.length ? days[days.length - 1] : utcDay(0);
-      pick.replaceChildren(
-        option('1h', t('The last hour')), option('8h', t('The last 8 hours')), option('24h', t('The last 24 hours')),
-        option('48h', t('The last 2 days')), option('168h', t('The last 7 days')),
-        option('today', t('Today')), option('yesterday', t('Yesterday')),
-        option('all', tn(days.length, 'Every day kept (%d), from %s', 'Every day kept (%d), from %s').replace('%s', dateText(oldest))),
-        option('custom', t('Between two moments…')));
-      const one = el('optgroup');
-      one.label = t('One day');
-      for (const d of days) one.appendChild(option(d, dateText(d)));
-      pick.appendChild(one);
-      pick.value = choice;
-      if (pick.value !== choice) { choice = '24h'; pick.value = choice; }
-    };
-    fillPeriods();
-    // the window as the server takes it: moments for the hours (the end rounded
-    // to the minute, so a second look within it finds the report kept), days whole
-    const windowOf = function () {
-      const minute = Math.floor(Date.now() / 60000) * 60000;
-      if (/^\d+h$/.test(choice)) return {from: iso(minute + 59000 - parseInt(choice, 10) * 3600e3), to: iso(minute + 59000)};
-      if (choice === 'today') return {from: iso(localMidnight(0)), to: iso(minute + 59000)};
-      if (choice === 'yesterday') return {from: iso(localMidnight(1)), to: iso(localMidnight(0) - 1000)};
-      if (choice === 'all') return {from: days.length ? days[days.length - 1] : utcDay(0), to: utcDay(0)};
-      if (choice === 'custom') {
-        const a = fromBox.value ? new Date(fromBox.value).getTime() : minute - 864e5, b = toBox.value ? new Date(toBox.value).getTime() : minute + 59000;
-        return a <= b ? {from: iso(a), to: iso(b)} : {from: iso(b), to: iso(a)};
-      }
-      return {from: choice, to: choice};
-    };
-    let period = windowOf();
-    const periodNow = function () { return period; };
-    const label = el('label', 'visit-tick'), tick = el('input');
-    tick.type = 'checkbox'; tick.checked = hideMe; label.append(tick, ' ' + t('Hide my visits'));
-    tick.addEventListener('change', function () { hideMe = tick.checked; try { localStorage.setItem('admin-hide-me', hideMe ? 'on' : 'off'); } catch (e) { } load(); });
-    const again = el('button', 'small-link', t('Refresh'));
-    again.type = 'button';
-    again.addEventListener('click', function () { load(); });
-    controls.append(pickLabel, custom, label, again);
-    box.appendChild(controls);
-    const tabList = [
-      {key: 'overview', title: t('Overview')}, {key: 'people', title: t('People')}, {key: 'pages', title: t('Pages')},
-      {key: 'searches', title: t('Searches')}, {key: 'members', title: t('Members')}, {key: 'crawlers', title: t('Known crawlers')},
-      {key: 'bots', title: t('Bots')}, {key: 'concerns', title: t('Of concern')}, {key: 'latest', title: t('Latest requests')},
-      {key: 'address', title: t('Address')}];
-    const blocks = S.adminCan && S.adminCan('manage-blocks');
-    if (blocks) tabList.push({key: 'blocked', title: t('Blocked')});
-    tabList.push({key: 'counts', title: t('By part of the site')});
-    const subs = subTabs(box, 'visitors', tabList);
-    const reportParts = ['overview', 'people', 'pages', 'searches', 'members', 'crawlers', 'bots', 'concerns', 'latest'];
-
-    // the address panel: any address, typed or picked anywhere, in the window shown
-    const addrBox = subs.holder('address');
-    const addrForm = el('form', 'visit-lookup');
-    const addrInput = el('input');
-    addrInput.type = 'search';
-    addrInput.placeholder = t('An address, such as 203.0.113.9');
-    addrInput.setAttribute('aria-label', t('Address'));
-    const addrGo = el('button', '', t('Look up'));
-    addrForm.append(addrInput, addrGo);
-    const addrPanel = el('div', 'lv-detail visit-address');
-    addrPanel.hidden = true;
-    addrBox.append(el('p', 'hint', t('Everything one address did in the period, whatever it said it was, with the guard’s facts and the block buttons. Pick an address anywhere in these lists, or type one.')), addrForm, addrPanel);
-    let shownIp = '';
-    const showAddress = function (ip) {
-      shownIp = (ip || '').trim();
-      addrInput.value = shownIp;
-      addrPanel.hidden = !shownIp;
-      if (shownIp) addressPanel(shownIp, addrPanel, periodNow);
-    };
-    addrForm.addEventListener('submit', function (e) { e.preventDefault(); showAddress(addrInput.value); });
-    S.showAddress = function (ip) { subs.select('address'); showAddress(ip); };
-    S.blockLook = S.showAddress;
-
-    let loads = 0;
-    const load = function () {
-      const mine = ++loads;
-      period = windowOf();
-      for (const k of reportParts) waiting(subs.holder(k), t('Reading the log…'));
-      pick.disabled = tick.disabled = again.disabled = true;
-      get('/api/admin/visitors/report?from=' + enc(period.from) + '&to=' + enc(period.to) + (hideMe ? '&hide=me' : '')).then(function (r) {
-        if (mine !== loads) return;
-        if (JSON.stringify(days) !== JSON.stringify(r.days)) {
-          days = r.days;
-          fillPeriods();
-          // "every day kept" asked before the days were known: asked again with them
-          if (windowOf().from !== period.from) { load(); return; }
-        }
-        drawVisitReport(subs, r, pick, hideMe);
-        if (r.found) {
-          drawLatest(subs.holder('latest'), r);
-          drawConcerns(subs.holder('concerns'), r, periodNow);
-        }
-        if (shownIp) showAddress(shownIp);
-        // a blocked row's open story, told again for this window
-        if (S.blocksChanged) S.blocksChanged();
-      }).catch(function (err) {
-        if (mine !== loads) return;
-        // the server's own short reason when it gave one (not a proxy's error page)
-        const why = err && err.message && err.message.length < 300 && !/[<>]/.test(err.message) ? ' ' + err.message : '';
-        for (const k of reportParts) subs.holder(k).replaceChildren(el('p', 'notice', t('The access log could not be read.') + why));
-      }).finally(function () { if (mine === loads) pick.disabled = tick.disabled = again.disabled = false; });
-    };
-    pick.addEventListener('change', function () {
-      choice = pick.value;
-      try { localStorage.setItem('admin-visit-window', choice); } catch (e) { }
-      custom.hidden = choice !== 'custom';
-      load();
-    });
-    fromBox.addEventListener('change', function () { if (choice === 'custom') load(); });
-    toBox.addEventListener('change', function () { if (choice === 'custom') load(); });
-    load();
-    if (blocks) adminBlocks(subs.holder('blocked'), periodNow);
-    waiting(subs.holder('counts'));
-    get('/api/admin/visitors').then(function (data) { subs.holder('counts').replaceChildren(); drawVisitCounts(subs.holder('counts'), data); })
-      .catch(function (err) { subs.holder('counts').replaceChildren(el('p', 'notice', err.message)); });
-  }
-
-  function adminStorage(box) {
-    get('/api/admin/storage').then(function (data) {
-      if (data.disk_total > 0) {
-        const used = data.disk_total - data.disk_free, share = used / data.disk_total;
-        const tiles = el('div', 'tiles-admin');
-        const disk = stat(tiles, Math.round(share * 100) + '%', t('Disk used'), sizeText(used) + ' ' + t('of') + ' ' + sizeText(data.disk_total), share > 0.9 ? 'warn' : '');
-        const meter = el('div', 'meter' + (share > 0.95 ? ' bad' : share > 0.8 ? ' warn' : '')); const fill = el('i'); fill.style.width = Math.round(share * 100) + '%'; meter.appendChild(fill); disk.appendChild(meter);
-        stat(tiles, sizeText(data.disk_free), t('Free'));
-        stat(tiles, sizeText(data.items.reduce(function (sum, item) { return sum + item.bytes; }, 0)), t('The site uses'), t('database and folders'));
-        box.appendChild(tiles);
-      }
-      if (data.items.length) bars(box, data.items.slice().sort(function (a, b) { return b.bytes - a.bytes; }).map(function (item) { return {name: t(item.caption), value: item.bytes}; }), sizeText);
-      box.appendChild(el('p', 'hint', t('Measured in the background at most once an hour. Database sizes are engine estimates including indexes. Folder sizes exclude symbolic links.')));
-      if (!data.items.length) box.appendChild(el('p', 'notice', t('No storage measurement yet.')));
-      adminTable(box, [t('Group or folder'), t('Size'), t('Measured'), t('Status')], data.items.map(function (item) {
-        return [t(item.caption), sizeText(item.bytes), dateTimeText(item.measured), item.complete ? t('Complete') : t('Partial')];
-      }));
-    }).catch(failed);
-  }
-
-  // The first thing an admin sees: which modules (parts) this site runs, each with
-  // its switch, and what waits for attention.
-  function adminOverview(box, data, can) {
-    const on = String(data.parts || '').split(' ');
-    const switches = (data.settings || []).filter(function (s) { return s.group === 'Parts'; });
-    if (data.unlisted_proxies)
-      box.appendChild(el('p', 'problem', t('Requests arrive through %s, which the config file does not name under proxies. Until it does, every visitor looks like that one address and the guard cannot tell them apart.', data.unlisted_proxies)));
-    box.appendChild(el('h2', '', t('Community modules')));
-    box.appendChild(el('p', 'hint', t('Each module can be on or off. A module that is off has no pages and no entries here; what it holds is kept.')));
-    const cards = el('div', 'part-cards');
-    box.appendChild(cards);
-    const names = {chat: t('Chat'), wiki: t('Wiki'), forum: t('Forum')};
-    const fronts = {chat: '/', wiki: '/wiki', forum: '/forum'};
-    const list = switches.length ? switches.map(function (s) { return {name: s.name, caption: s.caption, on: s.value === '1', change: true}; }) :
-      on.filter(Boolean).map(function (name) { return {name: name, caption: '', on: true, change: false}; });
-    for (const p of list) {
-      const card = el('div', 'part-card ' + (p.on ? 'on' : 'off'));
-      const head = el('h3', '', names[p.name] || t(p.name.charAt(0).toUpperCase() + p.name.slice(1)));
-      head.appendChild(el('span', 'part-state', p.on ? t('On') : t('Off')));
-      card.appendChild(head);
-      // the caption says what the part is, after its name and a colon
-      const words = t(p.caption);
-      const about = words.indexOf(': ') > 0 ? words.slice(words.indexOf(': ') + 2) : words;
-      card.appendChild(el('p', '', about.charAt(0).toUpperCase() + about.slice(1)));
-      const tools = el('div', 'part-tools');
-      if (p.change) {
-        const flip = el('button', p.on ? '' : 'primary', p.on ? t('Turn off') : t('Turn on'));
-        flip.type = 'button';
-        flip.addEventListener('click', async function () {
-          flip.disabled = true;
-          try {
-            const fields = {};
-            fields[p.name] = p.on ? '0' : '1';
-            await post('/api/admin/settings', fields);
-            // the page's list and the top bar follow the parts: read it all again
-            location.reload();
-          } catch (err) { failed(err); flip.disabled = false; }
-        });
-        tools.appendChild(flip);
-      }
-      if (p.on) tools.appendChild(link(fronts[p.name] || '/' + p.name, 'small-link', t('Open')));
-      card.appendChild(tools);
-      cards.appendChild(card);
-    }
-    box.appendChild(el('h2', '', t('The site')));
-    const stats = el('div', 'tiles-admin');
-    box.appendChild(stats);
-    if (data.members_total !== undefined) stat(stats, data.members_total, t('Members'));
-    if (can('read-reports')) {
-      const waiting = stat(stats, data.open_reports || 0, t('Reports'), '', (data.open_reports || 0) > 0 ? 'warn' : '');
-      waiting.style.cursor = 'pointer';
-      waiting.addEventListener('click', function () { S.adminTab('Reports'); });
-    }
-    stat(stats, list.filter(function (p) { return p.on; }).length, t('Modules on'));
-    if (data.version) stat(stats, data.version, t('Exedra version'));
-    // what other scripts add to this page
-    for (const extra of Extras.adminOverview)
-      if (!extra.permission || can(extra.permission)) {
-        const holder = el('section', 'overview-extra');
-        box.appendChild(holder);
-        extra.build(holder);
-      }
-  }
-
-  // Only says which groups of settings this box holds; key keeps each box's
-  // last section apart.
-  function adminSettings(box, data, only, key) {
-    const layout = el('div', 'settings-layout');
-    const side = el('div', 'settings-side');
-    const search = el('input', 'lv-find');
-    search.type = 'search';
-    search.autocomplete = 'off';
-    search.placeholder = t('Search settings');
-    search.setAttribute('aria-label', t('Search settings'));
-    const nav = el('nav', 'subtabs settings-nav');
-    nav.setAttribute('aria-label', t('Settings sections'));
-    const picker = el('select', 'lv-filter settings-picker');
-    picker.setAttribute('aria-label', t('Settings section'));
-    const panel = el('div', 'settings-panels');
-    const empty = el('p', 'hint', t('No settings match your search.'));
-    empty.hidden = true;
-    panel.appendChild(empty);
-    side.append(search, nav, picker);
-    layout.append(side, panel);
-    box.appendChild(layout);
-
-    const groups = new Map();
-    for (const s of data.settings) {
-      if (only && !only(s.group)) continue;
-      if (!groups.has(s.group)) groups.set(s.group, []);
-      groups.get(s.group).push(s);
-    }
-    let chosen = shared('admin-settings-section' + (key ? '-' + key : ''));
-    if (!groups.has(chosen)) chosen = groups.keys().next().value;
-    const sections = [];
-    function show() {
-      const query = search.value.trim().toLowerCase();
-      let found = false;
-      for (const section of sections) {
-        let matches = 0;
-        for (const field of section.fields) {
-          const match = !query || field.words.includes(query);
-          field.label.hidden = !match;
-          // Hidden search results must not be submitted or block number validation.
-          field.input.disabled = !match;
-          if (match) matches++;
-        }
-        section.form.hidden = query ? matches === 0 : section.group !== chosen;
-        section.button.classList.toggle('on', section.group === chosen);
-        section.button.setAttribute('aria-pressed', section.group === chosen ? 'true' : 'false');
-        if (!section.form.hidden) found = true;
-      }
-      picker.value = chosen;
-      empty.hidden = found;
-    }
-    function select(group) {
-      chosen = group;
-      shared('admin-settings-section' + (key ? '-' + key : ''), group);
-      search.value = '';
-      show();
-    }
-
-    for (const [group, settings] of groups) {
-      const button = el('button');
-      button.type = 'button';
-      button.append(el('span', '', t(group)), chip(t('%d', settings.length)));
-      button.addEventListener('click', function () { select(group); });
-      nav.appendChild(button);
-      const option = el('option', '', t('%s (%d)', t(group), settings.length));
-      option.value = group;
-      picker.appendChild(option);
-      const form = el('form', 'settings settings-section');
-      form.autocomplete = 'off';
-      form.appendChild(el('h3', '', t(group)));
-      if (group === 'Sign-in')
-        form.appendChild(el('p', 'hint', t('Make an OAuth app at each provider and give it this return address: %s followed by its name: github, gitlab, codeberg, google or microsoft. A provider shows on the sign-in page once its id and secret are here and it is switched on.',
-          location.origin + SiteBase.url('/_oauth/'))));
-      const fields = [];
-      for (const s of settings) {
-        const label = el('label');
-        const caption = el('span', 'setting-caption', t(s.caption));
-        caption.appendChild(el('small', 'hint', t(s.name)));
-        label.appendChild(caption);
-        let input;
-        if (s.kind === 'yesno' || s.kind.startsWith('choice:')) {
-          input = el('select');
-          const choices = s.kind === 'yesno' ? [['1', t('yes')], ['0', t('no')]] :
-            s.kind.slice(7).split('|').map(function (c) { return [c, t(c)]; });
-          for (const c of choices) {
-            const o = el('option', '', c[1]);
-            o.value = c[0];
-            input.appendChild(o);
-          }
-        } else {
-          // a long line (a list of emoji, of addresses) gets the column's
-          // whole width and wraps; it stays one line: Enter saves, as in a box
-          const long = s.kind === 'longtext';
-          input = el(long ? 'textarea' : 'input');
-          if (long) {
-            label.classList.add('wide');
-            input.rows = 3;
-            input.addEventListener('keydown', function (e) {
-              if (e.key === 'Enter') { e.preventDefault(); form.requestSubmit(); }
-            });
-            input.addEventListener('input', function () {
-              if (input.value.includes('\n')) input.value = input.value.replace(/\s*\n\s*/g, ' ');
-            });
-          }
-          if (s.kind === 'number') input.type = 'number';
-          // No browser autofill: its suggestion box holds the page's scrolling
-          // while it is open (Brave on Windows, 10 Nov 2026), and these are
-          // the site's settings, not the admin's own details.
-          input.autocomplete = 'off';
-          input.spellcheck = false;
-          // Secrets never come back from the server: an empty box keeps the one set.
-          // A text box masked by CSS, not a password box, so no password manager offers itself.
-          if (s.kind === 'secret') {
-            input.classList.add('secret');
-            input.setAttribute('data-1p-ignore', '');
-            input.setAttribute('data-lpignore', 'true');
-            input.placeholder = s.set ? t('set (empty keeps it)') : t('not set');
-          }
-        }
-        input.name = s.name;
-        input.value = s.value;
-        label.appendChild(input);
-        form.appendChild(label);
-        fields.push({label: label, input: input, words: [s.caption, t(s.caption), s.name].join(' ').toLowerCase()});
-      }
-      const save = el('button', 'primary', t('Save settings'));
-      save.type = 'submit';
-      form.appendChild(save);
-      if (group === 'File scanning') fileScanning(form);
-      if (group === 'Search') searchIndex(form);
-      form.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        save.disabled = true;
-        try { toast(await post('/api/admin/settings', new URLSearchParams(new FormData(form)))); }
-        catch (err) { failed(err); }
-        finally { save.disabled = false; }
-      });
-      panel.appendChild(form);
-      sections.push({group: group, button: button, form: form, fields: fields});
-    }
-    search.addEventListener('input', show);
-    picker.addEventListener('change', function () { select(picker.value); });
-    show();
-  }
-
-  // Under the File scanning settings: whether the scanner runs, a test with
-  // the EICAR file, and the uploads it stopped or could not check.
-  function fileScanning(form) {
-    const status = el('p', 'hint');
-    status.setAttribute('role', 'status');
-    const test = el('button', '', t('Test the scanner'));
-    test.type = 'button';
-    const said = el('p');
-    said.setAttribute('role', 'status');
-    const list = el('div', 'scan-list');
-    const panel = el('div', 'scan-panel');
-    panel.append(el('h3', '', t('The scanner')), status, el('p', 'hint', t('The test scans the EICAR test file, a harmless file that every virus scanner reports.')), test, said, list);
-    form.appendChild(panel);
-    const show = async function () {
-      const d = await get('/api/admin/scans');
-      status.textContent = [d.on ? t('Scanning is on.') : t('Scanning is off.'),
-        d.ready ? t('Scanner ready: %s', d.version || '?') : d.problem,
-        d.last_error ? t('Last error, %s: %s', dateTimeText(d.last_error_at), d.last_error) : ''].join(' ').trim();
-      list.replaceChildren(el('h3', '', t('Files stopped or not checked')));
-      if (!d.files.length) { list.appendChild(el('p', 'hint', t('Nothing yet.'))); return; }
-      adminTable(list, [t('When'), t('Member'), t('Where'), t('File'), t('Size'), t('Result'), 'SHA-256'], d.files.map(function (f) {
-        return [dateTimeText(f.when), f.member, f.route, f.name, sizeText(f.size),
-          f.found ? t('refused, found %s', f.names) : (f.kept ? t('kept unchecked: %s', f.names) : t('refused unchecked: %s', f.names)), f.sha256];
-      }));
-    };
-    test.addEventListener('click', async function () {
-      test.disabled = true;
-      said.textContent = '';
+    async function MoreClick(E) {
+      var Mine = 0.0;
+      var Next = 0.0;
+      var A = null;
+      if (!Boolean(O["remote"])) {
+        Limit = Limit + Step;
+        Draw();
+        return;
+      };
+      Mine = Asked;
+      Next = Page + 1;
+      More["disabled"] = true;
+      More.textContent = window.t("Loading…");
       try {
-        const r = JSON.parse(await post('/api/admin/scans/test', {}));
-        said.textContent = r.caught ? t('The scanner caught the test file: %s', r.words) :
-          r.error ? t('The scanner could not check the test file: %s', r.words) : t('The scanner did not catch the test file.');
-        if (r.caught && !r.limits) said.textContent += ' ' + t('It does not report the files it stops reading at a limit, so those would count as clean: set AlertExceedsMax yes in clamd.conf.');
-        await show();
-      } catch (err) { failed(err); }
-      finally { test.disabled = false; }
-    });
-    show().catch(failed);
-  }
-
-  // Under the Search settings: how each module's index stands, read again
-  // while one is being built.
-  function searchIndex(form) {
-    const panel = el('div', 'scan-panel');
-    form.appendChild(panel);
-    const show = async function () {
-      const d = await get('/api/admin/search');
-      panel.replaceChildren(el('h3', '', t('Search index')));
-      if (d.cgi) { panel.appendChild(el('p', 'hint', t('This program runs as CGI and keeps no index: the database search answers.'))); return; }
-      if (!d.parts.length) panel.appendChild(el('p', 'hint', t('Nothing here is searched through the index yet.')));
-      for (const p of d.parts) {
-        const count = p.documents.toLocaleString(locale);
-        let words = p.state === 'ready' ? t('%s documents, ready', count) :
-          p.state === 'building' ? t('building, %s', p.step || '') :
-          p.state === 'failed' ? t('failed: %s', p.problem) :
-          p.state === 'waiting' ? t('waiting to be built') : t('off');
-        if (p.queued) words += ', ' + t('%s changes waiting', p.queued.toLocaleString(locale));
-        if (p.refused) words += ', ' + t('%s found but not shown', p.refused.toLocaleString(locale));
-        const line = el('p', 'hint', p.part + ': ' + words);
-        line.setAttribute('role', 'status');
-        panel.appendChild(line);
-      }
-      if (form.isConnected && d.parts.some(function (p) { return p.state === 'building'; })) setTimeout(function () { show().catch(failed); }, 2000);
-    };
-    show().catch(failed);
-  }
-
-  // The site's icon (made in every size from one square picture) and the
-  // logo in the header.
-  function adminLook(box) {
-    const part = function (what, title, hint, preview) {
-      const form = el('form', 'settings look');
-      form.appendChild(el('h3', '', title));
-      form.appendChild(el('p', 'hint', hint));
-      const img = el('img', 'lookpreview ' + what);
-      img.alt = '';
-      img.addEventListener('error', function () { img.hidden = true; });
-      img.addEventListener('load', function () { img.hidden = false; });
-      img.src = preview;
-      const file = el('input');
-      file.type = 'file';
-      file.name = 'picture';
-      file.accept = 'image/png,image/jpeg';
-      const save = el('button', 'primary', t('Upload'));
-      const remove = el('button', '', t('Use none'));
-      remove.type = 'button';
-      const send = async function (fields) {
-        fields.append('what', what);
         try {
-          toast(await post('/api/admin/look', fields));
-          img.src = preview + (preview.includes('?') ? '&' : '?') + Date.now();
-        } catch (err) { failed(err); }
+          A = await O.remote(pas.JS.New(["q",Q,"filters",Filters,"sort",Sort,"page",Next]));
+        } catch ($e) {
+          $mod.C.failed($e);
+          return;
+        };
+      } finally {
+        More["disabled"] = false;
+        More.textContent = window.t("Show more");
       };
-      form.addEventListener('submit', function (e) { e.preventDefault(); send(new FormData(form)); });
-      remove.addEventListener('click', function () {
-        const fields = new FormData();
-        fields.append('remove', '1');
-        send(fields);
-      });
-      form.append(img, file, save, remove);
-      box.appendChild(form);
+      if (Mine !== Asked) return;
+      Page = Next;
+      Shown = Shown.concat(A["rows"]);
+      Total = A["total"];
+      Draw();
     };
-    const logo = $('.brandlogo');
-    part('icon', t('Icon'), t('One square PNG or JPEG, 512 by 512 pixels or more. It becomes the browser tab icon, the installed app\'s icon and the notification icon, in every size they need.'), '/icon-192.png');
-    part('logo', t('Logo'), t('Shown in the header, 32 pixels high, beside the name or instead of it (Settings, "Show the name beside the logo"). It sits on the dark header bar in both themes, so use light lettering. A wide PNG with a clear background works best.'), logo ? logo.src : '/site/logo.png');
-  }
-
-  function adminChannels(box, data) {
-    box.appendChild(el('p', 'hint', t('Public channels everyone follows when they join. Members open their own private channels from the + in the sidebar.')));
-    const table = el('table', 'grid');
-    const addRow = function (c) {
-      const tr = el('tr');
-      const slug = el('input');
-      slug.value = c.slug || '';
-      slug.readOnly = !!c.slug;
-      slug.placeholder = t('new-channel');
-      const topic = el('input');
-      topic.value = c.topic || '';
-      topic.placeholder = t('What it is for');
-      const policy = el('select');
-      [['all', t('everyone posts')], ['readonly', t('read only: some post, all reply')], ['closed', t('closed: only some post or reply')]].forEach(function (p) {
-        const o = el('option', '', p[1]);
-        o.value = p[0];
-        policy.appendChild(o);
-      });
-      policy.value = c.policy === 'readonly' || c.policy === 'closed' ? c.policy : 'all';
-      // nobody changes or deletes a message there once it is sent
-      const asSent = el('input');
-      asSent.type = 'checkbox';
-      asSent.checked = !!c.as_sent;
-      const asSentLabel = el('label', 'aslabel', '');
-      asSentLabel.append(asSent, ' ' + t('as sent'));
-      asSentLabel.title = t('Messages stay as they were sent: nobody changes or deletes one, a moderator neither.');
-      const archivedLabel = el('label', 'aslabel', '');
-      const archived = el('input');
-      archived.type = 'checkbox';
-      archived.checked = !!c.archived;
-      archived.title = t('Archived');
-      archivedLabel.append(archived, ' ' + t('archived'));
-      // The channel's icon: a click on it picks a new picture.
-      const iconCell = el('label', 'chanicon');
-      if (c.slug) {
-        const img = el('img');
-        img.alt = '';
-        if (c.avatar) img.src = c.avatar; else img.hidden = true;
-        const pick = el('input');
-        pick.type = 'file';
-        pick.accept = 'image/png,image/jpeg,image/webp';
-        pick.hidden = true;
-        iconCell.title = t('Change the icon');
-        iconCell.append(img, el('span', '', c.avatar ? '' : t('Icon')), pick);
-        pick.addEventListener('change', async function () {
-          const fields = new FormData();
-          fields.append('file', pick.files[0]);
-          fields.append('room_icon', c.slug);
-          try {
-            img.src = JSON.parse(await post('/api/upload', fields)).url;
-            img.hidden = false;
-            iconCell.querySelector('span').textContent = '';
-            toast(t('Icon saved.'));
-          } catch (err) { failed(err); }
-        });
-      }
-      const save = el('button', '', c.slug ? t('Save') : t('Create'));
-      save.type = 'button';
-      save.addEventListener('click', async function () {
+    function FreshOf(K) {
+      var Result = undefined;
+      var N = 0;
+      for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+        N = $l;
+        if ($mod.Same(KeyOf(Rows[N]),K)) return Rows[N];
+      };
+      Result = undefined;
+      return Result;
+    };
+    async function Refresh() {
+      var Result = undefined;
+      var Mine = 0.0;
+      var A = null;
+      if (Boolean(O["remote"])) {
+        Page = 0;
+        Asked = Asked + 1;
+        Mine = Asked;
+        Loading = true;
+        Trouble = "";
+        MarkSort();
+        Draw();
         try {
-          toast(await post('/api/admin/channel', {slug: slug.value, topic: topic.value, policy: policy.value,
-            archived: archived.checked ? '1' : '0', as_sent: asSent.checked ? '1' : '0'}));
-          if (!c.slug) route('/admin', false);
-        } catch (err) { failed(err); }
-      });
-      [iconCell, slug, topic, policy, asSentLabel, archivedLabel, save].forEach(function (x) { const td = el('td'); td.appendChild(x); tr.appendChild(td); });
-      table.appendChild(tr);
+          A = await O.remote(pas.JS.New(["q",Q,"filters",Filters,"sort",Sort,"page",0]));
+        } catch ($e) {
+          if (Mine !== Asked) return Result;
+          Loading = false;
+          Trouble = $mod.Either($e["message"],window.t("The list could not be read."));
+          Shown = new Array();
+          Draw();
+          return Result;
+        };
+        if (Mine !== Asked) return Result;
+        Loading = false;
+        Rows = A["rows"];
+        Shown = Rows;
+        Total = A["total"];
+        if (Boolean(Picked)) {
+          Picked = $mod.Either(FreshOf(KeyOf(Picked)),null);
+          MarkSort();
+          Draw();
+          ShowDetail();
+          return Result;
+        };
+      } else {
+        Limit = Step;
+        Local();
+      };
+      MarkSort();
+      Draw();
+      return Result;
     };
-    data.channels.forEach(addRow);
-    addRow({});
-    box.appendChild(table);
-  }
-
-  // Who has private channels and conversations: who, when and how much, never
-  // what.  Deleting here is for everyone in them and cannot be undone.
-  function adminPrivate(box) {
-    const when = function (iso) { return iso ? ago(iso) : t('nothing yet'); };
-    const count = function (n) { return tn(n, '%d message', '%d messages'); };
-    const people = function (c) {
-      const names = c.members.map(function (n) { return n === c.owner ? t('%s (owner)', n) : n; });
-      if (c.owner && c.members.indexOf(c.owner) < 0) names.unshift(t('%s (owner, left)', c.owner));
-      return names.join(', ') || t('nobody');
+    function ShowDetail() {
+      var Close = null;
+      var Inner = null;
+      Detail.replaceChildren();
+      if (!Boolean(Picked)) {
+        Detail.hidden = true;
+        return;
+      };
+      Detail.hidden = false;
+      Close = $mod.C.el("button","lv-close","×");
+      Close["type"] = "button";
+      Close.title = window.t("Close");
+      Close.setAttribute("aria-label",window.t("Close"));
+      Close.addEventListener("click",Unpick);
+      Inner = $mod.C.el("div","lv-detail-body");
+      Detail.append(Close,Inner);
+      O.detail(Picked,Inner,Api);
     };
-    const removeButton = function (ask, fields, show) {
-      const remove = el('button', 'small-link bad', t('Delete'));
-      remove.type = 'button';
-      remove.addEventListener('click', async function () {
-        if (!confirm(ask)) return;
-        try { toast(await post('/api/admin/private/delete', fields)); await show(); } catch (err) { failed(err); }
-      });
-      return remove;
+    function MarkRows(Tr, ByKey, R) {
+      var Lines = null;
+      var N = 0;
+      var X = null;
+      Lines = Array.from(Tbody.children);
+      for (var $l = 0, $end = Lines.length - 1; $l <= $end; $l++) {
+        N = $l;
+        X = Lines[N];
+        if (ByKey) {
+          $mod.Toggle(X,"on",Boolean(X["row"]) && $mod.Same(KeyOf(X["row"]),KeyOf(R)))}
+         else $mod.Toggle(X,"on",X == Tr);
+      };
     };
-    const part = function (rows, empty) {
-      const wrap = el('div', 'gridwrap');
-      if (!rows.length) { wrap.appendChild(el('p', 'dim', empty)); return wrap; }
-      const table = el('table', 'grid privategrid');
-      rows.forEach(function (row) { table.appendChild(row); });
-      wrap.appendChild(table);
-      return wrap;
+    function Pick(R, Tr, KeepFocus) {
+      var Top = 0.0;
+      var High = 0.0;
+      Picked = R;
+      MarkRows(Tr,false,null);
+      ShowDetail();
+      if (!KeepFocus && Boolean(Detail["getBoundingClientRect"])) {
+        Top = Detail.getBoundingClientRect().top;
+        High = rtl.getNumber($mod.Either(window.innerHeight,800));
+        if (Top > (High - 120)) Detail.scrollIntoView(pas.JS.New(["block","nearest","behavior","smooth"]));
+      };
     };
-    const row = function (cells) {
-      const tr = el('tr');
-      cells.forEach(function (c) {
-        const td = el('td', c.dim ? 'dim' : '');
-        if (c.node) td.appendChild(c.node); else td.textContent = c.text;
-        tr.appendChild(td);
-      });
-      return tr;
+    function Unpick() {
+      var Lines = null;
+      var N = 0;
+      Picked = null;
+      Lines = Array.from(Tbody.children);
+      for (var $l = 0, $end = Lines.length - 1; $l <= $end; $l++) {
+        N = $l;
+        Lines[N].classList.remove("on");
+      };
+      ShowDetail();
     };
-    let list = null;
-    const body = el('div');
-    const find = el('input');
-    find.type = 'search';
-    find.placeholder = t('Find a member or channel');
-    const fill = function () {
-      const q = find.value.trim().toLowerCase();
-      const has = function (text) { return !q || String(text).toLowerCase().indexOf(q) >= 0; };
-      const channels = list.channels.filter(function (c) {
-        return has(c.slug) || has(c.title) || has(c.owner) || c.members.some(has);
-      }).map(function (c) {
-        return row([
-          {node: el('b', '', c.archived ? t('#%s (archived)', c.slug) : '#' + c.slug)},
-          {text: people(c)},
-          {text: count(c.messages), dim: true},
-          {text: when(c.last), dim: true},
-          {node: removeButton(t('Delete #%s for good?\n\nIts messages, threads and files go for everyone in it. This cannot be undone.', c.slug), {kind: 'channel', slug: c.slug}, show)},
-        ]);
-      });
-      const talks = list.conversations.filter(function (c) { return has(c.a) || has(c.b); }).map(function (c) {
-        return row([
-          {node: el('b', '', t('%s and %s', c.a, c.b))},
-          {text: c.locked ? t('locked') : t('plain'), dim: true},
-          {text: count(c.messages), dim: true},
-          {text: when(c.last), dim: true},
-          {node: removeButton(t('Delete the conversation between %s and %s for good?\n\nEvery message and file goes from both sides. This cannot be undone.', c.a, c.b),
-            {kind: 'conversation', a: c.a, b: c.b}, show)},
-        ]);
-      });
-      body.replaceChildren(el('h2', '', t('Private channels')), part(channels, q ? t('None match.') : t('There are none.')),
-        el('h2', '', t('Private conversations')), part(talks, q ? t('None match.') : t('There are none.')));
+    function SetRows(List) {
+      Rows = List;
+      Loading = false;
+      Trouble = "";
+      if (Boolean(Picked)) Picked = $mod.Either(FreshOf(KeyOf(Picked)),null);
+      FillSelects();
+      Refresh();
+      ShowDetail();
     };
-    const show = async function () {
-      list = await get('/api/admin/private');
-      fill();
+    function Reload() {
+      var Result = undefined;
+      Result = Refresh();
+      return Result;
     };
-    find.addEventListener('input', fill);
-    box.append(el('p', 'hint', t('Who talks in private and how much. What they say does not come here.')), find, body);
-    show().catch(failed);
-  }
-
-  // The permission grid: a row for each permission, a column for each role.
-  // a role as the admin pages show it: the channel roles by the word channel
-  function roleTitle(name) {
-    return {owner: t('channel owner'), 'room-moderator': t('channel moderator')}[name] || name;
-  }
-
-  function adminPermissions(box, data) {
-    box.appendChild(el('p', 'hint', t('Tick which roles may do what. Admins may always do everything. The channel roles (channel owner, channel moderator) count only in their channel. To give one member one extra right, make a role with it and give them that role under Members.')));
-    const wrap = el('div', 'gridwrap');
-    const table = el('table', 'grid perms');
-    const headRow = el('tr');
-    headRow.appendChild(el('th', '', ''));
-    for (const r of data.roles) {
-      const th = el('th', r.scope === 'room' ? 'roomrole' : '', roleTitle(r.name));
-      th.title = r.caption;
-      headRow.appendChild(th);
-    }
-    table.appendChild(headRow);
-    for (const p of data.permissions) {
-      const tr = el('tr');
-      const name = el('td', 'pname', t(p.caption));
-      name.title = p.name;
-      tr.appendChild(name);
-      const have = p.roles.split(',').filter(Boolean);
-      for (const r of data.roles) {
-        const td = el('td');
-        const box2 = el('input');
-        box2.type = 'checkbox';
-        box2.checked = r.name === 'admin' || have.indexOf(r.name) >= 0;
-        box2.disabled = r.name === 'admin';
-        box2.title = roleTitle(r.name) + ': ' + t(p.caption);
-        box2.addEventListener('change', async function () {
-          if (box2.checked) have.push(r.name);
-          else have.splice(have.indexOf(r.name), 1);
-          try { await post('/api/admin/permission', {name: p.name, roles: have.join(',')}); }
-          catch (err) { failed(err); box2.checked = !box2.checked; }
-        });
-        td.appendChild(box2);
-        tr.appendChild(td);
-      }
-      table.appendChild(tr);
-    }
-    wrap.appendChild(table);
-    box.appendChild(wrap);
-
-    box.appendChild(el('h2', '', t('Roles')));
-    const roles = el('table', 'grid');
-    for (const r of data.roles) {
-      const tr = el('tr');
-      tr.append(el('td', '', roleTitle(r.name)), el('td', 'dim', r.scope === 'room' ? t('in one channel') : t('site')),
-        el('td', 'dim', r.caption));
-      const td = el('td');
-      if (!r.builtin) {
-        const x = el('button', 'small-link', t('Delete'));
-        x.type = 'button';
-        x.addEventListener('click', async function () {
-          if (!confirm(t('Delete the role %s? Members who have it lose it.', r.name))) return;
-          try { await post('/api/admin/role', {name: r.name, delete: '1'}); route('/admin', false); } catch (err) { failed(err); }
-        });
-        td.appendChild(x);
-      }
-      tr.appendChild(td);
-      roles.appendChild(tr);
-    }
-    box.appendChild(roles);
-    const form = el('form', 'invite');
-    const name = el('input');
-    name.placeholder = t('new-role');
-    const caption = el('input');
-    caption.placeholder = t('What it is for');
-    const scope = el('select');
-    [['site', t('site')], ['room', t('in one channel')]].forEach(function (o) {
-      const opt = el('option', '', o[1]);
-      opt.value = o[0];
-      scope.appendChild(opt);
+    function SetLoading() {
+      Loading = true;
+      Trouble = "";
+      Draw();
+    };
+    function SetFailed(Words) {
+      Loading = false;
+      Trouble = $mod.Either(Words,window.t("The list could not be read."));
+      Rows = new Array();
+      Shown = Rows;
+      Draw();
+    };
+    function Changed(R) {
+      var Lines = null;
+      var N = 0;
+      var Tr = null;
+      var Fresh = null;
+      Lines = Array.from(Tbody.children);
+      for (var $l = 0, $end = Lines.length - 1; $l <= $end; $l++) {
+        N = $l;
+        Tr = Lines[N];
+        if (Boolean(Tr["row"]) && $mod.Same(KeyOf(Tr["row"]),KeyOf(R))) {
+          Fresh = RowOf(R);
+          if (Tr.classList.contains("on")) Fresh.classList.add("on");
+          Tr.replaceWith(Fresh);
+        };
+      };
+      if (Boolean(Picked) && $mod.Same(KeyOf(Picked),KeyOf(R))) {
+        Picked = R;
+        ShowDetail();
+      };
+    };
+    function PickBy(Match) {
+      var Result = false;
+      var R = undefined;
+      if (Boolean(O["remote"])) {
+        R = $mod.FindIn(Shown,Match)}
+       else R = $mod.FindIn(Rows,Match);
+      if (!Boolean(R)) return false;
+      Picked = R;
+      Draw();
+      ShowDetail();
+      Result = true;
+      return Result;
+    };
+    function Show(R) {
+      Picked = R;
+      MarkRows(null,true,R);
+      ShowDetail();
+    };
+    function Search(Words) {
+      if (Boolean(Find)) {
+        Find.value = Words;
+        Q = Words;
+        Refresh();
+      };
+    };
+    function GiveRows() {
+      var Result = null;
+      Result = Rows;
+      return Result;
+    };
+    if (Boolean(O["cls"])) {
+      View = $mod.C.el("div","listview " + ("" + O["cls"]))}
+     else View = $mod.C.el("div","listview");
+    Bar = $mod.C.el("div","lv-bar");
+    Scroller = $mod.C.el("div","lv-scroll");
+    Table = $mod.C.el("table","lv-table");
+    Thead = $mod.C.el("thead");
+    Tbody = $mod.C.el("tbody");
+    Table.append(Thead,Tbody);
+    Scroller.appendChild(Table);
+    Foot = $mod.C.el("div","lv-foot");
+    Count = $mod.C.el("span","lv-count");
+    More = $mod.C.el("button","small-link",window.t("Show more"));
+    More["type"] = "button";
+    More.hidden = true;
+    Foot.append(Count,More);
+    Detail = $mod.C.el("div","lv-detail");
+    Detail.hidden = true;
+    View.append(Bar,Scroller,Foot,Detail);
+    Box.appendChild(View);
+    if (Boolean(O["key"])) {
+      KeyOf = O["key"]}
+     else KeyOf = function (R) {
+      var Result = undefined;
+      Result = JSON.stringify(R);
+      return Result;
+    };
+    if (Boolean(O["text"])) {
+      TextOf = O["text"]}
+     else TextOf = function (R) {
+      var Result = undefined;
+      var Words = null;
+      var N = 0;
+      Words = new Array();
+      Columns = O["columns"];
+      for (var $l = 0, $end = Columns.length - 1; $l <= $end; $l++) {
+        N = $l;
+        Words.push(String(ValueOf(Columns[N],R)));
+      };
+      Result = Words.join(" ");
+      return Result;
+    };
+    Step = rtl.getNumber($mod.Either(O["page"],100));
+    Rows = $mod.Either(O["rows"],new Array());
+    Shown = new Array();
+    Total = 0;
+    Limit = Step;
+    Page = 0;
+    Picked = null;
+    Q = "";
+    Asked = 0;
+    Loading = Boolean(O["remote"]) || $mod.IsUndef(O["rows"]);
+    Trouble = "";
+    Sort = "" + $mod.Either(O["sort"],"");
+    Filters = new Object();
+    Saved = new Object();
+    try {
+      if (Boolean(O["id"])) Saved = JSON.parse("" + $mod.Either(window.localStorage.getItem("lv-" + ("" + O["id"])),"{}"));
+    } catch ($e) {
+    };
+    Columns = O["columns"];
+    if (Boolean(Saved["sort"])) for (var $l = 0, $end = Columns.length - 1; $l <= $end; $l++) {
+      I = $l;
+      if (!Boolean(Columns[I]["nosort"]) && $mod.Same(Columns[I]["key"],Saved["sort"].replace(new RegExp("^-"),""))) {
+        Sort = "" + Saved["sort"];
+        break;
+      };
+    };
+    Find = null;
+    Timer = 0;
+    if (!$mod.Same(O["search"],false)) AddFind();
+    Selects = new Array();
+    Given = $mod.Either(O["filters"],new Array());
+    for (var $l1 = 0, $end1 = Given.length - 1; $l1 <= $end1; $l1++) {
+      I = $l1;
+      AddFilter(Given[I]);
+    };
+    if (Boolean(O["csv"])) AddCsv();
+    if (Bar.children.length === 0) Bar.hidden = true;
+    Head = $mod.C.el("tr");
+    Ths = new Array();
+    for (var $l2 = 0, $end2 = Columns.length - 1; $l2 <= $end2; $l2++) {
+      I = $l2;
+      AddHeading(Columns[I]);
+    };
+    Thead.appendChild(Head);
+    More.addEventListener("click",MoreClick);
+    Api = pas.JS.New(["set",SetRows,"reload",Reload,"loading",SetLoading,"failed",SetFailed,"changed",Changed,"pick",PickBy,"show",Show,"unpick",Unpick,"search",Search,"rows",GiveRows,"element",View]);
+    FillSelects();
+    Refresh();
+    Result = Api;
+    return Result;
+  };
+  this.StrikeKinds = function () {
+    var Result = null;
+    Result = Object.assign(pas.JS.New(["g-miss",window.t("missing pages"),"g-password",window.t("wrong passwords or tokens"),"g-admin",window.t("admin pages probed"),"signin",window.t("sign-in tries"),"signup",window.t("sign-up tries"),"token",window.t("token tries"),"authtry",window.t("sign-in requests"),"wikilist",window.t("wiki lists"),"search",window.t("searches")]),$mod.Either($mod.Extras["strikeKinds"],new Object()));
+    return Result;
+  };
+  this.SectionOf = function (Path) {
+    var Result = "";
+    var First = "";
+    First = ("" + $mod.Either(("" + $mod.Either(Path,"/")).split("?")[0].split("/")[1],"")).split("-")[0];
+    if (First !== "") {
+      Result = "/" + First}
+     else Result = "/";
+    return Result;
+  };
+  this.SectionOptions = function (Paths) {
+    var Result = null;
+    var Seen = null;
+    var Section = "";
+    var I = 0;
+    Seen = new Map();
+    for (var $l = 0, $end = Paths.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Section = $mod.SectionOf(Paths[I]);
+      Seen.set(Section,rtl.getNumber($mod.Either(Seen.get(Section),0)) + 1);
+    };
+    Result = $impl.ByCount(Seen);
+    return Result;
+  };
+  this.LookUpAddress = function (Ip) {
+    if (Boolean($mod.S["adminTab"])) $mod.S.adminTab("Visitors");
+    if (Boolean($mod.S["showAddress"])) $mod.S.showAddress(Ip);
+  };
+  this.AddressCell = function (Ip) {
+    var Result = null;
+    Result = $mod.AddressCell$1(Ip,undefined);
+    return Result;
+  };
+  this.AddressCell$1 = function (Ip, Flagged) {
+    var Result = null;
+    var B = null;
+    var Mark = null;
+    B = $mod.C.el("button","lv-ip lv-link",Ip);
+    B["type"] = "button";
+    B.title = window.t("Everything about this address");
+    B.addEventListener("click",function (E) {
+      $mod.LookUpAddress(Ip);
     });
-    const add = el('button', 'primary', t('Make the role'));
-    form.append(name, caption, scope, add);
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
+    if (!Boolean(Flagged)) return B;
+    Result = $mod.C.el("span","lv-flag");
+    Mark = $mod.C.chip("!","bad");
+    Mark.title = window.t("Of concern: see the Of concern tab");
+    Result.append(B," ",Mark);
+    return Result;
+  };
+  this.Stamp = function (At) {
+    var Result = undefined;
+    var D = null;
+    D = new Date(At);
+    if (isNaN(D)) return $mod.Either(At,"");
+    if (D.toDateString() === (new Date()).toDateString()) {
+      Result = $mod.C.clock(At)}
+     else Result = window.dateTimeText(At);
+    return Result;
+  };
+  this.OutLink = function (Url) {
+    var Result = null;
+    if (!(new RegExp("^https?:\\/\\/","i")).test(String(Url))) return $mod.C.el("span","visit-path",Url);
+    Result = $mod.C.el("a","visit-path",Url);
+    Result["href"] = Url;
+    Result["target"] = "_blank";
+    Result["rel"] = "noopener noreferrer";
+    return Result;
+  };
+  this.LookButton = function (Ip) {
+    var Result = null;
+    Result = $mod.C.el("button","",window.t("Everything about this address"));
+    Result["type"] = "button";
+    Result.title = window.t("Its whole story in the period, the guard's facts included, under Address");
+    Result.addEventListener("click",function (E) {
+      $mod.LookUpAddress(Ip);
+    });
+    return Result;
+  };
+  this.ReasonWords = function (X) {
+    var Result = undefined;
+    var N = undefined;
+    var Kind = "";
+    N = $mod.Either(X["n"],0);
+    Kind = String(X["kind"]);
+    if (!$mod.Same(Kind,X["kind"])) return X["kind"];
+    if (Kind === "rate") {
+      Result = window.tn(N,"%d request in one minute","%d requests in one minute");
+      if (Boolean(X["text"])) Result = "" + Result + " (" + ("" + $mod.Stamp(X["text"])) + ")";
+    } else if (Kind === "requests") {
+      Result = window.tn(N,"%d request","%d requests")}
+     else if (Kind === "browser-crawl") {
+      Result = window.t("a browser that read %s pages",$mod.LocaleNumber(N))}
+     else if (Kind === "agents") {
+      Result = window.tn(N,"%d browser string","%d browser strings")}
+     else if (Kind === "pretender") {
+      Result = window.t("names %s’s crawler from outside its addresses",X["text"])}
+     else if (Kind === "fake") {
+      Result = window.t("claims to be %s; its DNS says no",X["text"])}
+     else if (Kind === "missing") {
+      Result = window.tn(N,"%d page that is not here","%d pages that are not here")}
+     else if (Kind === "probes") {
+      Result = window.tn(N,"%d scanner path probed","%d scanner paths probed")}
+     else if (Kind === "refused") {
+      Result = window.tn(N,"turned away %d time","turned away %d times")}
+     else if (Kind === "errors") {
+      Result = window.tn(N,"%d server error","%d server errors")}
+     else if (Kind === "members") {
+      Result = window.tn(N,"signed in as %d member","signed in as %d members")}
+     else Result = X["kind"];
+    return Result;
+  };
+  this.ReasonKinds = function () {
+    var Result = null;
+    Result = pas.JS.New(["rate",window.t("Pace"),"requests",window.t("Many requests"),"browser-crawl",window.t("A browser crawling"),"agents",window.t("Browser strings"),"pretender",window.t("Pretending to be a crawler"),"fake",window.t("Failed its DNS check"),"missing",window.t("Missing pages"),"probes",window.t("Probing"),"refused",window.t("Turned away"),"errors",window.t("Server errors"),"members",window.t("Many members")]);
+    return Result;
+  };
+  this.StatusCell = function (Code) {
+    var Result = null;
+    if (!Boolean(Code)) return $mod.C.el("span","dim","–");
+    if (Number(Code) >= 500) {
+      Result = $mod.C.chip(String(Code),"bad")}
+     else if (Number(Code) >= 400) {
+      Result = $mod.C.chip(String(Code),"open")}
+     else Result = $mod.C.chip(String(Code),"");
+    return Result;
+  };
+  this.MsCell = function (Ms) {
+    var Result = undefined;
+    var Cls = "";
+    var Words = "";
+    if ($mod.IsUndef(Ms) || (Ms == null)) return "";
+    if (Number(Ms) >= 2000) {
+      Cls = "bot-bad"}
+     else Cls = "dim";
+    if (Number(Ms) >= 1000) {
+      Words = $mod.Fixed(Number(Ms) / 1000,1) + " s"}
+     else Words = "" + Ms + " ms";
+    Result = $mod.C.el("span",Cls,Words);
+    return Result;
+  };
+  this.PartLabel = function (Part) {
+    var Result = undefined;
+    var Name = "";
+    Name = "" + Part;
+    Result = $mod.Either($mod.Extras["places"][Name],pas.JS.New(["chat",window.t("Chat"),"api",window.t("API"),"static",window.t("Static"),"other",window.t("Other")])[Name]);
+    if (!Boolean(Result)) Result = Part.charAt(0).toUpperCase() + Part.slice(1);
+    return Result;
+  };
+  this.PlaceName = function (Where) {
+    var Result = undefined;
+    if ($mod.Same(Where,"chat")) {
+      Result = window.t("Chat")}
+     else Result = $mod.Either($mod.Extras["places"]["" + Where],Where);
+    return Result;
+  };
+  this.WindowName = function (R) {
+    var Result = "";
+    Result = String($mod.Either(R["from"],"")).slice(0,10) + "-" + String($mod.Either(R["to"],"")).slice(0,10);
+    return Result;
+  };
+  $mod.$implcode = function () {
+    $impl.ByCount = function (Seen) {
+      var Result = null;
+      var Pairs = null;
+      var I = 0;
+      Pairs = $mod.SortBy(Array.from(Seen),function (A, B) {
+        var Result = 0.0;
+        Result = rtl.getNumber(B[1]) - rtl.getNumber(A[1]);
+        return Result;
+      });
+      Result = new Array();
+      for (var $l = 0, $end = Pairs.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Result.push(Array.of(Pairs[I][0],"" + Pairs[I][0] + " (" + ("" + Pairs[I][1]) + ")"));
+      };
+      return Result;
+    };
+  };
+  $mod.$init = function () {
+    $mod.C = window["Chat"];
+    $mod.SiteName = $mod.C["Site"];
+    $mod.Me = $mod.C["me"];
+    $mod.S = $mod.C["state"];
+    $mod.Extras = $mod.C["extras"];
+    $mod.Locale = $mod.C["locale"];
+    $mod.Stream = $mod.C["stream"];
+    $mod.FilePaths = new Array();
+  };
+},[]);
+rtl.module("Admin_Address",["System","JS","Web","Admin_List"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.TimelineChart = function (Box, Tl, Compact) {
+    var Step = 0.0;
+    var Start = 0.0;
+    var Most = 0.0;
+    var Total = 0.0;
+    var Sum = 0.0;
+    var N = 0;
+    var I = 0;
+    var J = 0;
+    var K = 0;
+    var StepWords = "";
+    var Rows = null;
+    var Series = null;
+    var Ser = null;
+    var Words = null;
+    var Row = null;
+    var Wrap = null;
+    var Head = null;
+    var Columns = null;
+    var Col = null;
+    var Seg = null;
+    var Cap = null;
+    var V = undefined;
+    var Any = false;
+    function Iso(Ms) {
+      var Result = "";
+      Result = (new Date(Ms)).toISOString();
+      return Result;
+    };
+    function When(Bar) {
+      var Result = "";
+      var A = 0.0;
+      var B = 0.0;
+      A = Start + (Bar * Step * 1000);
+      B = (A + (Step * 1000)) - 1000;
+      if (Step >= 86400) return window.dateText(Iso(A).slice(0,10));
+      if (Step >= 7200) {
+        Result = window.dateTimeText(Iso(A))}
+       else Result = "" + pas.Admin_List.Stamp(Iso(A));
+      Result = Result + " – " + ("" + pas.Admin_List.C.clock(Iso(B)));
+      return Result;
+    };
+    function CountOf(One, Bar) {
+      var Result = undefined;
+      Result = pas.Admin_List.Either(pas.Admin_List.Either(One[0],new Array())[Bar],0);
+      return Result;
+    };
+    if (!Boolean(Tl) || !Boolean(Tl["pages"]) || !Boolean(Tl["pages"].length)) return;
+    Step = Number(Tl["step"]);
+    Start = (new Date(Tl["start"])).getTime();
+    N = Tl["pages"].length;
+    if (Step < 3600) {
+      StepWords = window.tn(Step / 60,"a bar a minute","a bar every %d minutes")}
+     else if (Step < 86400) {
+      StepWords = window.tn(Step / 3600,"a bar an hour","a bar every %d hours")}
+     else StepWords = window.tn(Step / 86400,"a bar a day","a bar every %d days");
+    Rows = Array.of(pas.JS.New(["title",window.t("Pages people read, and the rest they asked for"),"series",Array.of(Array.of(Tl["pages"],"tl-pages",window.t("pages")),Array.of(Tl["other"],"tl-other",window.t("other requests")))]),pas.JS.New(["title",window.t("Bot requests"),"series",Array.of(Array.of(Tl["bots"],"tl-bots",window.t("bot requests")))]),pas.JS.New(["title",window.t("Refused, not here, or failed"),"series",Array.of(Array.of(Tl["errors"],"tl-errors",window.t("errors")))]));
+    if (Compact) {
+      Wrap = pas.Admin_List.C.el("div","timeline compact")}
+     else Wrap = pas.Admin_List.C.el("div","timeline");
+    for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Row = Rows[I];
+      Series = Row["series"];
+      Any = false;
+      for (var $l1 = 0, $end1 = Series.length - 1; $l1 <= $end1; $l1++) {
+        J = $l1;
+        Ser = Series[J];
+        if (Boolean(Ser[0])) for (var $l2 = 0, $end2 = Ser[0].length - 1; $l2 <= $end2; $l2++) {
+          K = $l2;
+          if (Boolean(Ser[0][K])) Any = true;
+        };
+      };
+      if (!Any) continue;
+      Most = 1;
+      Total = 0;
+      for (var $l3 = 0, $end3 = N - 1; $l3 <= $end3; $l3++) {
+        K = $l3;
+        Sum = 0;
+        for (var $l4 = 0, $end4 = Series.length - 1; $l4 <= $end4; $l4++) {
+          J = $l4;
+          Sum = Sum + Number(CountOf(Series[J],K));
+        };
+        if (Sum > Most) Most = Sum;
+        Total = Total + Sum;
+      };
+      Head = pas.Admin_List.C.el("div","tl-head");
+      Head.append(pas.Admin_List.C.el("span","",Row["title"]),pas.Admin_List.C.el("span","num",pas.Admin_List.LocaleNumber(Total)));
+      Wrap.appendChild(Head);
+      Columns = pas.Admin_List.C.el("div","days tl-row");
+      for (var $l5 = 0, $end5 = N - 1; $l5 <= $end5; $l5++) {
+        K = $l5;
+        Col = pas.Admin_List.C.el("b");
+        Words = new Array();
+        for (var $l6 = 0, $end6 = Series.length - 1; $l6 <= $end6; $l6++) {
+          J = $l6;
+          Ser = Series[J];
+          V = CountOf(Ser,K);
+          Seg = pas.Admin_List.C.el("i",Ser[1]);
+          Seg.style["height"] = String(Math.round((60 * Number(V)) / Most)) + "px";
+          Col.appendChild(Seg);
+          Words.push(pas.Admin_List.LocaleNumber(V) + " " + ("" + Ser[2]));
+        };
+        Col.title = When(K) + ": " + Words.join(", ");
+        Columns.appendChild(Col);
+      };
+      Wrap.appendChild(Columns);
+    };
+    Cap = pas.Admin_List.C.el("div","days-caption");
+    Cap.append(pas.Admin_List.C.el("span","",window.dateTimeText(Tl["start"])),pas.Admin_List.C.el("span","",StepWords),pas.Admin_List.C.el("span","",window.dateTimeText(Iso((Start + (N * Step * 1000)) - 1000))));
+    Wrap.appendChild(Cap);
+    Box.appendChild(Wrap);
+  };
+  this.AddressPanel = function (Ip, Holder, Period) {
+    var Win = null;
+    function Again() {
+      $mod.AddressPanel(Ip,Holder,Period);
+    };
+    function Draw(R) {
+      var A = null;
+      var G = null;
+      var Ab = null;
+      var X = null;
+      var M = null;
+      var Head = null;
+      var Look = null;
+      var Tiles = null;
+      var P = null;
+      var List = null;
+      var Li = null;
+      var Acts = null;
+      var Two = null;
+      var Left = null;
+      var Right = null;
+      var Ul = null;
+      var A2 = null;
+      var Lookups = null;
+      var Rows = null;
+      var Codes = null;
+      var Parts = null;
+      var Strikes = null;
+      var Shown = null;
+      var Names = null;
+      var Kinds2 = null;
+      var CrawlerText = "";
+      var Words = "";
+      var Cls = "";
+      var Code = "";
+      var Note = undefined;
+      var I = 0;
+      function Mark(Fits) {
+        var Result = "";
+        if (Fits) {
+          Result = "warn"}
+         else Result = "";
+        return Result;
+      };
+      function AgentName(Row) {
+        var Result = undefined;
+        Result = pas.Admin_List.Either(Row["bot"],pas.Admin_List.BrowserOf(Row["agent"]));
+        return Result;
+      };
+      Holder.replaceChildren();
+      A = R["address"];
+      G = R["guard"];
+      Head = pas.Admin_List.C.el("div","lv-detail-head");
+      Head.appendChild(pas.Admin_List.C.el("b","",R["ip"]));
+      if (Boolean(G) && Boolean(G["host"])) Head.appendChild(pas.Admin_List.C.el("span","dim",G["host"]));
+      Look = pas.Admin_List.C.el("span","ip-lookups");
+      Lookups = Array.of(Array.of("AbuseIPDB","https://www.abuseipdb.com/check/",window.t("Abuse reports about this address")),Array.of("GreyNoise","https://viz.greynoise.io/ip/",window.t("Whether it scans the whole internet")),Array.of("ipinfo","https://ipinfo.io/",window.t("Who the address belongs to")));
+      for (var $l = 0, $end = Lookups.length - 1; $l <= $end; $l++) {
+        I = $l;
+        A2 = pas.Admin_List.C.link("" + Lookups[I][1] + pas.Admin_List.C.enc(R["ip"]),"",Lookups[I][0]);
+        A2.target = "_blank";
+        A2["rel"] = "noopener noreferrer";
+        A2["title"] = Lookups[I][2];
+        Look.appendChild(A2);
+      };
+      Head.appendChild(Look);
+      if (Boolean(A["crawler"])) {
+        CrawlerText = "" + A["crawler"];
+        if (Boolean(A["company"])) CrawlerText = CrawlerText + " · " + ("" + A["company"]);
+      } else if (Boolean(G) && Boolean(G["crawler_name"])) {
+        CrawlerText = "" + G["crawler_name"];
+        if (Boolean(G["company"])) CrawlerText = CrawlerText + " · " + ("" + G["company"]);
+      } else if (Boolean(G) && Boolean(G["crawler"])) {
+        CrawlerText = window.t("a search engine’s crawler")}
+       else CrawlerText = "";
+      if (CrawlerText !== "") {
+        Head.appendChild(pas.Admin_List.C.chip(CrawlerText,"admin"))}
+       else if (Boolean(A["bot"])) Head.appendChild(pas.Admin_List.C.chip(A["bot"],""));
+      if (Boolean(G) && Boolean(G["local"])) {
+        Head.appendChild(pas.Admin_List.C.chip(window.t("This network"),"admin"))}
+       else if (Boolean(G) && Boolean(G["allowed"])) Head.appendChild(pas.Admin_List.C.chip(window.t("Allowed"),"admin"));
+      if (Boolean(G) && Boolean(G["block"]) && Boolean(G["block"]["active"])) {
+        if (Boolean(G["block"]["for_good"])) {
+          Head.appendChild(pas.Admin_List.C.chip(window.t("Blocked for good"),"bad"))}
+         else Head.appendChild(pas.Admin_List.C.chip(window.t("Blocked now"),"bad"));
+      };
+      if (Number(A["score"]) > 0) Head.appendChild(pas.Admin_List.C.chip(window.t("Of concern"),"open"));
+      Holder.appendChild(Head);
+      if (!Boolean(A["requests"])) {
+        if (Boolean(pas.Admin_List.S["adminCan"]) && pas.Admin_List.S.adminCan("view-visitors")) {
+          Holder.appendChild(pas.Admin_List.C.el("p","dim",window.t("Nothing from this address in the period.")))}
+         else Holder.appendChild(pas.Admin_List.C.el("p","dim",window.t("The log is for those who may view visitors.")));
+      } else {
+        Tiles = pas.Admin_List.C.el("div","tiles-admin");
+        pas.Admin_List.Stat(Tiles,A["requests"],window.t("Requests"),window.t("%s to %s",pas.Admin_List.Stamp(A["first"]),pas.Admin_List.Stamp(A["last"])),undefined);
+        pas.Admin_List.Stat(Tiles,A["pages"],window.t("Pages"),undefined,undefined);
+        if (Boolean(A["polls"])) pas.Admin_List.Stat(Tiles,A["polls"],window.t("Open tab checks"),window.t("a tab left open, asking what is new"),undefined);
+        if (Boolean(A["peak_at"])) {
+          Note = pas.Admin_List.Stamp(A["peak_at"])}
+         else Note = "";
+        pas.Admin_List.Stat(Tiles,A["peak"],window.t("Busiest minute"),Note,Mark((Number(A["peak"]) >= 120) && !Boolean(A["crawler"])));
+        pas.Admin_List.Stat(Tiles,A["agents"],window.t("Browser strings"),"",Mark((Number(A["agents"]) >= 5) && !Boolean(A["crawler"])));
+        if (Boolean(A["probes"])) {
+          Note = window.tn(A["probes"],"%d scanner path","%d scanner paths")}
+         else Note = "";
+        pas.Admin_List.Stat(Tiles,A["missing"],window.t("Not here (404)"),Note,Mark((Number(A["missing"]) >= 30) || Boolean(A["probes"])));
+        if (Boolean(A["errors"])) {
+          Note = window.tn(A["errors"],"%d server error","%d server errors")}
+         else Note = "";
+        pas.Admin_List.Stat(Tiles,A["refused"],window.t("Turned away"),Note,Mark(Number(A["refused"]) >= 20));
+        Holder.appendChild(Tiles);
+      };
+      if (Boolean(A["reasons"]) && Boolean(A["reasons"].length)) {
+        P = pas.Admin_List.C.el("p","lv-reasons");
+        for (var $l1 = 0, $end1 = A["reasons"].length - 1; $l1 <= $end1; $l1++) {
+          I = $l1;
+          P.appendChild(pas.Admin_List.C.chip(pas.Admin_List.ReasonWords(A["reasons"][I]),"open"));
+        };
+        Holder.appendChild(P);
+      };
+      List = pas.Admin_List.C.el("ul","block-facts");
+      if (!Boolean(G)) {
+        List.appendChild(pas.Admin_List.C.el("li","dim",window.t("The guard’s facts could not be read.")))}
+       else {
+        Kinds2 = pas.Admin_List.StrikeKinds();
+        if (Boolean(G["local"])) {
+          List.appendChild(pas.Admin_List.C.el("li","good",window.t("This network: never blocked or limited.")))}
+         else if (Boolean(G["allowed"])) List.appendChild(pas.Admin_List.C.el("li","good",window.t("On the allowed list (Settings, allowed_ips): never blocked or limited.")));
+        if (Boolean(G["crawler"])) List.appendChild(pas.Admin_List.C.el("li","good",window.t("A published crawler, by the addresses its company publishes or its name pointing back to the address: never limited or blocked by the guard.")));
+        X = G["block"];
+        if (Boolean(X) && Boolean(X["active"])) {
+          if (Boolean(X["for_good"])) {
+            List.appendChild(pas.Admin_List.C.el("li","bad",window.t("Blocked for good: %s (%s).",X["reason"],window.dateTimeText(X["when"]))))}
+           else List.appendChild(pas.Admin_List.C.el("li","bad",window.t("Blocked until %s: %s. Blocked %d times so far.",window.dateTimeText(X["until"]),X["reason"],X["times"])));
+        } else if (Boolean(X)) {
+          List.appendChild(pas.Admin_List.C.el("li","",window.t("Not blocked now. Last block: %s, over since %s; blocked %d times so far.",X["reason"],window.dateTimeText(X["until"]),X["times"])))}
+         else List.appendChild(pas.Admin_List.C.el("li","",window.t("Not blocked, and never has been.")));
+        if (Boolean(G["abuse"])) {
+          Ab = G["abuse"];
+          Words = window.t("AbuseIPDB: %d%% confidence of abuse, %s from other sites (looked up %s).",Ab["score"],window.tn(Ab["reports"],"%d report","%d reports"),window.dateTimeText(Ab["checked"]));
+          if (Boolean(Ab["usage"]) || Boolean(Ab["isp"])) {
+            Names = new Array();
+            if (Boolean(Ab["usage"])) Names.push(Ab["usage"]);
+            if (Boolean(Ab["isp"])) Names.push(Ab["isp"]);
+            if (Boolean(Ab["country"])) Names.push(Ab["country"]);
+            Words = Words + " " + Names.join(", ") + ".";
+          };
+          if (Boolean(Ab["reported"])) Words = Words + " " + window.t("We reported it %s.",window.dateTimeText(Ab["reported"]));
+          if (Number(Ab["score"]) >= 75) {
+            Cls = "bad"}
+           else Cls = "";
+          List.appendChild(pas.Admin_List.C.el("li",Cls,Words));
+        };
+        if (Boolean(G["strikes"]) && Boolean(G["strikes"].length)) {
+          Li = pas.Admin_List.C.el("li","",window.t("In the last day:") + " ");
+          Strikes = new Array();
+          for (var $l2 = 0, $end2 = G["strikes"].length - 1; $l2 <= $end2; $l2++) {
+            I = $l2;
+            X = G["strikes"][I];
+            Strikes.push("" + pas.Admin_List.Either(Kinds2["" + X["kind"]],X["kind"]) + " × " + ("" + X["count"]));
+          };
+          Li.appendChild(pas.Admin_List.C.el("span","",Strikes.join(", ")));
+          List.appendChild(Li);
+        } else List.appendChild(pas.Admin_List.C.el("li","dim",window.t("Nothing counted against it in the last day.")));
+      };
+      Holder.appendChild(List);
+      Acts = pas.Admin_List.C.el("div","lv-actions");
+      if (Boolean(G)) {
+        Note = G["block"]}
+       else Note = G;
+      $impl.BlockButtons(Acts,R["ip"],Note,Again,CrawlerText);
+      if (Acts.childNodes.length > 0) Holder.appendChild(Acts);
+      if (!Boolean(A["requests"])) return;
+      $mod.TimelineChart(Holder,R["timeline"],true);
+      Two = pas.Admin_List.C.el("div","visit-two");
+      Left = pas.Admin_List.C.el("div");
+      Right = pas.Admin_List.C.el("div");
+      Two.append(Left,Right);
+      Holder.appendChild(Two);
+      if (Number(R["paths_count"]) > R["paths"].length) {
+        Left.appendChild(pas.Admin_List.C.el("h3","",window.t("What it asked for most (%s paths in all)",pas.Admin_List.LocaleNumber(R["paths_count"]))))}
+       else Left.appendChild(pas.Admin_List.C.el("h3","",window.t("What it asked for")));
+      Shown = R["paths"].slice(0,14);
+      Rows = new Array();
+      for (var $l3 = 0, $end3 = Shown.length - 1; $l3 <= $end3; $l3++) {
+        I = $l3;
+        X = Shown[I];
+        Note = X["path"];
+        try {
+          Note = decodeURIComponent("" + Note);
+        } catch ($e) {
+        };
+        Rows.push(pas.JS.New(["name",pas.Admin_List.Either(Note,"/"),"value",X["count"]]));
+      };
+      pas.Admin_List.Bars(Left,Rows,$impl.Requests);
+      Right.appendChild(pas.Admin_List.C.el("h3","",window.t("How it was answered")));
+      Codes = $impl.KeysByCount(pas.Admin_List.Either(R["statuses"],new Object()));
+      Rows = new Array();
+      for (var $l4 = 0, $end4 = Codes.length - 1; $l4 <= $end4; $l4++) {
+        I = $l4;
+        Code = "" + Codes[I];
+        if (Code === "0") {
+          Note = window.t("before the codes were logged")}
+         else Note = Code;
+        Rows.push(pas.JS.New(["name",Note,"value",R["statuses"][Code],"other",(Code === "0") || (Code < "400")]));
+      };
+      pas.Admin_List.Bars(Right,Rows,$impl.Requests);
+      Right.appendChild(pas.Admin_List.C.el("h3","",window.t("Parts of the site")));
+      Parts = $impl.KeysByCount(pas.Admin_List.Either(R["parts"],new Object()));
+      Rows = new Array();
+      for (var $l5 = 0, $end5 = Parts.length - 1; $l5 <= $end5; $l5++) {
+        I = $l5;
+        Rows.push(pas.JS.New(["name",pas.Admin_List.PartLabel(Parts[I]),"value",R["parts"]["" + Parts[I]]]));
+      };
+      pas.Admin_List.Bars(Right,Rows,$impl.Requests);
+      if (Boolean(R["referers"]) && Boolean(R["referers"].length)) {
+        Right.appendChild(pas.Admin_List.C.el("h3","",window.t("Came by links from")));
+        Shown = R["referers"].slice(0,8);
+        Rows = new Array();
+        for (var $l6 = 0, $end6 = Shown.length - 1; $l6 <= $end6; $l6++) {
+          I = $l6;
+          Rows.push(pas.JS.New(["name",Shown[I]["host"],"value",Shown[I]["requests"]]));
+        };
+        pas.Admin_List.Bars(Right,Rows,$impl.Requests);
+      };
+      Holder.appendChild(pas.Admin_List.C.el("h3","",window.t("Browser strings it used")));
+      pas.Admin_List.ListView(Holder,pas.JS.New(["id","v-addr-agents","key",function (Row) {
+        var Result = undefined;
+        Result = Row["agent"];
+        return Result;
+      },"sort","-requests","search",false,"rows",R["agents"],"columns",Array.of(pas.JS.New(["key","browser","title",window.t("Browser or bot"),"value",AgentName,"cell",function (Row) {
+        var Result = undefined;
+        var Span = null;
+        Span = pas.Admin_List.C.el("span","",AgentName(Row));
+        if (Boolean(Row["claims"]) && !Boolean(A["crawler"])) Span.append(" ",pas.Admin_List.C.chip(window.t("claims %s",Row["claims"]),"bad"));
+        Result = Span;
+        return Result;
+      }]),pas.JS.New(["key","requests","title",window.t("Requests"),"num",true]),pas.JS.New(["key","last","title",window.t("Last seen"),"down",true,"cell",function (Row) {
+        var Result = undefined;
+        Result = pas.Admin_List.Stamp(Row["last"]);
+        return Result;
+      }]),pas.JS.New(["key","agent","title",window.t("The whole string"),"wide",true,"cls","lv-text"])),"noun",function (N) {
+        var Result = undefined;
+        Result = window.tn(N,"%d browser string","%d browser strings");
+        return Result;
+      }]));
+      if (Boolean(R["members"]) && Boolean(R["members"].length)) {
+        Holder.appendChild(pas.Admin_List.C.el("h3","",window.t("Signed in from it as")));
+        Ul = pas.Admin_List.C.el("ul","lv-paths");
+        for (var $l7 = 0, $end7 = R["members"].length - 1; $l7 <= $end7; $l7++) {
+          I = $l7;
+          M = R["members"][I];
+          Li = pas.Admin_List.C.el("li");
+          Li.append(pas.Admin_List.C.link("/u/" + pas.Admin_List.C.enc(M["name"]),"",M["name"])," ",pas.Admin_List.C.el("span","dim",window.tn(M["requests"],"%d request","%d requests") + ", " + ("" + pas.Admin_List.Stamp(M["last"]))));
+          Ul.appendChild(Li);
+        };
+        Holder.appendChild(Ul);
+      };
+      Holder.appendChild(pas.Admin_List.C.el("h3","",window.t("Its last requests in the period")));
+      pas.Admin_List.ListView(Holder,pas.JS.New(["id","v-addr-trail","key",function (L) {
+        var Result = undefined;
+        Result = "" + L["at"] + ("" + L["path"]);
+        return Result;
+      },"sort","-at","search",window.t("Filter its requests"),"page",100,"rows",R["trail"],"csv","address-" + R["ip"].replace(new RegExp("[^0-9a-z]","gi"),"_"),"columns",Array.of(pas.JS.New(["key","at","title",window.t("When"),"down",true,"cell",function (L) {
+        var Result = undefined;
+        Result = pas.Admin_List.Stamp(L["at"]);
+        return Result;
+      }]),pas.JS.New(["key","method","title",window.t("Method"),"wide",true]),pas.JS.New(["key","path","title",window.t("Page"),"cell",function (L) {
+        var Result = undefined;
+        Result = pas.Admin_List.PageLink(L["path"]);
+        return Result;
+      }]),pas.JS.New(["key","status","title",window.t("Status"),"num",true,"cell",function (L) {
+        var Result = undefined;
+        Result = pas.Admin_List.StatusCell(L["status"]);
+        return Result;
+      }]),pas.JS.New(["key","ms","title",window.t("Took"),"num",true,"wide",true,"cell",function (L) {
+        var Result = undefined;
+        Result = pas.Admin_List.MsCell(L["ms"]);
+        return Result;
+      }]),pas.JS.New(["key","member","title",window.t("Member"),"wide",true,"cell",function (L) {
+        var Result = undefined;
+        if (Boolean(L["member"])) {
+          Result = pas.Admin_List.C.link("/u/" + pas.Admin_List.C.enc(L["member"]),"",L["member"])}
+         else Result = "";
+        return Result;
+      }]),pas.JS.New(["key","browser","title",window.t("Browser"),"wide",true,"value",function (L) {
+        var Result = undefined;
+        Result = pas.Admin_List.BrowserOf(L["agent"]);
+        return Result;
+      }])),"filters",Array.of(pas.JS.New(["key","kind","title",window.t("Which"),"all",window.t("Every request"),"options",Array.of(Array.of("pages",window.t("Pages")),Array.of("other",window.t("Everything else")),Array.of("errors",window.t("Errors and refusals"))),"test",function (L, K) {
+        var Result = undefined;
+        if (K === "errors") {
+          Result = Number(L["status"]) >= 400}
+         else if (pas.Admin_List.Same(L["method"],"GET") && pas.Admin_List.IsPagePath(L["path"])) {
+          Result = K === "pages"}
+         else Result = K === "other";
+        return Result;
+      }])),"noun",$impl.Requests]));
+    };
+    async function Read() {
+      var R = null;
+      var G = null;
+      var Why = "";
+      var Message = undefined;
       try {
-        await post('/api/admin/role', {name: name.value, caption: caption.value, scope: scope.value});
-        route('/admin', false);
-      } catch (err) { failed(err); }
-    });
-    box.appendChild(form);
-  }
-
-  // Members as a list: sorted by any column on the server, a role or bans
-  // picked out; the one picked below with its roles and the ban.
-  function adminMembers(box, data, can) {
-    const giveable = data.roles.filter(function (r) {
-      return r.scope === 'site' && r.name !== 'member' && r.name !== 'guest';
-    });
-    const detail = function (u, holder, view) {
-      const head = el('div', 'lv-detail-head');
-      head.appendChild(link('/u/' + enc(u.name), '', u.name));
-      if (u.banned) head.appendChild(chip(t('Banned'), 'bad'));
-      if (u.closed) head.appendChild(chip(t('Closed'), 'bad'));
-      holder.appendChild(head);
-      facts(holder, [[t('Joined'), u.joined ? dateText(u.joined) : ''], [t('Last here'), u.seen ? ago(u.seen) : t('never back')],
-        [t('Messages'), u.posts.toLocaleString(locale)]].concat(u.closed ? [[t('Closed'), dateText(u.closed)],
-        [t('Closed by'), u.closed_by === u.name ? t('the member') : u.closed_by], [t('Reason'), u.closed_reason]] : []));
-      // admins only (view-member-addresses): the server sends them to nobody else
-      if (u.addresses) {
-        const sect = el('div', 'member-addresses');
-        sect.appendChild(el('h4', '', u.address_count > u.addresses.length
-          ? t('Addresses: the %d newest of %d', u.addresses.length, u.address_count) : t('Addresses')));
-        const panel = el('div', 'lv-detail');
-        const list = el('ul', 'member-address-list');
-        for (const a of u.addresses) {
-          const li = el('li');
-          const b = el('button', 'lv-link', a.ip);
-          b.type = 'button';
-          b.title = t('Its whole story under Address: score, blocks, requests');
-          b.addEventListener('click', function () {
-            // the address panel reads the logs from the day before it was last seen, at most 30 days back
-            const today = new Date().toISOString().slice(0, 10);
-            const back = new Date(Math.max(Date.parse(a.seen) - 864e5, Date.now() - 30 * 864e5)).toISOString().slice(0, 10);
-            addressPanel(a.ip, panel, {from: back, to: today});
-          });
-          li.append(b, document.createTextNode(' ' + ago(a.seen) + ', ' + tn(a.times, '%d time', '%d times')));
-          list.appendChild(li);
-        }
-        sect.append(list, panel);
-        holder.appendChild(sect);
-      }
-      const have = u.roles.split(',').filter(Boolean);
-      const roles = el('div', 'lv-actions rolechecks');
-      // a closed account holds no role; it can be opened again, or renamed
-      roles.hidden = !!u.closed;
-      roles.appendChild(el('span', 'dim', t('Roles') + ':'));
-      for (const r of giveable) {
-        const label = el('label');
-        const c = el('input');
-        c.type = 'checkbox';
-        c.checked = have.indexOf(r.name) >= 0;
-        c.disabled = u.name === Me.name || !can('manage-members');
-        c.addEventListener('change', async function () {
-          if (c.checked) have.push(r.name); else have.splice(have.indexOf(r.name), 1);
-          try { toast(await post('/api/admin/member', {name: u.name, roles: have.join(',')})); u.roles = have.join(','); view.changed(u); }
-          catch (err) { failed(err); c.checked = !c.checked; }
-        });
-        label.append(c, document.createTextNode(' ' + r.name));
-        roles.appendChild(label);
-      }
-      holder.appendChild(roles);
-      if (u.name === Me.name) { holder.appendChild(el('p', 'hint', t('Ask another admin to change your own account.'))); return; }
-      const acts = el('div', 'lv-actions');
-      const act = function (caption, cls, run) {
-        const b = el('button', cls, caption);
-        b.type = 'button';
-        b.addEventListener('click', async function () {
-          try { await run(); } catch (err) { failed(err); }
-        });
-        acts.appendChild(b);
+        try {
+          R = await pas.Admin_List.C.get("/api/admin/visitors/address?ip=" + pas.Admin_List.C.enc(Ip) + "&from=" + pas.Admin_List.C.enc(Win["from"]) + "&to=" + pas.Admin_List.C.enc(Win["to"]));
+        } catch ($e) {
+          if (!Boolean(pas.Admin_List.S["adminCan"]) || pas.Admin_List.S.adminCan("view-visitors") || !pas.Admin_List.S.adminCan("manage-blocks")) throw $e;
+          G = await pas.Admin_List.C.get("/api/blocks/why?ip=" + pas.Admin_List.C.enc(Ip));
+          R = pas.JS.New(["ip",G["ip"],"address",pas.JS.New(["requests",0,"reasons",new Array()]),"guard",G]);
+        };
+        Draw(R);
+      } catch ($e) {
+        Why = "";
+        if (Boolean($e)) {
+          Message = $e["message"];
+          if (Boolean(Message) && (Message.length < 300) && !pas.Admin_List.Regex("[<>]",Message)) Why = " " + ("" + Message);
+        };
+        Holder.replaceChildren(pas.Admin_List.C.el("p","notice",window.t("The address could not be looked up.") + Why));
       };
-      const again = function () { view.unpick(); view.reload(); };
-      if (u.closed) {
-        if (can('manage-members')) act(t('Reopen the account'), '', async function () {
-          toast(await post('/api/admin/member', {name: u.name, reopen: '1'}));
-          toast(t('It has no password now: make a password link for %s.', u.name));
-          again();
-        });
-      } else if (can('ban')) act(u.banned ? t('Lift the ban') : t('Ban'), u.banned ? '' : 'bad', async function () {
-        if (!u.banned && !confirm(t('Ban %s? They are signed out and can only read.', u.name))) return;
-        toast(await post('/api/admin/member', {name: u.name, banned: u.banned ? '0' : '1'}));
-        u.banned = !u.banned;
-        view.changed(u);
-      });
-      if (can('manage-members')) {
-        // for a member who cannot get in: the link is shown once, to hand over
-        if (!u.closed) act(t('Password link'), '', async function () {
-          let address = (await post('/api/admin/member', {name: u.name, password_link: '1'})).trim();
-          if (address.charAt(0) === '/') address = location.origin + SiteBase.url(address);
-          const shown = el('pre', 'newtoken', address);
-          const copy = el('button', '', t('Copy'));
-          copy.type = 'button';
-          copy.addEventListener('click', function () {
-            navigator.clipboard.writeText(address).then(function () { copy.textContent = t('Copied'); });
-          });
-          const made = el('div', 'lv-actions member-link');
-          made.append(shown, copy, el('p', 'hint', t('Give this link to %s. It sets a new password, works once and for a week. Private conversations locked with the old password stay closed.', u.name)));
-          const old = $('.member-link', holder);
-          if (old) old.replaceWith(made); else acts.after(made);
-        });
-        act(t('Rename'), '', async function () {
-          const name = prompt(t('A new name for %s. Mentions of the old name stay as they were written.', u.name), u.name);
-          if (!name || name.trim() === u.name) return;
-          toast(await post('/api/admin/member', {name: u.name, rename: name.trim()}));
-          again();
-        });
-        if (!u.closed) act(t('Close the account'), 'bad', async function () {
-          const reason = prompt(t('Close the account of %s? They are signed out for good; their address, password and profile are wiped, and what they wrote stays. Why? (kept with the account)', u.name), '');
-          if (!reason || !reason.trim()) return;
-          toast(await post('/api/admin/member', {name: u.name, close: '1', reason: reason.trim()}));
-          again();
-        });
-      }
-      if (acts.children.length) holder.appendChild(acts);
     };
-    listView(box, {
-      id: 'members', key: function (u) { return u.name; }, sort: '-seen', csv: 'members',
-      search: can('view-member-addresses') ? t('Find a member by name or address') : t('Find a member by name'),
-      remote: function (s) {
-        return get('/api/admin/members?q=' + enc(s.q) + '&sort=' + enc(s.sort) + '&role=' + enc(s.filters.role || '') +
-          '&state=' + enc(s.filters.state || '') + '&page=' + s.page).then(function (a) { return {rows: a.members, total: a.total}; });
-      },
-      columns: [
-        {key: 'name', title: t('Member'), cell: function (u) { return link('/u/' + enc(u.name), '', u.name); }},
-        {key: 'roles', title: t('Roles'), nosort: true, cell: function (u) {
-          const span = el('span', 'chips');
-          for (const r of u.roles.split(',').filter(Boolean)) span.appendChild(chip(r, r === 'admin' ? 'admin' : ''));
-          if (u.banned) span.appendChild(chip(t('Banned'), 'bad'));
-          if (u.closed) span.appendChild(chip(t('Closed'), 'bad'));
-          return span;
-        }},
-        {key: 'posts', title: t('Messages'), num: true},
-        {key: 'joined', title: t('Joined'), down: true, wide: true, cell: function (u) { return u.joined ? dateText(u.joined) : ''; }},
-        {key: 'seen', title: t('Last here'), down: true, cell: function (u) { return u.seen ? ago(u.seen) : t('never back'); }}
-      ].concat(can('view-member-addresses') ? [
-        {key: 'addresses', title: t('Address'), nosort: true, wide: true, cell: function (u) {
-          if (!u.addresses || !u.addresses.length) return '';
-          return u.addresses[0].ip + (u.address_count > 1 ? ' +' + (u.address_count - 1) : '');
-        }}] : []),
-      filters: [
-        {key: 'role', title: t('Role'), all: t('Every role'), options: giveable.map(function (r) { return [r.name, r.name]; }).concat([['none', t('No role given')]])},
-        {key: 'state', title: t('Banned or closed'), all: t('Everyone'), options: [['active', t('Neither')], ['banned', t('Banned')], ['closed', t('Closed')]]}
-      ],
-      noun: function (n) { return tn(n, '%d member', '%d members'); },
-      detail: detail
+    if (typeof(Period) === "function") {
+      Win = Period()}
+     else Win = Period;
+    pas.Admin_List.C.waiting(Holder,window.t("Reading the log…"));
+    Read();
+  };
+  $mod.$implcode = function () {
+    $impl.BlockButtons = function (Holder, Ip, B, After, Crawler) {
+      var Lift = null;
+      var ForGood = null;
+      var Block = null;
+      var Allow = null;
+      function CrawlerOk() {
+        var Result = false;
+        Result = !Boolean(Crawler) || window.confirm(window.t("%s is %s, checked against the addresses its company publishes. Blocking it keeps the site out of that company’s search and answers. Block it anyway?",Ip,Crawler));
+        return Result;
+      };
+      async function Act(What, Reason) {
+        var Blocking = false;
+        var Ok = "";
+        Blocking = (What === "block") || (What === "forgood");
+        if (Blocking && Boolean(Crawler)) {
+          Ok = "1"}
+         else Ok = "";
+        try {
+          await pas.Admin_List.C.post("/api/blocks",pas.JS.New(["ip",Ip,"do",What,"reason",pas.Admin_List.Either(Reason,""),"crawler_ok",Ok]));
+        } catch ($e) {
+          pas.Admin_List.C.failed($e);
+          return;
+        };
+        if (Boolean(pas.Admin_List.S["blocksChanged"])) pas.Admin_List.S.blocksChanged();
+        if (After != null) After();
+      };
+      if (!Boolean(pas.Admin_List.S["adminCan"]) || !pas.Admin_List.S.adminCan("manage-blocks")) return;
+      if (Boolean(B) && Boolean(B["active"])) {
+        Lift = pas.Admin_List.C.el("button","",window.t("Lift"));
+        Lift["type"] = "button";
+        Lift.addEventListener("click",function (E) {
+          Act("lift",undefined);
+        });
+        Holder.appendChild(Lift);
+      };
+      if (!Boolean(B) || !Boolean(B["for_good"])) {
+        ForGood = pas.Admin_List.C.el("button","bad",window.t("Block for good"));
+        ForGood["type"] = "button";
+        ForGood.addEventListener("click",function (E) {
+          var Go = false;
+          if (Boolean(Crawler)) {
+            Go = CrawlerOk()}
+           else Go = window.confirm(window.t("Block %s for good?",Ip));
+          if (Go) Act("forgood",undefined);
+        });
+        Holder.appendChild(ForGood);
+      };
+      if (!Boolean(B) || !Boolean(B["active"])) {
+        Block = pas.Admin_List.C.el("button","",window.t("Block now"));
+        Block["type"] = "button";
+        Block.addEventListener("click",function (E) {
+          var Reason = undefined;
+          if (!CrawlerOk()) return;
+          Reason = window.prompt(window.t("Why? (kept with the block)"),"");
+          if (!(Reason == null)) Act("block",Reason);
+        });
+        Holder.appendChild(Block);
+      };
+      Allow = pas.Admin_List.C.el("button","",window.t("Allow"));
+      Allow["type"] = "button";
+      Allow.title = window.t("Never block or limit this address again");
+      Allow.addEventListener("click",function (E) {
+        Act("allow",undefined);
+      });
+      Holder.appendChild(Allow);
+    };
+    $impl.Requests = function (N) {
+      var Result = undefined;
+      Result = window.tn(N,"%d request","%d requests");
+      return Result;
+    };
+    $impl.KeysByCount = function (Counts) {
+      var Result = null;
+      Result = pas.Admin_List.SortBy(Object.keys(Counts),function (X, Y) {
+        var Result = 0.0;
+        Result = Number(Counts[Y]) - Number(Counts[X]);
+        return Result;
+      });
+      return Result;
+    };
+  };
+},[]);
+rtl.module("Admin_Backup",["System","JS","Web","Admin_List"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  var Piece = 8 * 1024 * 1024;
+  this.AdminBackup = function (Box) {
+    var Timer = 0;
+    function Hours(Iso) {
+      var Result = 0.0;
+      if (Boolean(Iso)) {
+        Result = (Date.now() - Number(new Date(Iso))) / 36e5}
+       else Result = Infinity;
+      return Result;
+    };
+    async function Show() {
+      var Data = null;
+      var Newest = null;
+      var Outside = null;
+      var Pictures = null;
+      var Logs = null;
+      var List = null;
+      var Worries = null;
+      var Bits = null;
+      var Lines = null;
+      var Notice = null;
+      var Line = null;
+      var Far = null;
+      var Make = null;
+      var Go = null;
+      var Up = null;
+      var Pick = null;
+      var Send = null;
+      var Progress = null;
+      var Move = null;
+      var Steps = null;
+      var Word = "";
+      var Done = "";
+      var I = 0;
+      function TickOf(Name, Words) {
+        var Result = null;
+        var TheLabel = null;
+        var Tick = null;
+        TheLabel = pas.Admin_List.C.el("label");
+        Tick = pas.Admin_List.C.el("input");
+        Tick["type"] = "checkbox";
+        Tick["name"] = Name;
+        Tick["value"] = "1";
+        TheLabel.append(Tick," ",Words);
+        Result = pas.JS.New(["label",TheLabel,"tick",Tick]);
+        return Result;
+      };
+      async function MakeNow(E) {
+        var WithPictures = "";
+        var WithLogs = "";
+        E.preventDefault();
+        try {
+          if (Boolean(Pictures["tick"]["checked"])) {
+            WithPictures = "1"}
+           else WithPictures = "0";
+          if (Boolean(Logs["tick"]["checked"])) {
+            WithLogs = "1"}
+           else WithLogs = "0";
+          pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/backup/make",pas.JS.New(["pictures",WithPictures,"logs",WithLogs])));
+          Show();
+        } catch ($e) {
+          pas.Admin_List.C.failed($e);
+        };
+      };
+      function Kept(B) {
+        var Row = null;
+        var Name = null;
+        var Detail = null;
+        var More = null;
+        var TableList = null;
+        var Down = null;
+        var Check = null;
+        var Restore = null;
+        var Del = null;
+        var About = null;
+        var M = null;
+        var Holds = null;
+        var Names = null;
+        var Words = "";
+        var N = 0;
+        async function CheckNow(E) {
+          try {
+            pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/backup/check",pas.JS.New(["name",B["name"]])));
+            Show();
+          } catch ($e) {
+            pas.Admin_List.C.failed($e);
+          };
+        };
+        async function RestoreNow(E) {
+          var Typed = undefined;
+          Typed = window.prompt(window.t('Restoring %s replaces every table with the backup’s (a table the backup does not have is emptied) and writes its files over the data folder and the pictures; files added since stay. Everyone else sees a "back in a minute" page while it runs, and a restart afterwards is wise. Type RESTORE to go ahead.',B["name"]));
+          if (pas.Admin_List.Same(Typed,null)) return;
+          try {
+            pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/backup/restore",pas.JS.New(["name",B["name"],"confirm",Typed.trim()])));
+            Show();
+          } catch ($e) {
+            pas.Admin_List.C.failed($e);
+          };
+        };
+        async function DeleteNow(E) {
+          if (!window.confirm(window.t("Delete %s?",B["name"]))) return;
+          try {
+            pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/backup/delete",pas.JS.New(["name",B["name"]])));
+            Show();
+          } catch ($e) {
+            pas.Admin_List.C.failed($e);
+          };
+        };
+        Row = pas.Admin_List.C.el("div","person backup-row");
+        Name = pas.Admin_List.C.el("a","backup-name",B["name"]);
+        Name["href"] = "/api/admin/backup/file/" + encodeURIComponent("" + B["name"]);
+        Name.setAttribute("download","" + B["name"]);
+        Words = pas.Admin_List.C.sizeText(B["bytes"]) + " · " + window.dateTimeText(B["when"]);
+        if (Boolean(B["uploaded"])) Words = Words + " · " + window.t("uploaded");
+        Row.append(Name,pas.Admin_List.C.el("span","dim",Words));
+        About = pas.Admin_List.Either(B["about"],new Object());
+        M = About["manifest"];
+        Holds = new Array();
+        if (Boolean(M)) {
+          if (Boolean(M["site"])) Holds.push(M["site"]);
+          if (Boolean(M["tables"])) Holds.push(window.tn(M["tables"],"%d table","%d tables") + ", " + window.tn(pas.Admin_List.Either(M["rows"],0),"%d row","%d rows"));
+          if (Boolean(M["files"])) Holds.push(window.tn(M["files"],"%d file","%d files"));
+          if (Boolean(M["pictures"])) {
+            Holds.push(window.t("with pictures"))}
+           else Holds.push(window.t("no pictures"));
+          if (Boolean(M["logs"])) {
+            Holds.push(window.t("with access logs"))}
+           else Holds.push(window.t("no access logs"));
+        } else if (pas.Admin_List.Same(About["manifest"],null)) Holds.push(window.t("no manifest inside: an early backup or not one made here"));
+        Detail = pas.Admin_List.C.el("div","backup-holds dim",Holds.join(" · "));
+        if (Boolean(M) && Boolean(M["counts"])) {
+          More = pas.Admin_List.C.el("a","small-link",window.t("Tables"));
+          More["href"] = "#";
+          TableList = pas.Admin_List.C.el("div","backup-tables dim");
+          TableList.hidden = true;
+          Names = pas.Admin_List.SortBy(Object.keys(M["counts"]),undefined);
+          for (var $l = 0, $end = Names.length - 1; $l <= $end; $l++) {
+            N = $l;
+            Names[N] = "" + Names[N] + " " + ("" + M["counts"]["" + Names[N]]);
+          };
+          TableList.textContent = Names.join(" · ");
+          More.addEventListener("click",function (E) {
+            E.preventDefault();
+            TableList.hidden = !TableList.hidden;
+          });
+          Detail.append(" ",More);
+          Row.append(Detail,TableList);
+        } else Row.appendChild(Detail);
+        if (Boolean(About["checked"])) {
+          if (Boolean(About["whole"])) {
+            Row.appendChild(pas.Admin_List.C.el("div","backup-check good",window.t("Checked %s: whole.",window.dateTimeText(About["checked"])) + " " + ("" + pas.Admin_List.Either(About["note"],""))))}
+           else Row.appendChild(pas.Admin_List.C.el("div","backup-check bad",window.t("Checked %s: NOT whole.",window.dateTimeText(About["checked"])) + " " + ("" + pas.Admin_List.Either(About["note"],""))));
+        } else Row.appendChild(pas.Admin_List.C.el("div","backup-check warn",window.t("Not checked yet.")));
+        Down = pas.Admin_List.C.el("a","small-link",window.t("Download"));
+        Down["href"] = Name["href"];
+        Down.setAttribute("download","" + B["name"]);
+        Row.appendChild(Down);
+        Check = pas.Admin_List.C.el("button","small-link",window.t("Check"));
+        Check["type"] = "button";
+        Check["disabled"] = Boolean(Data["busy"]);
+        Check.addEventListener("click",CheckNow);
+        Row.appendChild(Check);
+        Restore = pas.Admin_List.C.el("button","small-link",window.t("Restore…"));
+        Restore["type"] = "button";
+        Restore["disabled"] = Boolean(Data["busy"]);
+        Restore.addEventListener("click",RestoreNow);
+        Row.appendChild(Restore);
+        Del = pas.Admin_List.C.el("button","small-link",window.t("Delete"));
+        Del["type"] = "button";
+        Del.addEventListener("click",DeleteNow);
+        Row.appendChild(Del);
+        Box.appendChild(Row);
+      };
+      async function Upload(E) {
+        var Sent = null;
+        var Where = "";
+        var Url = "";
+        var Body = "";
+        var Offset = 0.0;
+        var Tries = 0;
+        var Last = false;
+        var Lost = false;
+        var Answer = null;
+        var R = null;
+        var Trouble = undefined;
+        E.preventDefault();
+        if (Pick.files.length === 0) return;
+        Sent = Pick.files.item(0);
+        Where = "/api/admin/backup/chunk?name=" + pas.Admin_List.C.enc(Sent["name"]);
+        Send["disabled"] = true;
+        Offset = 0;
+        Tries = 0;
+        try {
+          try {
+            Trouble = undefined;
+            while (true) {
+              Last = (Offset + 8388608) >= Sent.size;
+              Url = Where + "&offset=" + String(Offset);
+              if (Last) Url = Url + "&size=" + String(Sent.size);
+              Lost = false;
+              try {
+                R = await window.fetch(Url,pas.JS.New(["method","POST","body",Sent.slice(Offset,Offset + 8388608),"headers",pas.JS.New(["Content-Type","application/octet-stream"])]));
+                Body = await R.text();
+                if (R.ok) {
+                  Answer = JSON.parse(Body)}
+                 else {
+                  Lost = true;
+                  Trouble = new Error(Body);
+                };
+              } catch ($e) {
+                Lost = true;
+                Trouble = $e;
+              };
+              if (Lost) {
+                Tries += 1;
+                if (Tries > 4) break;
+                await new Promise(function (Go, Stop) {
+                  window.setTimeout(function () {
+                    Go(undefined);
+                  },2000 * Tries);
+                });
+                continue;
+              };
+              Tries = 0;
+              if (Boolean(Answer["done"])) {
+                Progress.textContent = "";
+                pas.Admin_List.C.toast(window.t("Kept as %s.",Answer["name"]));
+                break;
+              };
+              Offset = Number(Answer["have"]);
+              Progress.textContent = window.t("Sending: %s",String(Math.floor((100 * Offset) / Math.max(1,Sent.size))) + "%");
+            };
+            if (Lost) {
+              Progress.textContent = "";
+              pas.Admin_List.C.failed(Trouble);
+            } else Show();
+          } catch ($e) {
+            Progress.textContent = "";
+            pas.Admin_List.C.failed($e);
+          };
+        } finally {
+          Send["disabled"] = false;
+        };
+      };
+      try {
+        Data = await pas.Admin_List.C.get("/api/admin/backup");
+      } catch ($e) {
+        pas.Admin_List.C.failed($e);
+        return;
+      };
+      Box.replaceChildren();
+      Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("A backup is one zip file with every table of the database, the data folder with members’ files, and the program’s config file. The pictures are large: the wiki’s hold what members uploaded, so they belong in a whole backup. The access logs are only history. Each goes in when asked. Backups are kept on the server in %s.",Data["folder"])));
+      List = pas.Admin_List.SortBy(pas.Admin_List.Either(Data["backups"],new Array()).slice(0),function (A, B) {
+        var Result = 0.0;
+        if ($impl.Less(A["when"],B["when"])) {
+          Result = 1}
+         else Result = -1;
+        return Result;
+      });
+      if (List.length > 0) {
+        Newest = List[0]}
+       else Newest = null;
+      if (Boolean(Data["outside"]) && (typeof(Data["outside"]) === "object")) {
+        Outside = Data["outside"]}
+       else Outside = null;
+      Worries = new Array();
+      if (Newest === null) {
+        Worries.push(window.t("No backup has been made here yet."))}
+       else if (Hours(Newest["when"]) > 36) Worries.push(window.t("The newest backup here is %s old.",pas.Admin_List.C.ago(Newest["when"])));
+      if ((Newest !== null) && Boolean(Newest["about"]) && pas.Admin_List.Same(Newest["about"]["whole"],false)) Worries.push(window.t("The newest backup here did not pass its check: %s",pas.Admin_List.Either(Newest["about"]["note"],"")));
+      if (Outside === null) {
+        Worries.push(window.t("No copy on another machine has been recorded. A script that copies backups elsewhere writes backup-status.json beside the program."))}
+       else if (pas.Admin_List.Same(Outside["ok"],false)) {
+        Worries.push(window.t("The last copy to another machine failed (%s).",pas.Admin_List.Either(Outside["failed"],window.t("see its log"))))}
+       else if (Hours(Outside["when"]) > 36) Worries.push(window.t("The last copy to another machine is %s old.",pas.Admin_List.C.ago(Outside["when"])));
+      if ((Number(Data["free_bytes"]) >= 0) && (Number(Data["free_bytes"]) < (2 * 1024 * 1024 * 1024))) Worries.push(window.t("Only %s is free on the disk that holds the backups.",pas.Admin_List.C.sizeText(Data["free_bytes"])));
+      if (Worries.length > 0) {
+        Notice = pas.Admin_List.C.el("div","notice bad");
+        for (var $l = 0, $end = Worries.length - 1; $l <= $end; $l++) {
+          I = $l;
+          Notice.appendChild(pas.Admin_List.C.el("div","",Worries[I]));
+        };
+        Box.appendChild(Notice);
+      } else Box.appendChild(pas.Admin_List.C.el("p","notice good",window.t("A whole backup from the last day and a half is here, and the copy on the other machine is fresh.")));
+      if (Boolean(Data["busy"])) {
+        Line = pas.Admin_List.C.el("p","notice working");
+        if (pas.Admin_List.Same(Data["doing"],"restore")) {
+          Word = window.t("Restoring…")}
+         else if (pas.Admin_List.Same(Data["doing"],"check")) {
+          Word = window.t("Checking…")}
+         else Word = window.t("Making a backup…");
+        Line.append(pas.Admin_List.C.el("b","",Word)," ",pas.Admin_List.C.el("span","",pas.Admin_List.Either(Data["step"],""))," ",pas.Admin_List.C.el("span","dim",window.t("started %s by %s",window.dateTimeText(Data["started"]),pas.Admin_List.Either(Data["by"],""))));
+        Box.appendChild(Line);
+        if (Timer === 0) Timer = window.setInterval(function () {
+          Show();
+        },2000);
+      } else {
+        if (Timer !== 0) {
+          window.clearInterval(Timer);
+          Timer = 0;
+        };
+        if (Boolean(Data["error"])) {
+          Box.appendChild(pas.Admin_List.C.el("p","notice bad",window.t("The last job failed: %s",Data["error"])))}
+         else if (Boolean(Data["last"])) Box.appendChild(pas.Admin_List.C.el("p","notice good",Data["last"]));
+      };
+      Far = pas.Admin_List.C.el("div","backup-outside");
+      Far.appendChild(pas.Admin_List.C.el("h3","",window.t("Copy on another machine")));
+      if (Outside === null) {
+        Far.appendChild(pas.Admin_List.C.el("p","dim",window.t("None recorded.")))}
+       else {
+        if (Boolean(Outside["ok"])) {
+          Done = window.t("complete")}
+         else if (Boolean(Outside["failed"])) {
+          Done = window.t("FAILED") + " (" + ("" + Outside["failed"]) + ")"}
+         else Done = window.t("FAILED");
+        Bits = Array.of(window.dateTimeText(Outside["when"]),Done);
+        if (Boolean(Outside["database_bytes"])) Bits.push(window.t("database %s",pas.Admin_List.C.sizeText(Outside["database_bytes"])));
+        if (Boolean(Outside["config_bytes"])) Bits.push(window.t("config and files %s",pas.Admin_List.C.sizeText(Outside["config_bytes"])));
+        if (Boolean(Outside["images_bytes"])) Bits.push(window.t("pictures %s",pas.Admin_List.C.sizeText(Outside["images_bytes"])));
+        if (Boolean(Outside["kept"])) Bits.push(window.tn(Outside["kept"],"%d dump kept","%d dumps kept"));
+        if (Boolean(Outside["ok"])) {
+          Far.appendChild(pas.Admin_List.C.el("p","",Bits.join(" · ")))}
+         else Far.appendChild(pas.Admin_List.C.el("p","bad",Bits.join(" · ")));
+        if (Boolean(Outside["where"])) Far.appendChild(pas.Admin_List.C.el("p","dim",Outside["where"]));
+      };
+      Box.appendChild(Far);
+      Make = pas.Admin_List.C.el("form","backup-make");
+      Pictures = TickOf("pictures",window.t("Include the pictures (%s): slow and large, but whole",pas.Admin_List.Either(Data["pictures"],window.t("none registered"))));
+      Pictures["tick"]["checked"] = true;
+      Logs = TickOf("logs",window.t("Include the access logs (the last %d days)",pas.Admin_List.Either(Data["log_days"],0)));
+      Go = pas.Admin_List.C.el("button","",window.t("Make a backup now"));
+      Go["disabled"] = Boolean(Data["busy"]);
+      Make.append(Go,Pictures["label"],Logs["label"]);
+      Make.addEventListener("submit",MakeNow);
+      Box.appendChild(Make);
+      Box.appendChild(pas.Admin_List.C.el("h3","",window.tn(List.length,"%d backup kept here","%d backups kept here") + " · " + window.t("the newest %d made here stay",Data["keep"])));
+      if (List.length === 0) Box.appendChild(pas.Admin_List.C.el("p","dim",window.t("No backups yet.")));
+      for (var $l1 = 0, $end1 = List.length - 1; $l1 <= $end1; $l1++) {
+        I = $l1;
+        Kept(List[I]);
+      };
+      Up = pas.Admin_List.C.el("form","backup-upload");
+      Pick = pas.Admin_List.C.el("input");
+      Pick["type"] = "file";
+      Pick["accept"] = ".zip,application/zip";
+      Pick["required"] = true;
+      Send = pas.Admin_List.C.el("button","",window.t("Upload a backup"));
+      Progress = pas.Admin_List.C.el("span","dim");
+      Progress.setAttribute("role","status");
+      Up.append(pas.Admin_List.C.el("label","",window.t("A backup file from another day or another server, of any size:")),Pick,Send,Progress);
+      Up.addEventListener("submit",Upload);
+      Box.appendChild(Up);
+      Move = pas.Admin_List.C.el("details","backup-move");
+      Move.appendChild(pas.Admin_List.C.el("summary","",window.t("Moving the site to another machine")));
+      Steps = pas.Admin_List.C.el("ol");
+      Lines = Array.of(window.t("Make a backup here with the pictures, and download it (or copy it from the folder above)."),window.t("On the new machine: install MariaDB and the client library, make an empty database, and put the program, its static, templates and lang folders and a config file naming that database in one folder, with a data folder the service’s user owns."),window.t("With the service stopped, as that user, run the program with its config file and --restore and the path of the backup file. It builds the tables, loads every table, puts the data folder and the pictures back (where it may write), and leaves the old config file beside the backups to compare."),window.t("Start the service. The site is as it was; members stay signed in from the old sessions only if they sign in again."));
+      for (var $l2 = 0, $end2 = Lines.length - 1; $l2 <= $end2; $l2++) {
+        I = $l2;
+        Steps.appendChild(pas.Admin_List.C.el("li","",Lines[I]));
+      };
+      Move.appendChild(Steps);
+      Move.appendChild(pas.Admin_List.C.el("p","dim","exedra site.ini --restore /path/site-20260101-000000.zip · exedra site.ini --backup --pictures --logs"));
+      Box.appendChild(Move);
+    };
+    Timer = 0;
+    Show();
+  };
+  $mod.$implcode = function () {
+    $impl.Less = function (A, B) {
+      var Result = false;
+      if ((typeof(A) === "string") && (typeof(B) === "string")) {
+        Result = ("" + A) < ("" + B)}
+       else Result = Number(A) < Number(B);
+      return Result;
+    };
+  };
+},[]);
+rtl.module("Admin_Reports",["System","JS","Web","Admin_List"],function () {
+  "use strict";
+  var $mod = this;
+  this.AdminReports = function (Box) {
+    var States = null;
+    var Rows = null;
+    var View = null;
+    function StateName(State) {
+      var Result = undefined;
+      var I = 0;
+      for (var $l = 0, $end = States.length - 1; $l <= $end; $l++) {
+        I = $l;
+        if (pas.Admin_List.Same(States[I][0],State)) return States[I][1];
+      };
+      Result = State;
+      return Result;
+    };
+    function OpenCount() {
+      var I = 0;
+      var Open = 0;
+      if (!Boolean(pas.Admin_List.S["adminCount"])) return;
+      Open = 0;
+      for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+        I = $l;
+        if (!Boolean(Rows[I]["done"])) Open += 1;
+      };
+      pas.Admin_List.S.adminCount("Reports",Open);
+    };
+    async function Save(R, Fields, List) {
+      var Result = false;
+      try {
+        await pas.Admin_List.C.post("/api/bugs",Object.assign(pas.JS.New(["id",R["id"]]),Fields));
+      } catch ($e) {
+        pas.Admin_List.C.failed($e);
+        return false;
+      };
+      if (Boolean(Fields["state"])) {
+        R["state"] = Fields["state"];
+        R["done"] = pas.Admin_List.Same(Fields["state"],"resolved") || pas.Admin_List.Same(Fields["state"],"closed") || pas.Admin_List.Same(Fields["state"],"spam");
+      };
+      if (!pas.Admin_List.IsUndef(Fields["note"])) R["note"] = Fields["note"];
+      List.changed(R);
+      OpenCount();
+      Result = true;
+      return Result;
+    };
+    function Detail(R, Holder, List) {
+      var Head = null;
+      var Page = null;
+      var Ip = null;
+      var Look = null;
+      var Row = null;
+      var More = null;
+      var NoteForm = null;
+      var Note = null;
+      var Keep = null;
+      var Local = false;
+      var Shown = undefined;
+      var Address = undefined;
+      var Changed = undefined;
+      var I = 0;
+      function StateButton(St) {
+        var B = null;
+        if (pas.Admin_List.Same(R["state"],St[0])) {
+          B = pas.Admin_List.C.el("button","on",St[1])}
+         else B = pas.Admin_List.C.el("button","",St[1]);
+        B["type"] = "button";
+        if (pas.Admin_List.Same(R["state"],St[0])) {
+          B.setAttribute("aria-pressed","true")}
+         else B.setAttribute("aria-pressed","false");
+        B.addEventListener("click",function (E) {
+          if (!pas.Admin_List.Same(R["state"],St[0])) Save(R,pas.JS.New(["state",St[0]]),List);
+        });
+        Row.appendChild(B);
+      };
+      async function SaveNote(E) {
+        E.preventDefault();
+        if (await Save(R,pas.JS.New(["note",Note["value"]]),List)) pas.Admin_List.C.toast(window.t("Saved."));
+      };
+      Head = pas.Admin_List.C.el("div","lv-detail-head");
+      Head.append(pas.Admin_List.C.el("b","",R["name"]),pas.Admin_List.C.el("span","dim",window.dateTimeText(R["at"])));
+      Holder.appendChild(Head);
+      Local = pas.Admin_List.Regex("^\\/(?!\\/)",pas.Admin_List.Either(R["page"],""));
+      if (Local) {
+        Page = pas.Admin_List.C.el("a","",R["page"])}
+       else Page = pas.Admin_List.C.el("span","",R["page"]);
+      if (Local) {
+        Page["href"] = R["page"];
+        Page["target"] = "_blank";
+        Page["rel"] = "noopener";
+      };
+      Ip = pas.Admin_List.C.el("span");
+      if (Boolean(R["ip"])) {
+        Ip.append("" + R["ip"] + " ");
+        Look = pas.Admin_List.C.el("button","small-link",window.t("Look up"));
+        Look["type"] = "button";
+        Look.addEventListener("click",function (E) {
+          pas.Admin_List.LookUpAddress(R["ip"]);
+        });
+        Ip.appendChild(Look);
+      };
+      if (Boolean(R["page"])) {
+        Shown = Page}
+       else Shown = "";
+      if (Boolean(R["ip"])) {
+        Address = Ip}
+       else Address = "";
+      if (Boolean(R["updated"])) {
+        Changed = window.dateTimeText(R["updated"])}
+       else Changed = "";
+      pas.Admin_List.C.facts(Holder,Array.of(Array.of(window.t("Page"),Shown),Array.of(window.t("Address"),Address),Array.of(window.t("Changed"),Changed)));
+      Row = pas.Admin_List.C.el("div","lv-actions");
+      Row.appendChild(pas.Admin_List.C.el("span","dim",window.t("State") + ":"));
+      for (var $l = 0, $end = States.length - 1; $l <= $end; $l++) {
+        I = $l;
+        StateButton(States[I]);
+      };
+      Holder.appendChild(Row);
+      Holder.appendChild(pas.Admin_List.C.el("div","bugtext",R["text"]));
+      if (Boolean(R["info"])) {
+        More = pas.Admin_List.C.el("details","buginfo-box");
+        More.appendChild(pas.Admin_List.C.el("summary","",window.t("What the browser sent with it")));
+        More.appendChild(pas.Admin_List.C.el("pre","buginfo",R["info"]));
+        Holder.appendChild(More);
+      };
+      NoteForm = pas.Admin_List.C.el("form","lv-note");
+      Note = pas.Admin_List.C.el("textarea");
+      Note["value"] = pas.Admin_List.Either(R["note"],"");
+      Note["rows"] = 2;
+      Note["placeholder"] = window.t("A note for the admins: what was done, or why not");
+      Note.setAttribute("aria-label",window.t("Note"));
+      Keep = pas.Admin_List.C.el("button","",window.t("Save the note"));
+      NoteForm.append(Note,Keep);
+      NoteForm.addEventListener("submit",SaveNote);
+      Holder.appendChild(NoteForm);
+      if (pas.Admin_List.Same(R["state"],"new")) Save(R,pas.JS.New(["state","read"]),List);
+    };
+    async function Load() {
+      var List = null;
+      var R = null;
+      var I = 0;
+      try {
+        List = await pas.Admin_List.C.get("/api/bugs");
+        Rows = new Array();
+        for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+          I = $l;
+          R = List[I];
+          if (!Boolean(R["state"])) if (Boolean(R["done"])) {
+            R["state"] = "resolved"}
+           else R["state"] = "new";
+          Rows.push(R);
+        };
+        View.set(Rows);
+        OpenCount();
+      } catch ($e) {
+        View.failed($e["message"]);
+      };
+    };
+    States = Array.of(Array.of("new",window.t("New")),Array.of("read",window.t("Read")),Array.of("needs-info",window.t("Needs more information")),Array.of("resolved",window.t("Resolved")),Array.of("closed",window.t("Closed")),Array.of("spam",window.t("Spam")));
+    Rows = new Array();
+    View = pas.Admin_List.ListView(Box,pas.JS.New(["id","reports","key",function (R) {
+      var Result = undefined;
+      Result = String(R["id"]);
+      return Result;
+    },"sort","-at","csv","reports","search",window.t("Search the reports"),"columns",Array.of(pas.JS.New(["key","at","title",window.t("Sent"),"down",true,"cell",function (R) {
+      var Result = undefined;
+      var Span = null;
+      Span = pas.Admin_List.C.el("span","",pas.Admin_List.C.ago(R["at"]));
+      Span.title = window.dateTimeText(R["at"]);
+      Result = Span;
+      return Result;
+    }]),pas.JS.New(["key","name","title",window.t("From")]),pas.JS.New(["key","text","title",window.t("Report"),"cls","lv-text","cell",function (R) {
+      var Result = undefined;
+      Result = R["text"].replace(new RegExp("\\s+","g")," ").slice(0,120);
+      return Result;
+    }]),pas.JS.New(["key","page","title",window.t("Page"),"wide",true,"cls","lv-text","cell",function (R) {
+      var Result = undefined;
+      Result = R["page"].replace(new RegExp("^https?:\\/\\/[^/]+"),"");
+      return Result;
+    }]),pas.JS.New(["key","state","title",window.t("State"),"value",function (R) {
+      var Result = undefined;
+      Result = StateName(R["state"]);
+      return Result;
+    },"cell",function (R) {
+      var Result = undefined;
+      if (pas.Admin_List.Same(R["state"],"new")) {
+        Result = pas.Admin_List.C.chip(StateName(R["state"]),"new")}
+       else if (Boolean(R["done"])) {
+        Result = pas.Admin_List.C.chip(StateName(R["state"]),"")}
+       else Result = pas.Admin_List.C.chip(StateName(R["state"]),"open");
+      return Result;
+    }])),"filters",Array.of(pas.JS.New(["key","state","title",window.t("State"),"all",window.t("Every state"),"value","open","options",Array.of(Array.of("open",window.t("Not resolved or closed"))).concat(States),"test",function (R, V) {
+      var Result = undefined;
+      if (V === "open") {
+        Result = !Boolean(R["done"])}
+       else Result = pas.Admin_List.Same(R["state"],V);
+      return Result;
+    }])),"rowClass",function (R) {
+      var Result = undefined;
+      var Cls = "";
+      if (pas.Admin_List.Same(R["state"],"new")) {
+        Cls = "unread"}
+       else Cls = "";
+      if (Boolean(R["done"])) Cls = Cls + " done";
+      Result = Cls;
+      return Result;
+    },"noun",function (N) {
+      var Result = undefined;
+      Result = window.tn(N,"%d report","%d reports");
+      return Result;
+    },"empty",window.t("No reports yet."),"detail",Detail]));
+    Load();
+  };
+});
+rtl.module("Admin_Visitors",["System","JS","Web","Admin_List"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  var ReportParts = ["overview","people","pages","searches","members","crawlers","bots","concerns","latest"];
+  this.AdminVisitors = function (Box) {
+    var HideMe = false;
+    var Blocks = false;
+    var Choice = "";
+    var Days = null;
+    var Controls = null;
+    var PickLabel = null;
+    var Custom = null;
+    var TickLabel = null;
+    var Again = null;
+    var AddrBox = null;
+    var AddrForm = null;
+    var AddrGo = null;
+    var AddrPanel = null;
+    var Pick = null;
+    var FromBox = null;
+    var ToBox = null;
+    var Tick = null;
+    var AddrInput = null;
+    var Period = null;
+    var TabList = null;
+    var Subs = null;
+    var ShownIp = "";
+    var Loads = 0;
+    function UtcDay(Back) {
+      var Result = "";
+      Result = (new Date(Date.now() - (Back * 864e5))).toISOString().slice(0,10);
+      return Result;
+    };
+    function Iso(Ms) {
+      var Result = "";
+      Result = (new Date(Ms)).toISOString().slice(0,19) + "Z";
+      return Result;
+    };
+    function LocalMidnight(Back) {
+      var Result = 0.0;
+      var D = null;
+      D = new Date();
+      D.setHours(0,0,0,0);
+      D.setDate(D.getDate() - Back);
+      Result = D.getTime();
+      return Result;
+    };
+    function Local(Ms) {
+      var Result = "";
+      var D = null;
+      D = new Date(Ms);
+      Result = (new Date(Ms - (D.getTimezoneOffset() * 60000))).toISOString().slice(0,16);
+      return Result;
+    };
+    function Option(Value, Words) {
+      var Result = null;
+      Result = pas.Admin_List.C.el("option","",Words);
+      Result["value"] = Value;
+      return Result;
+    };
+    function FillPeriods() {
+      var Oldest = undefined;
+      var One = null;
+      var I = 0;
+      if (Days.length > 0) {
+        Oldest = Days[Days.length - 1]}
+       else Oldest = UtcDay(0);
+      Pick.replaceChildren(Option("1h",window.t("The last hour")),Option("8h",window.t("The last 8 hours")),Option("24h",window.t("The last 24 hours")),Option("48h",window.t("The last 2 days")),Option("168h",window.t("The last 7 days")),Option("today",window.t("Today")),Option("yesterday",window.t("Yesterday")),Option("all",window.tn(Days.length,"Every day kept (%d), from %s","Every day kept (%d), from %s").replace("%s",window.dateText(Oldest))),Option("custom",window.t("Between two moments…")));
+      One = pas.Admin_List.C.el("optgroup");
+      One["label"] = window.t("One day");
+      for (var $l = 0, $end = Days.length - 1; $l <= $end; $l++) {
+        I = $l;
+        One.appendChild(Option(Days[I],window.dateText(Days[I])));
+      };
+      Pick.appendChild(One);
+      Pick.value = Choice;
+      if (Pick.value !== Choice) {
+        Choice = "24h";
+        Pick.value = Choice;
+      };
+    };
+    function WindowOf() {
+      var Result = null;
+      var Minute = 0.0;
+      var A = 0.0;
+      var B = 0.0;
+      var Oldest = undefined;
+      Minute = Math.floor(Date.now() / 60000) * 60000;
+      if (pas.Admin_List.Regex("^\\d+h$",Choice)) return pas.JS.New(["from",Iso((Minute + 59000) - (parseInt(Choice,10) * 3600e3)),"to",Iso(Minute + 59000)]);
+      if (Choice === "today") return pas.JS.New(["from",Iso(LocalMidnight(0)),"to",Iso(Minute + 59000)]);
+      if (Choice === "yesterday") return pas.JS.New(["from",Iso(LocalMidnight(1)),"to",Iso(LocalMidnight(0) - 1000)]);
+      if (Choice === "all") {
+        if (Days.length > 0) {
+          Oldest = Days[Days.length - 1]}
+         else Oldest = UtcDay(0);
+        return pas.JS.New(["from",Oldest,"to",UtcDay(0)]);
+      };
+      if (Choice === "custom") {
+        if (FromBox.value !== "") {
+          A = (new Date(FromBox.value)).getTime()}
+         else A = Minute - 864e5;
+        if (ToBox.value !== "") {
+          B = (new Date(ToBox.value)).getTime()}
+         else B = Minute + 59000;
+        if (A <= B) return pas.JS.New(["from",Iso(A),"to",Iso(B)]);
+        return pas.JS.New(["from",Iso(B),"to",Iso(A)]);
+      };
+      Result = pas.JS.New(["from",Choice,"to",Choice]);
+      return Result;
+    };
+    function PeriodNow() {
+      var Result = null;
+      Result = Period;
+      return Result;
+    };
+    function ShowAddress(Ip) {
+      ShownIp = pas.Admin_List.Either(Ip,"").trim();
+      AddrInput.value = ShownIp;
+      AddrPanel.hidden = ShownIp === "";
+      if (ShownIp !== "") pas.Admin_Address.AddressPanel(ShownIp,AddrPanel,PeriodNow);
+    };
+    function OpenAddress(Ip) {
+      Subs.select("address");
+      ShowAddress(Ip);
+    };
+    function Hold(Held) {
+      Pick.disabled = Held;
+      Tick.disabled = Held;
+      Again["disabled"] = Held;
+    };
+    async function Load() {
+      var Mine = 0;
+      var I = 0;
+      var R = null;
+      var Why = "";
+      var Problem = null;
+      Loads += 1;
+      Mine = Loads;
+      Period = WindowOf();
+      for (I = 0; I <= 8; I++) pas.Admin_List.C.waiting(Subs.holder(ReportParts[I]),window.t("Reading the log…"));
+      Hold(true);
+      try {
+        try {
+          if (HideMe) {
+            R = await pas.Admin_List.C.get("/api/admin/visitors/report?from=" + pas.Admin_List.C.enc(Period["from"]) + "&to=" + pas.Admin_List.C.enc(Period["to"]) + "&hide=me")}
+           else R = await pas.Admin_List.C.get("/api/admin/visitors/report?from=" + pas.Admin_List.C.enc(Period["from"]) + "&to=" + pas.Admin_List.C.enc(Period["to"]));
+          if (Mine !== Loads) return;
+          if (JSON.stringify(Days) !== JSON.stringify(R["days"])) {
+            Days = R["days"];
+            FillPeriods();
+            if (!pas.Admin_List.Same(WindowOf()["from"],Period["from"])) {
+              Load();
+              return;
+            };
+          };
+          $mod.DrawVisitReport(Subs,R,Pick,HideMe,undefined);
+          if (Boolean(R["found"])) {
+            $impl.DrawLatest(Subs.holder("latest"),R);
+            $impl.DrawConcerns(Subs.holder("concerns"),R,PeriodNow);
+          };
+          if (ShownIp !== "") ShowAddress(ShownIp);
+          if (Boolean(pas.Admin_List.S["blocksChanged"])) pas.Admin_List.S.blocksChanged();
+        } catch ($e) {
+          if (Mine !== Loads) return;
+          Problem = $e;
+          if (Boolean(Problem) && Boolean(Problem["message"]) && (Problem["message"].length < 300) && !pas.Admin_List.Regex("[<>]",Problem["message"])) {
+            Why = " " + ("" + Problem["message"])}
+           else Why = "";
+          for (I = 0; I <= 8; I++) Subs.holder(ReportParts[I]).replaceChildren(pas.Admin_List.C.el("p","notice",window.t("The access log could not be read.") + Why));
+        };
+      } finally {
+        if (Mine === Loads) Hold(false);
+      };
+    };
+    async function ReadCounts() {
+      var Data = null;
+      try {
+        Data = await pas.Admin_List.C.get("/api/admin/visitors");
+        Subs.holder("counts").replaceChildren();
+        $impl.DrawVisitCounts(Subs.holder("counts"),Data);
+      } catch ($e) {
+        Subs.holder("counts").replaceChildren(pas.Admin_List.C.el("p","notice",$e["message"]));
+      };
+    };
+    if (Boolean(pas.Admin_List.S["adminCan"]) && !pas.Admin_List.S.adminCan("view-visitors")) {
+      $impl.AdminBlocks(Box,function () {
+        var Result = null;
+        Result = pas.JS.New(["from",UtcDay(1),"to",UtcDay(0)]);
+        return Result;
+      });
+      return;
+    };
+    HideMe = true;
+    try {
+      HideMe = window.localStorage.getItem("admin-hide-me") !== "off";
+    } catch ($e) {
+    };
+    Choice = "24h";
+    try {
+      Choice = "" + pas.Admin_List.Either(window.localStorage.getItem("admin-visit-window"),"24h");
+    } catch ($e) {
+    };
+    Days = new Array();
+    Controls = pas.Admin_List.C.el("div","visit-controls");
+    PickLabel = pas.Admin_List.C.el("label","",window.t("Period") + " ");
+    Pick = pas.Admin_List.C.el("select");
+    PickLabel.appendChild(Pick);
+    Custom = pas.Admin_List.C.el("span","visit-custom");
+    FromBox = pas.Admin_List.C.el("input");
+    ToBox = pas.Admin_List.C.el("input");
+    ToBox.type = "datetime-local";
+    FromBox.type = "datetime-local";
+    FromBox.setAttribute("aria-label",window.t("From"));
+    ToBox.setAttribute("aria-label",window.t("To"));
+    FromBox.value = Local(Date.now() - 864e5);
+    ToBox.value = Local(Date.now());
+    Custom.append(FromBox," – ",ToBox);
+    Custom.hidden = Choice !== "custom";
+    FillPeriods();
+    Period = WindowOf();
+    TickLabel = pas.Admin_List.C.el("label","visit-tick");
+    Tick = pas.Admin_List.C.el("input");
+    Tick.type = "checkbox";
+    Tick.checked = HideMe;
+    TickLabel.append(Tick," " + window.t("Hide my visits"));
+    Tick.addEventListener("change",function (E) {
+      HideMe = Tick.checked;
+      try {
+        if (HideMe) {
+          window.localStorage.setItem("admin-hide-me","on")}
+         else window.localStorage.setItem("admin-hide-me","off");
+      } catch ($e) {
+      };
+      Load();
     });
-  }
+    Again = pas.Admin_List.C.el("button","small-link",window.t("Refresh"));
+    Again["type"] = "button";
+    Again.addEventListener("click",function (E) {
+      Load();
+    });
+    Controls.append(PickLabel,Custom,TickLabel,Again);
+    Box.appendChild(Controls);
+    TabList = Array.of(pas.JS.New(["key","overview","title",window.t("Overview")]),pas.JS.New(["key","people","title",window.t("People")]),pas.JS.New(["key","pages","title",window.t("Pages")]),pas.JS.New(["key","searches","title",window.t("Searches")]),pas.JS.New(["key","members","title",window.t("Members")]),pas.JS.New(["key","crawlers","title",window.t("Known crawlers")]),pas.JS.New(["key","bots","title",window.t("Bots")]),pas.JS.New(["key","concerns","title",window.t("Of concern")]),pas.JS.New(["key","latest","title",window.t("Latest requests")]),pas.JS.New(["key","address","title",window.t("Address")]));
+    Blocks = Boolean(pas.Admin_List.S["adminCan"]) && pas.Admin_List.S.adminCan("manage-blocks");
+    if (Blocks) TabList.push(pas.JS.New(["key","blocked","title",window.t("Blocked")]));
+    TabList.push(pas.JS.New(["key","counts","title",window.t("By part of the site")]));
+    Subs = pas.Admin_List.C.subTabs(Box,"visitors",TabList);
+    AddrBox = Subs.holder("address");
+    AddrForm = pas.Admin_List.C.el("form","visit-lookup");
+    AddrInput = pas.Admin_List.C.el("input");
+    AddrInput.type = "search";
+    AddrInput.placeholder = window.t("An address, such as 203.0.113.9");
+    AddrInput.setAttribute("aria-label",window.t("Address"));
+    AddrGo = pas.Admin_List.C.el("button","",window.t("Look up"));
+    AddrForm.append(AddrInput,AddrGo);
+    AddrPanel = pas.Admin_List.C.el("div","lv-detail visit-address");
+    AddrPanel.hidden = true;
+    AddrBox.append(pas.Admin_List.C.el("p","hint",window.t("Everything one address did in the period, whatever it said it was, with the guard’s facts and the block buttons. Pick an address anywhere in these lists, or type one.")),AddrForm,AddrPanel);
+    ShownIp = "";
+    AddrForm.addEventListener("submit",function (E) {
+      E.preventDefault();
+      ShowAddress(AddrInput.value);
+    });
+    pas.Admin_List.S["showAddress"] = OpenAddress;
+    pas.Admin_List.S["blockLook"] = pas.Admin_List.S["showAddress"];
+    Loads = 0;
+    Pick.addEventListener("change",function (E) {
+      Choice = Pick.value;
+      try {
+        window.localStorage.setItem("admin-visit-window",Choice);
+      } catch ($e) {
+      };
+      Custom.hidden = Choice !== "custom";
+      Load();
+    });
+    FromBox.addEventListener("change",function (E) {
+      if (Choice === "custom") Load();
+    });
+    ToBox.addEventListener("change",function (E) {
+      if (Choice === "custom") Load();
+    });
+    Load();
+    if (Blocks) $impl.AdminBlocks(Subs.holder("blocked"),PeriodNow);
+    pas.Admin_List.C.waiting(Subs.holder("counts"));
+    ReadCounts();
+  };
+  var Keys = ["overview","people","pages","searches","members","crawlers","bots","concerns","latest"];
+  this.DrawVisitReport = function (Subs, R, Pick, HideMe, HiddenSet) {
+    var Box = null;
+    var Pages = null;
+    var Hint = "";
+    var I = 0;
+    for (I = 0; I <= 8; I++) Subs.holder(Keys[I]).replaceChildren();
+    if (!Boolean(R["found"])) {
+      for (I = 0; I <= 8; I++) Subs.holder(Keys[I]).appendChild(pas.Admin_List.C.el("p","dim",window.t("There is no log for that period.")));
+      return;
+    };
+    if (pas.Admin_List.IsUndef(R["visitors_count"]) || (R["visitors_count"] == null)) {
+      Subs.count("people",R["visitors"].length)}
+     else Subs.count("people",R["visitors_count"]);
+    if (pas.Admin_List.IsUndef(R["pages_count"]) || (R["pages_count"] == null)) {
+      Subs.count("pages",R["pages"].length)}
+     else Subs.count("pages",R["pages_count"]);
+    Subs.count("searches",R["searches"].length);
+    Subs.count("members",R["members"].length);
+    Subs.count("crawlers",R["crawlers"].length);
+    Subs.count("bots",R["bots"].length);
+    Subs.count("concerns",pas.Admin_List.Either(R["concerns_count"],0));
+    $impl.DrawVisitOverview(Subs,R,HideMe);
+    $impl.DrawPeople(Subs.holder("people"),R);
+    Box = Subs.holder("pages");
+    Pages = R["pages"];
+    if (Number(R["pages_count"]) > Pages.length) Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("The %s pages read most are listed, of %s.",pas.Admin_List.LocaleNumber(Pages.length),pas.Admin_List.LocaleNumber(R["pages_count"]))));
+    pas.Admin_List.ListView(Box,pas.JS.New(["id","v-pages","key",$impl.FieldOf("path"),"sort","-views","csv","pages-" + pas.Admin_List.WindowName(R),"search",window.t("Filter pages"),"rows",Pages,"columns",Array.of($impl.Column("path",window.t("Page"),"",null,$impl.PageOf("path"),""),$impl.Column("views",window.t("Views"),"n",null,null,""),$impl.Column("people",window.t("People"),"n",null,null,"")),"filters",Array.of($impl.Filter("section",window.t("Part of the site"),window.t("The whole site"),function (Rows) {
+      var Result = undefined;
+      Result = pas.Admin_List.SectionOptions($impl.Column2(Rows,"path"));
+      return Result;
+    },function (P, K) {
+      var Result = undefined;
+      Result = pas.Admin_List.SectionOf(P["path"]) === K;
+      return Result;
+    })),"noun",$impl.Noun("%d page","%d pages"),"empty",window.t("Nothing yet.")]));
+    Box = Subs.holder("searches");
+    Hint = window.t("What people typed in the search boxes and pages. A box that searches as one types counts once, with the words as they ended.");
+    if (Boolean(HideMe)) Hint = Hint + " " + window.t("Your own searches are left out while Hide my visits is ticked.");
+    Box.appendChild(pas.Admin_List.C.el("p","hint",Hint));
+    pas.Admin_List.ListView(Box,pas.JS.New(["id","v-searches","key",function (Search) {
+      var Result = undefined;
+      Result = "" + Search["where"] + ("" + Search["words"]);
+      return Result;
+    },"sort","-count","search",window.t("Filter searches"),"rows",R["searches"],"columns",Array.of($impl.Column("where",window.t("Where"),"",function (Search) {
+      var Result = undefined;
+      Result = pas.Admin_List.PlaceName(Search["where"]);
+      return Result;
+    },null,""),$impl.Column("words",window.t("Words"),"",null,null,""),$impl.Column("count",window.t("Times"),"n",null,null,""),$impl.Column("last",window.t("Last searched"),"d",null,$impl.StampOf("last"),"")),"filters",Array.of($impl.Filter("where",window.t("Where"),window.t("Everywhere"),function (Rows) {
+      var Result = undefined;
+      var Places = null;
+      var Choices = null;
+      var N = 0;
+      Places = $impl.Distinct($impl.Column2(Rows,"where"));
+      Choices = new Array();
+      for (var $l = 0, $end = Places.length - 1; $l <= $end; $l++) {
+        N = $l;
+        Choices.push($impl.Pair(Places[N],pas.Admin_List.PlaceName(Places[N])));
+      };
+      Result = Choices;
+      return Result;
+    },function (Search, K) {
+      var Result = undefined;
+      Result = pas.Admin_List.Same(Search["where"],K);
+      return Result;
+    })),"noun",$impl.Noun("%d search","%d searches"),"empty",window.t("Nobody searched in that period.")]));
+    Box = Subs.holder("members");
+    pas.Admin_List.ListView(Box,pas.JS.New(["id","v-members","key",$impl.FieldOf("name"),"sort","-pages","search",false,"rows",R["members"],"columns",Array.of($impl.Column("name",window.t("Member"),"",null,function (M) {
+      var Result = undefined;
+      Result = $impl.MemberLink(M["name"]);
+      return Result;
+    },""),$impl.Column("pages",window.t("Pages"),"n",null,null,""),$impl.Column("last",window.t("Last seen"),"d",null,$impl.StampOf("last"),"")),"noun",$impl.Noun("%d member","%d members"),"empty",window.t("No member was signed in during that period.")]));
+    $impl.DrawCrawlers(Subs.holder("crawlers"),R);
+    $impl.DrawBots(Subs.holder("bots"),R);
+  };
+  $mod.$implcode = function () {
+    $impl.Column = function (Key, Title, Flags, Value, Cell, Cls) {
+      var Result = null;
+      Result = pas.JS.New(["key",Key,"title",Title]);
+      if (pas.System.Pos("n",Flags) > 0) Result["num"] = true;
+      if (pas.System.Pos("w",Flags) > 0) Result["wide"] = true;
+      if (pas.System.Pos("d",Flags) > 0) Result["down"] = true;
+      if (pas.System.Pos("s",Flags) > 0) Result["nosort"] = true;
+      if (Cls !== "") Result["cls"] = Cls;
+      if (Value != null) Result["value"] = Value;
+      if (Cell != null) Result["cell"] = Cell;
+      return Result;
+    };
+    $impl.Filter = function (Key, Title, All, Options, Test) {
+      var Result = null;
+      Result = pas.JS.New(["key",Key,"title",Title,"all",All,"options",Options,"test",Test]);
+      return Result;
+    };
+    $impl.Noun = function (One, Many) {
+      var Result = null;
+      Result = function (N) {
+        var Result = undefined;
+        Result = window.tn(N,One,Many);
+        return Result;
+      };
+      return Result;
+    };
+    $impl.FieldOf = function (Key) {
+      var Result = null;
+      Result = function (R) {
+        var Result = undefined;
+        Result = R[Key];
+        return Result;
+      };
+      return Result;
+    };
+    $impl.StampOf = function (Key) {
+      var Result = null;
+      Result = function (R) {
+        var Result = undefined;
+        Result = pas.Admin_List.Stamp(R[Key]);
+        return Result;
+      };
+      return Result;
+    };
+    $impl.PageOf = function (Key) {
+      var Result = null;
+      Result = function (R) {
+        var Result = undefined;
+        Result = pas.Admin_List.PageLink(R[Key]);
+        return Result;
+      };
+      return Result;
+    };
+    $impl.MemberLink = function (Name) {
+      var Result = null;
+      Result = pas.Admin_List.C.link("/u/" + pas.Admin_List.C.enc(Name),"",Name);
+      return Result;
+    };
+    $impl.MemberOf = function (R) {
+      var Result = undefined;
+      if (Boolean(R["member"])) {
+        Result = $impl.MemberLink(R["member"])}
+       else Result = "";
+      return Result;
+    };
+    $impl.BrowserOfRow = function (R) {
+      var Result = undefined;
+      Result = pas.Admin_List.BrowserOf(R["agent"]);
+      return Result;
+    };
+    $impl.Pair = function (A, B) {
+      var Result = null;
+      Result = Array.of(A,B);
+      return Result;
+    };
+    $impl.Distinct = function (Values) {
+      var Result = null;
+      Result = Array.from(new Set(Values));
+      return Result;
+    };
+    $impl.Column2 = function (Rows, Key) {
+      var Result = null;
+      var I = 0;
+      Result = new Array();
+      for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Result.push(Rows[I][Key]);
+      };
+      return Result;
+    };
+    $impl.AsChoices = function (Values) {
+      var Result = null;
+      var I = 0;
+      Result = new Array();
+      for (var $l = 0, $end = Values.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Result.push($impl.Pair(Values[I],Values[I]));
+      };
+      return Result;
+    };
+    $impl.Counted = function (Seen, Kinds) {
+      var Result = null;
+      var Pairs = null;
+      var Name = undefined;
+      var I = 0;
+      Pairs = pas.Admin_List.SortBy(Array.from(Seen),function (A, B) {
+        var Result = 0.0;
+        Result = Number(B[1]) - Number(A[1]);
+        return Result;
+      });
+      Result = new Array();
+      for (var $l = 0, $end = Pairs.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Name = Pairs[I][0];
+        if (Kinds !== null) {
+          Result.push($impl.Pair(Name,"" + pas.Admin_List.Either(Kinds["" + Name],Name) + " (" + ("" + Pairs[I][1]) + ")"))}
+         else Result.push($impl.Pair(Name,"" + Name + " (" + ("" + Pairs[I][1]) + ")"));
+      };
+      return Result;
+    };
+    $impl.Count = function (Seen, Key) {
+      Seen.set(Key,Number(pas.Admin_List.Either(Seen.get(Key),0)) + 1);
+    };
+    $impl.RequestWords = function (N) {
+      var Result = undefined;
+      Result = window.tn(N,"%d request","%d requests");
+      return Result;
+    };
+    $impl.Pixels = function (Share, Least) {
+      var Result = "";
+      Result = String(Math.max(Least,Math.round(Share))) + "px";
+      return Result;
+    };
+    $impl.AdminBlocks = function (Box, Period) {
+      var Tiles = null;
+      var StateWords = null;
+      var List = null;
+      function StateOf(B) {
+        var Result = "";
+        if (Boolean(B["for_good"])) {
+          Result = "forgood"}
+         else if (Boolean(B["active"])) {
+          Result = "blocked"}
+         else Result = "over";
+        return Result;
+      };
+      async function Show() {
+        var Result = undefined;
+        var Rows = null;
+        var Active = 0;
+        Rows = await pas.Admin_List.C.get("/api/blocks");
+        Tiles.replaceChildren();
+        Active = Rows.filter(function (B, Index, All) {
+          var Result = false;
+          Result = Boolean(B["active"]);
+          return Result;
+        }).length;
+        pas.Admin_List.Stat(Tiles,Active,window.t("Blocked right now"),undefined,undefined);
+        pas.Admin_List.Stat(Tiles,Rows.filter(function (B, Index, All) {
+          var Result = false;
+          Result = Boolean(B["for_good"]);
+          return Result;
+        }).length,window.t("For good"),undefined,undefined);
+        pas.Admin_List.Stat(Tiles,Rows.length - Active,window.t("Over, still listed"),undefined,undefined);
+        List.set(Rows);
+        return Result;
+      };
+      function BlocksChanged() {
+        Show().catch(function (Why) {
+          var Result = undefined;
+          return Result;
+        });
+      };
+      Tiles = pas.Admin_List.C.el("div","tiles-admin");
+      Box.replaceChildren(pas.Admin_List.C.el("p","hint",window.t("An address that asks for six missing pages in a minute, or gets ten passwords wrong in a quarter hour, is shut out for an hour; after three times, for thirty days. Published crawlers, checked against the addresses their companies publish, are never limited or blocked; a browser string that claims to be one of them from another address is refused. This network and the addresses in Settings, allowed_ips, are never blocked either. Allow adds an address there. With an AbuseIPDB key in Settings, an address that probes or guesses passwords here is looked up on AbuseIPDB and reported back, and blocked for good when its confidence of abuse is at the set level or above. Type an address to see its story, or to block it by hand.")),Tiles);
+      StateWords = pas.JS.New(["forgood",window.t("For good"),"blocked",window.t("Blocked now"),"over",window.t("Over")]);
+      List = pas.Admin_List.ListView(Box,pas.JS.New(["id","blocks","key",$impl.FieldOf("ip"),"sort","-when","csv","blocked","search",window.t("Filter, or type an address and press Enter to look it up"),"enter",function (Ip) {
+        if (Boolean(Ip)) pas.Admin_List.LookUpAddress(Ip);
+      },"columns",Array.of($impl.Column("ip",window.t("Address"),"",null,function (B) {
+        var Result = undefined;
+        Result = pas.Admin_List.C.el("b","lv-ip",B["ip"]);
+        return Result;
+      },""),$impl.Column("state",window.t("State"),"",function (B) {
+        var Result = undefined;
+        Result = StateWords[StateOf(B)];
+        return Result;
+      },function (B) {
+        var Result = undefined;
+        if (StateOf(B) === "over") {
+          Result = pas.Admin_List.C.chip(StateWords[StateOf(B)],"")}
+         else Result = pas.Admin_List.C.chip(StateWords[StateOf(B)],"bad");
+        return Result;
+      },""),$impl.Column("reason",window.t("Why"),"",null,null,""),$impl.Column("times",window.t("Times"),"n",null,null,""),$impl.Column("when",window.t("Last change"),"dw",null,function (B) {
+        var Result = undefined;
+        Result = window.dateTimeText(B["when"]);
+        return Result;
+      },""),$impl.Column("until",window.t("Until"),"w",null,function (B) {
+        var Result = undefined;
+        if (Boolean(B["for_good"])) {
+          Result = window.t("for good")}
+         else Result = window.dateTimeText(B["until"]);
+        return Result;
+      },"")),"filters",Array.of($impl.Filter("state",window.t("State"),window.t("Every state"),Array.of($impl.Pair("blocked",window.t("Blocked now")),$impl.Pair("forgood",window.t("For good")),$impl.Pair("over",window.t("Over"))),function (B, V) {
+        var Result = undefined;
+        if (V === "forgood") {
+          Result = B["for_good"]}
+         else if (V === "blocked") {
+          Result = B["active"]}
+         else Result = !Boolean(B["active"]);
+        return Result;
+      }),$impl.Filter("reason",window.t("Why"),window.t("Every reason"),function (Rows) {
+        var Result = undefined;
+        var Seen = null;
+        var I = 0;
+        Seen = new Map();
+        for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+          I = $l;
+          $impl.Count(Seen,Rows[I]["reason"]);
+        };
+        Result = $impl.Counted(Seen,null);
+        return Result;
+      },function (B, V) {
+        var Result = undefined;
+        Result = pas.Admin_List.Same(B["reason"],V);
+        return Result;
+      })),"rowClass",function (B) {
+        var Result = undefined;
+        if (Boolean(B["active"])) {
+          Result = ""}
+         else Result = "done";
+        return Result;
+      },"noun",$impl.Noun("%d address","%d addresses"),"empty",window.t("Nobody is blocked."),"detail",function (B, Holder, View) {
+        pas.Admin_Address.AddressPanel(B["ip"],Holder,Period);
+      }]));
+      pas.Admin_List.S["blocksChanged"] = BlocksChanged;
+      Show().catch(function (Why) {
+        var Result = undefined;
+        List.failed(Why["message"]);
+        return Result;
+      });
+    };
+    $impl.PersonDetail = function (V, Holder, Period) {
+      var Head = null;
+      var Acts = null;
+      var Trail = null;
+      var From = undefined;
+      async function Read() {
+        var A = null;
+        try {
+          A = await pas.Admin_List.C.get("/api/admin/access?n=1000&ip=" + pas.Admin_List.C.enc(V["ip"]) + "&agent=" + pas.Admin_List.C.enc(V["agent"]) + "&from=" + pas.Admin_List.C.enc(Period["from"]) + "&to=" + pas.Admin_List.C.enc(Period["to"]));
+          Trail.replaceChildren();
+          pas.Admin_List.ListView(Trail,pas.JS.New(["id","v-trail","key",function (L) {
+            var Result = undefined;
+            Result = "" + L["at"] + ("" + L["path"]);
+            return Result;
+          },"sort","-at","search",window.t("Filter their requests"),"page",200,"rows",A["lines"],"columns",Array.of($impl.Column("at",window.t("When"),"d",null,$impl.StampOf("at"),""),$impl.Column("method",window.t("Method"),"w",null,null,""),$impl.Column("path",window.t("Page"),"",null,$impl.PageOf("path"),""),$impl.Column("status",window.t("Status"),"n",null,function (L) {
+            var Result = undefined;
+            Result = pas.Admin_List.StatusCell(L["status"]);
+            return Result;
+          },""),$impl.Column("ms",window.t("Took"),"nw",null,function (L) {
+            var Result = undefined;
+            Result = pas.Admin_List.MsCell(L["ms"]);
+            return Result;
+          },""),$impl.Column("from",window.t("From"),"w",function (L) {
+            var Result = undefined;
+            Result = pas.Admin_List.HostOf(L["referer"]);
+            return Result;
+          },null,"")),"filters",Array.of(pas.JS.New(["key","kind","title",window.t("Which"),"all",window.t("Every request"),"value","people","options",Array.of($impl.Pair("people",window.t("Pages they read")),$impl.Pair("other",window.t("Everything else"))),"test",function (L, K) {
+            var Result = undefined;
+            if (pas.Admin_List.Same(L["method"],"GET") && pas.Admin_List.IsPagePath(L["path"])) {
+              Result = K === "people"}
+             else Result = K === "other";
+            return Result;
+          }])),"noun",$impl.Noun("%d request","%d requests")]));
+        } catch ($e) {
+          Trail.replaceChildren(pas.Admin_List.C.el("p","dim",window.t("The access log could not be read.")));
+        };
+      };
+      Head = pas.Admin_List.C.el("div","lv-detail-head");
+      Head.appendChild(pas.Admin_List.C.el("b","",V["ip"]));
+      if (Boolean(V["member"])) Head.appendChild($impl.MemberLink(V["member"]));
+      Head.appendChild(pas.Admin_List.C.el("span","dim",pas.Admin_List.BrowserOf(V["agent"])));
+      if (Boolean(V["flagged"])) Head.appendChild(pas.Admin_List.C.chip(window.t("Of concern"),"open"));
+      Holder.appendChild(Head);
+      if (Boolean(V["referer"])) {
+        From = pas.Admin_List.OutLink(V["referer"])}
+       else From = window.t("typed in, a bookmark, or not said");
+      pas.Admin_List.C.facts(Holder,Array.of($impl.Pair(window.t("First seen"),pas.Admin_List.Stamp(V["first"])),$impl.Pair(window.t("Last seen"),pas.Admin_List.Stamp(V["last"])),$impl.Pair(window.t("Pages"),V["pages"]),$impl.Pair(window.t("Requests"),V["requests"]),$impl.Pair(window.t("Open tab checks"),pas.Admin_List.Either(V["polls"],0)),$impl.Pair(window.t("Came in on"),pas.Admin_List.PageLink(V["entry"])),$impl.Pair(window.t("From"),From),$impl.Pair(window.t("Browser"),V["agent"])));
+      Acts = pas.Admin_List.C.el("div","lv-actions");
+      Acts.appendChild(pas.Admin_List.LookButton(V["ip"]));
+      Holder.appendChild(Acts);
+      Holder.appendChild(pas.Admin_List.C.el("h3","",window.t("What they asked for in the period")));
+      Trail = pas.Admin_List.C.el("div");
+      Holder.appendChild(Trail);
+      pas.Admin_List.C.waiting(Trail,window.t("Reading the log…"));
+      Read();
+    };
+    $impl.DrawVisitOverview = function (Subs, R, HideMe) {
+      var Box = null;
+      var Tiles = null;
+      var Worry = null;
+      var Days = null;
+      var Bar = null;
+      var Caption = null;
+      var Two = null;
+      var Left = null;
+      var Right = null;
+      var ByDay = null;
+      var Rows = null;
+      var Pages = null;
+      var Referers = null;
+      var Searches = null;
+      var Values = null;
+      var D = null;
+      var P = null;
+      var Top = 0.0;
+      var Name = undefined;
+      var I = 0;
+      Box = Subs.holder("overview");
+      Tiles = pas.Admin_List.C.el("div","tiles-admin");
+      pas.Admin_List.Stat(Tiles,R["people"],window.t("People"),window.t("a browser that took the page whole, not a bot"),undefined);
+      pas.Admin_List.Stat(Tiles,R["people_pages"],window.t("Pages they read"),undefined,undefined);
+      pas.Admin_List.Stat(Tiles,R["bot_requests"],window.t("Bot requests"),window.tn(R["bots"].length,"%d bot or crawler","%d bots and crawlers"),undefined);
+      pas.Admin_List.Stat(Tiles,R["members_seen"],window.t("Members signed in"),undefined,undefined);
+      if (Boolean(R["concerns_count"])) {
+        Worry = pas.Admin_List.Stat(Tiles,pas.Admin_List.Either(R["concerns_count"],0),window.t("Addresses of concern"),window.tn(pas.Admin_List.Either(R["addresses"],0),"of %d address","of %d addresses"),"warn")}
+       else Worry = pas.Admin_List.Stat(Tiles,pas.Admin_List.Either(R["concerns_count"],0),window.t("Addresses of concern"),window.tn(pas.Admin_List.Either(R["addresses"],0),"of %d address","of %d addresses"),"");
+      Worry.style["cursor"] = "pointer";
+      Worry.title = window.t("See the Of concern tab");
+      Worry.addEventListener("click",function (E) {
+        Subs.select("concerns");
+      });
+      if (Boolean(HideMe)) pas.Admin_List.Stat(Tiles,R["hidden_requests"],window.t("Your requests left out"),window.tn(R["hidden_addresses"],"from %d address","from %d addresses"),undefined);
+      Box.appendChild(Tiles);
+      ByDay = pas.Admin_List.Either(R["by_day"],new Array());
+      if (ByDay.length > 1) {
+        Top = pas.Admin_List.MostOf($impl.Column2(ByDay,"pages"));
+        Days = pas.Admin_List.C.el("div","days");
+        for (var $l = 0, $end = ByDay.length - 1; $l <= $end; $l++) {
+          I = $l;
+          D = ByDay[I];
+          Bar = pas.Admin_List.C.el("i");
+          Bar.style["height"] = $impl.Pixels((66 * Number(D["pages"])) / Top,2);
+          Bar.title = window.dateText(D["day"]) + ": " + window.tn(D["pages"],"%d page","%d pages") + ", " + window.tn(D["people"],"%d person","%d people");
+          Days.appendChild(Bar);
+        };
+        Box.appendChild(Days);
+        Caption = pas.Admin_List.C.el("div","days-caption");
+        Caption.append(pas.Admin_List.C.el("span","",window.dateText(ByDay[0]["day"])),pas.Admin_List.C.el("span","",window.t("pages people read, day by day")),pas.Admin_List.C.el("span","",window.dateText(ByDay[ByDay.length - 1]["day"])));
+        Box.appendChild(Caption);
+      };
+      pas.Admin_Address.TimelineChart(Box,R["timeline"],false);
+      Two = pas.Admin_List.C.el("div","visit-two");
+      Left = pas.Admin_List.C.el("div");
+      Right = pas.Admin_List.C.el("div");
+      Two.append(Left,Right);
+      Box.appendChild(Two);
+      Left.appendChild(pas.Admin_List.C.el("h3","",window.t("What people read most")));
+      Pages = R["pages"];
+      if (Pages.length > 0) {
+        Rows = Pages.slice(0,12);
+        Values = new Array();
+        for (var $l1 = 0, $end1 = Rows.length - 1; $l1 <= $end1; $l1++) {
+          I = $l1;
+          P = Rows[I];
+          Name = P["path"];
+          try {
+            Name = decodeURIComponent("" + Name);
+          } catch ($e) {
+          };
+          Values.push(pas.JS.New(["name",Name,"value",P["views"]]));
+        };
+        pas.Admin_List.Bars(Left,Values,function (N) {
+          var Result = undefined;
+          Result = window.tn(N,"%d view","%d views");
+          return Result;
+        });
+      } else Left.appendChild(pas.Admin_List.C.el("p","dim",window.t("Nothing yet.")));
+      Right.appendChild(pas.Admin_List.C.el("h3","",window.t("Where they came from")));
+      Referers = R["referers"];
+      if (Referers.length > 0) {
+        Rows = Referers.slice(0,12);
+        Values = new Array();
+        for (var $l2 = 0, $end2 = Rows.length - 1; $l2 <= $end2; $l2++) {
+          I = $l2;
+          Values.push(pas.JS.New(["name",Rows[I]["host"],"value",Rows[I]["views"]]));
+        };
+        pas.Admin_List.Bars(Right,Values,function (N) {
+          var Result = undefined;
+          Result = window.tn(N,"%d page","%d pages");
+          return Result;
+        });
+      } else Right.appendChild(pas.Admin_List.C.el("p","dim",window.t("Nobody came by a link in that period.")));
+      Searches = R["searches"];
+      if (Searches.length > 0) {
+        Box.appendChild(pas.Admin_List.C.el("h3","",window.t("What they searched for")));
+        Rows = Searches.slice(0,10);
+        Values = new Array();
+        for (var $l3 = 0, $end3 = Rows.length - 1; $l3 <= $end3; $l3++) {
+          I = $l3;
+          Values.push(pas.JS.New(["name","" + Rows[I]["words"] + "  ·  " + ("" + pas.Admin_List.PlaceName(Rows[I]["where"])),"value",Rows[I]["count"]]));
+        };
+        pas.Admin_List.Bars(Box,Values,function (N) {
+          var Result = undefined;
+          Result = window.tn(N,"%d time","%d times");
+          return Result;
+        });
+      };
+    };
+    $impl.DrawPeople = function (Box, R) {
+      var Visitors = null;
+      Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("Each address with one browser. Bots are counted apart, under Bots. Pick a row for everything they asked for.")));
+      Visitors = R["visitors"];
+      if (Number(R["visitors_count"]) > Visitors.length) Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("The %s who read the most are listed, of %s.",pas.Admin_List.LocaleNumber(Visitors.length),pas.Admin_List.LocaleNumber(R["visitors_count"]))));
+      pas.Admin_List.ListView(Box,pas.JS.New(["id","v-people","key",function (V) {
+        var Result = undefined;
+        Result = "" + V["ip"] + " " + ("" + V["agent"]);
+        return Result;
+      },"sort","-pages","csv","people-" + pas.Admin_List.WindowName(R),"search",window.t("Filter by address, page, site or member"),"rows",Visitors,"columns",Array.of($impl.Column("last",window.t("Last seen"),"d",null,function (V) {
+        var Result = undefined;
+        var Seen = null;
+        Seen = pas.Admin_List.C.el("span","",pas.Admin_List.Stamp(V["last"]));
+        Seen.title = window.t("First seen %s",pas.Admin_List.Stamp(V["first"]));
+        Result = Seen;
+        return Result;
+      },""),$impl.Column("ip",window.t("Address"),"",null,function (V) {
+        var Result = undefined;
+        Result = pas.Admin_List.AddressCell$1(V["ip"],V["flagged"]);
+        return Result;
+      },""),$impl.Column("member",window.t("Member"),"",null,$impl.MemberOf,""),$impl.Column("pages",window.t("Pages"),"n",null,null,""),$impl.Column("requests",window.t("Requests"),"nw",null,null,""),$impl.Column("entry",window.t("Came in on"),"",null,$impl.PageOf("entry"),""),$impl.Column("from",window.t("From"),"w",function (V) {
+        var Result = undefined;
+        Result = pas.Admin_List.HostOf(V["referer"]);
+        return Result;
+      },null,""),$impl.Column("browser",window.t("Browser"),"w",$impl.BrowserOfRow,null,"")),"filters",Array.of($impl.Filter("who",window.t("Who"),window.t("Everybody"),Array.of($impl.Pair("members",window.t("Members signed in")),$impl.Pair("guests",window.t("Not signed in")),$impl.Pair("concern",window.t("Of concern"))),function (V, K) {
+        var Result = undefined;
+        if (K === "members") {
+          Result = Boolean(V["member"])}
+         else if (K === "guests") {
+          Result = !Boolean(V["member"])}
+         else Result = Number(V["flagged"]) > 0;
+        return Result;
+      }),$impl.Filter("browser",window.t("Browser"),window.t("Every browser"),function (Rows) {
+        var Result = undefined;
+        var Names = null;
+        var I = 0;
+        Names = new Array();
+        for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+          I = $l;
+          Names.push(pas.Admin_List.BrowserOf(Rows[I]["agent"]));
+        };
+        Result = $impl.AsChoices(pas.Admin_List.SortBy($impl.Distinct(Names),undefined));
+        return Result;
+      },function (V, K) {
+        var Result = undefined;
+        Result = pas.Admin_List.Same(pas.Admin_List.BrowserOf(V["agent"]),K);
+        return Result;
+      }),$impl.Filter("from",window.t("From"),window.t("From anywhere"),function (Rows) {
+        var Result = undefined;
+        var Hosts = null;
+        var Host = "";
+        var I = 0;
+        Hosts = new Array();
+        for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+          I = $l;
+          Host = pas.Admin_List.HostOf(Rows[I]["referer"]);
+          if (Host !== "") Hosts.push(Host);
+        };
+        Result = Array.of($impl.Pair("-",window.t("No link (typed in or a bookmark)"))).concat($impl.AsChoices(pas.Admin_List.SortBy($impl.Distinct(Hosts),undefined)));
+        return Result;
+      },function (V, K) {
+        var Result = undefined;
+        if (K === "-") {
+          Result = pas.Admin_List.HostOf(V["referer"]) === ""}
+         else Result = pas.Admin_List.HostOf(V["referer"]) === K;
+        return Result;
+      })),"noun",$impl.Noun("%d person","%d people"),"empty",window.t("Nobody read a page in that period."),"detail",function (V, Holder, View) {
+        $impl.PersonDetail(V,Holder,pas.JS.New(["from",R["from"],"to",R["to"]]));
+      }]));
+    };
+    $impl.DrawCrawlers = function (Box, R) {
+      var Crawlers = null;
+      var Sources = null;
+      var Pretenders = null;
+      var Named = null;
+      var Parts = null;
+      var Pairs = null;
+      var Keys = null;
+      var Columns = null;
+      var Shown = null;
+      var Order = null;
+      var DayList = null;
+      var Series = null;
+      var Counts = null;
+      var Totals = null;
+      var Crawler = null;
+      var Days = null;
+      var Legend = null;
+      var Chart = null;
+      var Wrap = null;
+      var Table = null;
+      var Head = null;
+      var Th = null;
+      var Lists = null;
+      var Holder = null;
+      var Most = 0.0;
+      var Peak = 0.0;
+      var I = 0;
+      var J = 0;
+      function PartsOf(Crawler) {
+        var Result = null;
+        Result = pas.Admin_List.Either(Crawler["parts"],new Object());
+        return Result;
+      };
+      function PartOf(Crawler, K) {
+        var Result = undefined;
+        var Names = [];
+        var N = 0.0;
+        var X = 0;
+        if (!pas.Admin_List.Same(K,"other")) return pas.Admin_List.Either(PartsOf(Crawler)["" + K],0);
+        N = 0;
+        Names = Object.keys(PartsOf(Crawler));
+        for (var $l = 0, $end = rtl.length(Names) - 1; $l <= $end; $l++) {
+          X = $l;
+          if (Named.indexOf(Names[X]) < 0) N = N + Number(PartsOf(Crawler)[Names[X]]);
+        };
+        Result = N;
+        return Result;
+      };
+      function PartColumn(P) {
+        var Result = null;
+        Result = $impl.Column("part-" + ("" + P[0]),P[1],"nw",function (Crawler) {
+          var Result = undefined;
+          Result = PartOf(Crawler,P[0]);
+          return Result;
+        },null,"");
+        return Result;
+      };
+      function Sum(Counts) {
+        var Result = 0.0;
+        var N = 0;
+        Result = 0;
+        for (var $l = 0, $end = Counts.length - 1; $l <= $end; $l++) {
+          N = $l;
+          Result = Result + Number(Counts[N]);
+        };
+        return Result;
+      };
+      function ChartRow(Crawler) {
+        var Name = null;
+        var Bar = null;
+        var Seg = null;
+        var Track = null;
+        var number = null;
+        var Words = null;
+        var P = null;
+        var N = 0;
+        Name = pas.Admin_List.C.el("span","name",Crawler["name"]);
+        Name["title"] = Crawler["company"];
+        Bar = pas.Admin_List.C.el("span","crawl-bar");
+        Bar.style["width"] = String(Math.max(2,Math.round((100 * Number(Crawler["requests"])) / Most))) + "%";
+        Words = new Array();
+        for (var $l = 0, $end = Parts.length - 1; $l <= $end; $l++) {
+          N = $l;
+          P = Parts[N];
+          Words.push("" + P[1] + " " + ("" + PartOf(Crawler,P[0])));
+          if (!Boolean(PartOf(Crawler,P[0]))) continue;
+          Seg = pas.Admin_List.C.el("i","crawl-c" + String(N + 1));
+          Seg.style["flexGrow"] = PartOf(Crawler,P[0]);
+          Seg.title = "" + P[1] + ": " + window.tn(PartOf(Crawler,P[0]),"%d request","%d requests");
+          Bar.appendChild(Seg);
+        };
+        Track = pas.Admin_List.C.el("span","crawl-track");
+        Track.appendChild(Bar);
+        number = pas.Admin_List.C.el("span","num",pas.Admin_List.LocaleNumber(Crawler["requests"]));
+        number.title = Words.join(" · ");
+        Chart.append(Name,Track,number);
+      };
+      function HeatRow(One) {
+        var Row = null;
+        var Cell = null;
+        var Counts = null;
+        var N = undefined;
+        var Share = 0.0;
+        var X = 0;
+        Row = pas.Admin_List.C.el("tr");
+        Row.appendChild(pas.Admin_List.C.el("td","name",One["name"]));
+        Counts = One["counts"];
+        for (var $l = 0, $end = Counts.length - 1; $l <= $end; $l++) {
+          X = $l;
+          N = Counts[X];
+          if (Boolean(N)) {
+            Cell = pas.Admin_List.C.el("td","heat",pas.Admin_List.LocaleNumber(N))}
+           else Cell = pas.Admin_List.C.el("td","heat","");
+          if (Boolean(N)) {
+            Share = Math.round(12 + ((88 * Math.log(1 + Number(N))) / Math.log(1 + Peak)))}
+           else Share = 0;
+          Cell.style.setProperty("--share",String(Share) + "%");
+          if (Share > 55) Cell.classList.add("deep");
+          Cell.title = "" + One["name"] + ", " + window.dateText(DayList[X]) + ": " + window.tn(N,"%d request","%d requests");
+          Row.appendChild(Cell);
+        };
+        Table.appendChild(Row);
+      };
+      Sources = R["crawler_sources"];
+      Box.appendChild(pas.Admin_List.C.el("p","hint",window.tn(Sources.length,"Found by the address ranges their companies publish (%d list, read once a day): a request from those addresses is that company's crawler, whatever its browser string says.","Found by the address ranges their companies publish (%d lists, read once a day): a request from those addresses is that company's crawler, whatever its browser string says.")));
+      Crawlers = R["crawlers"];
+      Totals = new Map();
+      for (var $l = 0, $end = Crawlers.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Crawler = Crawlers[I];
+        Keys = Object.keys(PartsOf(Crawler));
+        for (var $l1 = 0, $end1 = Keys.length - 1; $l1 <= $end1; $l1++) {
+          J = $l1;
+          Totals.set(Keys[J],Number(pas.Admin_List.Either(Totals.get(Keys[J]),0)) + Number(PartsOf(Crawler)["" + Keys[J]]));
+        };
+      };
+      Pairs = pas.Admin_List.SortBy(Array.from(Totals).filter(function (X, Index, All) {
+        var Result = false;
+        Result = !pas.Admin_List.Same(X[0],"other");
+        return Result;
+      }),function (A, B) {
+        var Result = 0.0;
+        Result = Number(B[1]) - Number(A[1]);
+        return Result;
+      }).slice(0,3);
+      Named = new Array();
+      Parts = new Array();
+      for (var $l2 = 0, $end2 = Pairs.length - 1; $l2 <= $end2; $l2++) {
+        I = $l2;
+        Named.push(Pairs[I][0]);
+        Parts.push($impl.Pair(Pairs[I][0],pas.Admin_List.PartLabel(Pairs[I][0])));
+      };
+      Parts.push($impl.Pair("other",window.t("Other")));
+      if (Crawlers.length === 0) {
+        Box.appendChild(pas.Admin_List.C.el("p","dim",window.t("No known crawler came in that period.")))}
+       else {
+        Legend = pas.Admin_List.C.el("div","crawl-legend");
+        for (var $l3 = 0, $end3 = Parts.length - 1; $l3 <= $end3; $l3++) {
+          I = $l3;
+          Th = pas.Admin_List.C.el("span");
+          Th.append(pas.Admin_List.C.el("i","crawl-c" + String(I + 1))," " + ("" + Parts[I][1]));
+          Legend.appendChild(Th);
+        };
+        Box.appendChild(Legend);
+        Most = pas.Admin_List.MostOf($impl.Column2(Crawlers,"requests"));
+        Chart = pas.Admin_List.C.el("div","crawl-chart");
+        Shown = Crawlers.slice(0,20);
+        for (var $l4 = 0, $end4 = Shown.length - 1; $l4 <= $end4; $l4++) {
+          I = $l4;
+          ChartRow(Shown[I]);
+        };
+        Box.appendChild(Chart);
+        Columns = Array.of($impl.Column("name",window.t("Crawler"),"",null,null,""),$impl.Column("company",window.t("Company"),"",null,null,""),$impl.Column("requests",window.t("Requests"),"n",null,null,""));
+        for (var $l5 = 0, $end5 = Parts.length - 1; $l5 <= $end5; $l5++) {
+          I = $l5;
+          Columns.push(PartColumn(Parts[I]));
+        };
+        Columns.push($impl.Column("addresses",window.t("Addresses"),"n",null,null,""),$impl.Column("last",window.t("Last seen"),"d",null,$impl.StampOf("last"),""));
+        pas.Admin_List.ListView(Box,pas.JS.New(["id","v-crawlers","key",$impl.FieldOf("name"),"sort","-requests","csv","crawlers-" + pas.Admin_List.WindowName(R),"search",window.t("Filter crawlers"),"rows",Crawlers,"columns",Columns,"filters",Array.of($impl.Filter("company",window.t("Company"),window.t("Every company"),function (Rows) {
+          var Result = undefined;
+          Result = $impl.AsChoices(pas.Admin_List.SortBy($impl.Distinct($impl.Column2(Rows,"company")),undefined));
+          return Result;
+        },function (Crawler, K) {
+          var Result = undefined;
+          Result = pas.Admin_List.Same(Crawler["company"],K);
+          return Result;
+        })),"noun",$impl.Noun("%d crawler","%d crawlers"),"detail",function (Crawler, Holder, View) {
+          var Top = null;
+          var Names = [];
+          var ByPart = null;
+          var Paths = null;
+          var Read = null;
+          var N = 0;
+          Top = pas.Admin_List.C.el("div","lv-detail-head");
+          Top.append(pas.Admin_List.C.el("b","",Crawler["name"]),pas.Admin_List.C.el("span","dim",Crawler["company"]));
+          Holder.appendChild(Top);
+          Names = Object.keys(PartsOf(Crawler));
+          ByPart = new Array();
+          for (var $l6 = 0, $end6 = rtl.length(Names) - 1; $l6 <= $end6; $l6++) {
+            N = $l6;
+            ByPart.push("" + pas.Admin_List.PartLabel(Names[N]) + " " + ("" + PartsOf(Crawler)[Names[N]]));
+          };
+          pas.Admin_List.C.facts(Holder,Array.of($impl.Pair(window.t("Requests"),pas.Admin_List.LocaleNumber(Crawler["requests"])),$impl.Pair(window.t("Addresses"),Crawler["addresses"]),$impl.Pair(window.t("Last seen"),pas.Admin_List.Stamp(Crawler["last"])),$impl.Pair(window.t("By part"),ByPart.join(" · "))));
+          Holder.appendChild(pas.Admin_List.C.el("h3","",window.t("What it read most")));
+          Paths = Crawler["paths"];
+          Read = new Array();
+          for (var $l7 = 0, $end7 = Paths.length - 1; $l7 <= $end7; $l7++) {
+            N = $l7;
+            Read.push(pas.JS.New(["name",pas.Admin_List.Either(Paths[N]["path"],"/"),"value",Paths[N]["count"]]));
+          };
+          pas.Admin_List.Bars(Holder,Read,$impl.RequestWords);
+        }]));
+      };
+      Days = R["crawler_days"];
+      if (Boolean(Days) && (Days["series"].length > 0)) {
+        Box.appendChild(pas.Admin_List.C.el("h3","",window.t("Day by day")));
+        Series = Days["series"];
+        Counts = new Array();
+        for (var $l6 = 0, $end6 = Series.length - 1; $l6 <= $end6; $l6++) {
+          I = $l6;
+          Counts.push(Math.max.apply(null,Series[I]["counts"]));
+        };
+        Peak = pas.Admin_List.MostOf(Counts);
+        Wrap = pas.Admin_List.C.el("div","gridwrap");
+        Table = pas.Admin_List.C.el("table","grid crawl-days");
+        Head = pas.Admin_List.C.el("tr");
+        Head.appendChild(pas.Admin_List.C.el("th","",window.t("Crawler")));
+        DayList = Days["days"];
+        for (var $l7 = 0, $end7 = DayList.length - 1; $l7 <= $end7; $l7++) {
+          I = $l7;
+          Th = pas.Admin_List.C.el("th","",window.dateText(DayList[I]).replace(new RegExp("[-/.]?\\d{4}[-/.]?"),""));
+          Th.title = window.dateText(DayList[I]);
+          Head.appendChild(Th);
+        };
+        Table.appendChild(Head);
+        Order = pas.Admin_List.SortBy(Series.slice(0),function (A, B) {
+          var Result = 0.0;
+          Result = Sum(B["counts"]) - Sum(A["counts"]);
+          return Result;
+        });
+        for (var $l8 = 0, $end8 = Order.length - 1; $l8 <= $end8; $l8++) {
+          I = $l8;
+          HeatRow(Order[I]);
+        };
+        Wrap.appendChild(Table);
+        Box.appendChild(Wrap);
+      };
+      Pretenders = R["pretenders"];
+      if (Pretenders.length > 0) {
+        Box.appendChild(pas.Admin_List.C.el("h3","",window.t("Pretending to be one of them")));
+        Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("These name a known crawler in their browser string but come from outside its company's published addresses.")));
+        pas.Admin_List.ListView(Box,pas.JS.New(["id","v-pretenders","key",$impl.FieldOf("name"),"sort","-requests","search",false,"rows",Pretenders,"columns",Array.of($impl.Column("name",window.t("Says it is"),"",null,null,""),$impl.Column("company",window.t("Company"),"",null,null,""),$impl.Column("requests",window.t("Requests"),"n",null,null,""),$impl.Column("addresses",window.t("Addresses"),"n",null,null,""),$impl.Column("last",window.t("Last seen"),"d",null,$impl.StampOf("last"),""),$impl.Column("sample",window.t("For example"),"w",null,function (P) {
+          var Result = undefined;
+          Result = pas.Admin_List.AddressCell(P["sample"]);
+          return Result;
+        },"")),"noun",$impl.Noun("%d pretender","%d pretenders"),"detail",function (P, Holder, View) {
+          pas.Admin_List.C.facts(Holder,Array.of($impl.Pair(window.t("Says it is"),"" + P["name"] + " (" + ("" + P["company"]) + ")"),$impl.Pair(window.t("Requests"),P["requests"]),$impl.Pair(window.t("For example"),pas.Admin_List.AddressCell(P["sample"]))));
+        }]));
+      };
+      if (Sources.length > 0) {
+        Lists = pas.Admin_List.C.el("details","crawl-sources");
+        Lists.appendChild(pas.Admin_List.C.el("summary","",window.t("The published lists")));
+        Holder = pas.Admin_List.C.el("div");
+        Lists.appendChild(Holder);
+        Box.appendChild(Lists);
+        pas.Admin_List.ListView(Holder,pas.JS.New(["id","v-sources","key",$impl.FieldOf("url"),"sort","company","search",false,"rows",Sources,"columns",Array.of($impl.Column("company",window.t("Company"),"",null,null,""),$impl.Column("name",window.t("Crawler"),"",null,function (Source) {
+          var Result = undefined;
+          var A = null;
+          A = pas.Admin_List.C.el("a","",Source["name"]);
+          A["href"] = Source["url"];
+          A["target"] = "_blank";
+          A["rel"] = "noopener";
+          Result = A;
+          return Result;
+        },""),$impl.Column("ranges",window.t("Ranges"),"n",null,null,""),$impl.Column("created",window.t("List dated"),"w",null,function (Source) {
+          var Result = undefined;
+          if (Boolean(Source["created"])) {
+            Result = window.dateText(Source["created"])}
+           else Result = "";
+          return Result;
+        },""),$impl.Column("fetched",window.t("Read"),"w",null,function (Source) {
+          var Result = undefined;
+          if (Boolean(Source["fetched"])) {
+            Result = window.dateTimeText(Source["fetched"])}
+           else Result = "";
+          return Result;
+        },""),$impl.Column("error",window.t("Problem"),"",null,null,"")),"noun",$impl.Noun("%d list","%d lists")]));
+      };
+    };
+    $impl.DrawBots = function (Box, R) {
+      var Checks = null;
+      function CheckSpan(B, Words) {
+        var Result = null;
+        if (pas.Admin_List.Same(B["check"],"unverified")) {
+          Result = pas.Admin_List.C.el("span","bot-bad",Words)}
+         else Result = pas.Admin_List.C.el("span","bot-ok",Words);
+        return Result;
+      };
+      Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("Known by the name in their browser string, or because they asked for robots.txt. The big search engines are checked against their DNS: one that only claims the name shows as not verified.")));
+      Checks = pas.JS.New(["listed","✓ " + window.t("Published address"),"verified","✓ " + window.t("Verified"),"unverified",window.t("Not verified")]);
+      pas.Admin_List.ListView(Box,pas.JS.New(["id","v-bots","key",$impl.FieldOf("name"),"sort","-requests","csv","bots-" + pas.Admin_List.WindowName(R),"search",window.t("Filter bots"),"rows",R["bots"],"columns",Array.of($impl.Column("name",window.t("Bot"),"",null,null,""),$impl.Column("check",window.t("Checked"),"",function (B) {
+        var Result = undefined;
+        Result = pas.Admin_List.Either(Checks["" + B["check"]],"");
+        return Result;
+      },function (B) {
+        var Result = undefined;
+        if (Boolean(B["check"])) {
+          Result = CheckSpan(B,pas.Admin_List.Either(Checks["" + B["check"]],B["check"]))}
+         else Result = "";
+        return Result;
+      },""),$impl.Column("requests",window.t("Requests"),"n",null,null,""),$impl.Column("addresses",window.t("Addresses"),"n",null,null,""),$impl.Column("last",window.t("Last seen"),"d",null,$impl.StampOf("last"),""),$impl.Column("paths",window.t("Pages it asked for most"),"ws",function (B) {
+        var Result = undefined;
+        Result = B["paths"].join(" ");
+        return Result;
+      },function (B) {
+        var Result = undefined;
+        var Paths = null;
+        var Words = null;
+        var N = 0;
+        Paths = B["paths"].slice(0,3);
+        Words = new Array();
+        for (var $l = 0, $end = Paths.length - 1; $l <= $end; $l++) {
+          N = $l;
+          Words.push(pas.Admin_List.Either(Paths[N],"/"));
+        };
+        Result = pas.Admin_List.C.el("span","dim",Words.join("  ·  "));
+        return Result;
+      },"lv-text")),"filters",Array.of($impl.Filter("check",window.t("Checked"),window.t("Checked or not"),Array.of($impl.Pair("listed",window.t("Published address")),$impl.Pair("verified",window.t("Verified")),$impl.Pair("unverified",window.t("Not verified")),$impl.Pair("-",window.t("Not checked"))),function (B, K) {
+        var Result = undefined;
+        if (K === "-") {
+          Result = !Boolean(B["check"])}
+         else Result = pas.Admin_List.Same(B["check"],K);
+        return Result;
+      })),"noun",$impl.Noun("%d bot","%d bots"),"empty",window.t("No bot came in that period."),"detail",function (B, Holder, View) {
+        var Head = null;
+        var List = null;
+        var Line = null;
+        var Paths = null;
+        var Example = undefined;
+        var N = 0;
+        Head = pas.Admin_List.C.el("div","lv-detail-head");
+        if (Boolean(B["check"])) {
+          Head.append(pas.Admin_List.C.el("b","",B["name"]),CheckSpan(B,Checks["" + B["check"]]))}
+         else Head.append(pas.Admin_List.C.el("b","",B["name"]),"");
+        Holder.appendChild(Head);
+        if (Boolean(B["sample"])) {
+          Example = pas.Admin_List.AddressCell(B["sample"])}
+         else Example = "";
+        pas.Admin_List.C.facts(Holder,Array.of($impl.Pair(window.t("Requests"),pas.Admin_List.LocaleNumber(B["requests"])),$impl.Pair(window.t("Addresses"),B["addresses"]),$impl.Pair(window.t("For example"),Example),$impl.Pair(window.t("Last seen"),pas.Admin_List.Stamp(B["last"]))));
+        Holder.appendChild(pas.Admin_List.C.el("h3","",window.t("Pages it asked for most")));
+        List = pas.Admin_List.C.el("ul","lv-paths");
+        Paths = B["paths"];
+        for (var $l = 0, $end = Paths.length - 1; $l <= $end; $l++) {
+          N = $l;
+          Line = pas.Admin_List.C.el("li");
+          Line.appendChild(pas.Admin_List.PageLink(pas.Admin_List.Either(Paths[N],"/")));
+          List.appendChild(Line);
+        };
+        Holder.appendChild(List);
+      }]));
+    };
+    $impl.DrawLatest = function (Box, R) {
+      Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("The latest thousand requests from people and four hundred from bots in the period, newest first. Pick an address for its whole story.")));
+      pas.Admin_List.ListView(Box,pas.JS.New(["id","v-latest2","key",function (L) {
+        var Result = undefined;
+        Result = "" + L["at"] + ("" + L["ip"]) + ("" + L["path"]) + ("" + L["kind"]);
+        return Result;
+      },"sort","-at","csv","latest-" + pas.Admin_List.WindowName(R),"page",200,"search",window.t("Filter by address, page or member"),"rows",pas.Admin_List.Either(R["latest"],new Array()),"columns",Array.of($impl.Column("at",window.t("When"),"d",null,$impl.StampOf("at"),""),$impl.Column("ip",window.t("Address"),"",null,function (L) {
+        var Result = undefined;
+        Result = pas.Admin_List.AddressCell(L["ip"]);
+        return Result;
+      },""),$impl.Column("member",window.t("Member"),"",null,$impl.MemberOf,""),$impl.Column("path",window.t("Page"),"",null,$impl.PageOf("path"),""),$impl.Column("status",window.t("Status"),"n",null,function (L) {
+        var Result = undefined;
+        Result = pas.Admin_List.StatusCell(L["status"]);
+        return Result;
+      },""),$impl.Column("ms",window.t("Took"),"nw",null,function (L) {
+        var Result = undefined;
+        Result = pas.Admin_List.MsCell(L["ms"]);
+        return Result;
+      },""),$impl.Column("browser",window.t("Browser or bot"),"w",function (L) {
+        var Result = undefined;
+        Result = pas.Admin_List.Either(L["bot"],pas.Admin_List.BrowserOf(L["agent"]));
+        return Result;
+      },function (L) {
+        var Result = undefined;
+        var Seen = null;
+        Seen = pas.Admin_List.C.el("span","dim",pas.Admin_List.Either(L["bot"],pas.Admin_List.BrowserOf(L["agent"])));
+        Seen["title"] = L["agent"];
+        Result = Seen;
+        return Result;
+      },"")),"filters",Array.of(pas.JS.New(["key","kind","title",window.t("Which"),"all",window.t("Every request"),"value","page","options",Array.of($impl.Pair("page",window.t("Pages people read")),$impl.Pair("other",window.t("Everything else people asked for")),$impl.Pair("bot",window.t("Bots"))),"test",function (L, K) {
+        var Result = undefined;
+        Result = pas.Admin_List.Same(L["kind"],K);
+        return Result;
+      }]),$impl.Filter("status",window.t("Status"),window.t("Any status"),Array.of($impl.Pair("ok",window.t("Answered")),$impl.Pair("4xx",window.t("Refused or not here")),$impl.Pair("5xx",window.t("Failed"))),function (L, K) {
+        var Result = undefined;
+        if (K === "ok") {
+          Result = !(Number(L["status"]) >= 400)}
+         else if (K === "4xx") {
+          Result = (Number(L["status"]) >= 400) && (Number(L["status"]) < 500)}
+         else Result = Number(L["status"]) >= 500;
+        return Result;
+      }),$impl.Filter("section",window.t("Part of the site"),window.t("The whole site"),function (Rows) {
+        var Result = undefined;
+        Result = pas.Admin_List.SectionOptions($impl.Column2(Rows,"path"));
+        return Result;
+      },function (L, K) {
+        var Result = undefined;
+        Result = pas.Admin_List.SectionOf(L["path"]) === K;
+        return Result;
+      })),"noun",$impl.Noun("%d request","%d requests"),"empty",window.t("Nothing in that period's logs yet."),"detail",function (L, Holder, View) {
+        var Head = null;
+        var Acts = null;
+        var Answered = undefined;
+        var From = undefined;
+        Head = pas.Admin_List.C.el("div","lv-detail-head");
+        Head.append(pas.Admin_List.C.el("b","",L["ip"]),$impl.MemberOf(L),pas.Admin_List.C.el("span","dim",window.dateTimeText(L["at"])));
+        Holder.appendChild(Head);
+        if (Boolean(L["status"])) {
+          Answered = pas.Admin_List.StatusCell(L["status"])}
+         else Answered = "";
+        if (Boolean(L["referer"])) {
+          From = pas.Admin_List.OutLink(L["referer"])}
+         else From = "";
+        pas.Admin_List.C.facts(Holder,Array.of($impl.Pair(window.t("Asked for"),"" + L["method"] + " " + ("" + L["path"])),$impl.Pair(window.t("Page"),pas.Admin_List.PageLink(L["path"])),$impl.Pair(window.t("Answered"),Answered),$impl.Pair(window.t("Took"),pas.Admin_List.MsCell(L["ms"])),$impl.Pair(window.t("Bot"),L["bot"]),$impl.Pair(window.t("From"),From),$impl.Pair(window.t("Browser"),L["agent"])));
+        Acts = pas.Admin_List.C.el("div","lv-actions");
+        Acts.appendChild(pas.Admin_List.LookButton(L["ip"]));
+        Holder.appendChild(Acts);
+      }]));
+    };
+    $impl.DrawVisitCounts = function (Box, Data) {
+      var DayRows = null;
+      var Days = null;
+      var CountCols = null;
+      var Rows = null;
+      var Total = null;
+      var Today = undefined;
+      var ByDay = null;
+      var Totals = null;
+      var Day = null;
+      var Row = null;
+      var Bar = null;
+      var Caption = null;
+      var Most = 0.0;
+      var I = 0;
+      function PartName(X) {
+        var Result = undefined;
+        Result = pas.Admin_List.PartLabel(X["part"]);
+        return Result;
+      };
+      if (!Boolean(Data["server"])) Box.appendChild(pas.Admin_List.C.el("p","notice",window.t("Visitor collection requires server mode.")));
+      DayRows = Data["days"];
+      if (DayRows.length > 0) {
+        Today = DayRows[0]["day"]}
+       else Today = "";
+      ByDay = new Map();
+      for (var $l = 0, $end = DayRows.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Day = DayRows[I];
+        ByDay.set(Day["day"],Number(pas.Admin_List.Either(ByDay.get(Day["day"]),0)) + Number(Day["requests"]));
+      };
+      Days = pas.Admin_List.SortBy(Array.from(ByDay),undefined).slice(-30);
+      if (Days.length > 1) {
+        Rows = new Array();
+        for (var $l1 = 0, $end1 = Days.length - 1; $l1 <= $end1; $l1++) {
+          I = $l1;
+          Rows.push(Days[I][1]);
+        };
+        Most = pas.Admin_List.MostOf(Rows);
+        Row = pas.Admin_List.C.el("div","days");
+        for (var $l2 = 0, $end2 = Days.length - 1; $l2 <= $end2; $l2++) {
+          I = $l2;
+          Bar = pas.Admin_List.C.el("i");
+          Bar.style["height"] = $impl.Pixels((66 * Number(Days[I][1])) / Most,2);
+          Bar.title = window.dateText(Days[I][0]) + ": " + window.tn(Days[I][1],"%d request","%d requests");
+          if (pas.Admin_List.Same(Days[I][0],Today)) Bar.classList.add("today");
+          Row.appendChild(Bar);
+        };
+        Box.appendChild(Row);
+        Caption = pas.Admin_List.C.el("div","days-caption");
+        Caption.append(pas.Admin_List.C.el("span","",window.dateText(Days[0][0])),pas.Admin_List.C.el("span","",window.t("requests a day, bots included")),pas.Admin_List.C.el("span","",window.dateText(Days[Days.length - 1][0])));
+        Box.appendChild(Caption);
+      };
+      Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("UTC days. Counts are saved each minute. People are browsers that took the page whole, bots everything else that came; each address counts once in each part and day, and totals add those counts. People are counted from 6 Nov 2026.")));
+      Totals = new Map();
+      for (var $l3 = 0, $end3 = DayRows.length - 1; $l3 <= $end3; $l3++) {
+        I = $l3;
+        Day = DayRows[I];
+        Total = pas.Admin_List.Either(Totals.get(Day["part"]),Array.of(0,0,0,0));
+        Day["people"] = Math.min(Number(pas.Admin_List.Either(Day["people"],0)),Number(Day["visitors"]));
+        Day["bots"] = Number(Day["visitors"]) - Number(Day["people"]);
+        Total[0] = Number(Total[0]) + Number(Day["requests"]);
+        Total[1] = Number(Total[1]) + Number(Day["people"]);
+        Total[2] = Number(Total[2]) + Number(Day["refused"]);
+        Total[3] = Number(Total[3]) + Number(Day["bots"]);
+        Totals.set(Day["part"],Total);
+      };
+      CountCols = Array.of($impl.Column("requests",window.t("Requests"),"n",null,null,""),$impl.Column("people",window.t("People"),"n",null,null,""),$impl.Column("bots",window.t("Bot addresses"),"n",null,null,""),$impl.Column("refused",window.t("Guard refusals"),"n",null,null,""));
+      Box.appendChild(pas.Admin_List.C.el("h3","",window.t("All days kept")));
+      Rows = new Array();
+      Days = Array.from(Totals);
+      for (var $l4 = 0, $end4 = Days.length - 1; $l4 <= $end4; $l4++) {
+        I = $l4;
+        Total = Days[I][1];
+        Rows.push(pas.JS.New(["part",Days[I][0],"requests",Total[0],"people",Total[1],"refused",Total[2],"bots",Total[3]]));
+      };
+      pas.Admin_List.ListView(Box,pas.JS.New(["id","v-parts","key",$impl.FieldOf("part"),"sort","-requests","search",false,"rows",Rows,"columns",Array.of($impl.Column("part",window.t("Part"),"",PartName,null,"")).concat(CountCols),"noun",$impl.Noun("%d part","%d parts")]));
+      Box.appendChild(pas.Admin_List.C.el("h3","",window.t("Day by day")));
+      pas.Admin_List.ListView(Box,pas.JS.New(["id","v-partdays","key",function (X) {
+        var Result = undefined;
+        Result = "" + X["day"] + ("" + X["part"]);
+        return Result;
+      },"sort","-day","search",false,"csv","requests-by-day","rows",DayRows,"columns",Array.of($impl.Column("day",window.t("Day"),"d",null,function (X) {
+        var Result = undefined;
+        Result = window.dateText(X["day"]);
+        return Result;
+      },""),$impl.Column("part",window.t("Part"),"",PartName,null,"")).concat(CountCols),"filters",Array.of($impl.Filter("part",window.t("Part"),window.t("Every part"),function (List) {
+        var Result = undefined;
+        var Names = null;
+        var Choices = null;
+        var N = 0;
+        Names = $impl.Distinct($impl.Column2(List,"part"));
+        Choices = new Array();
+        for (var $l5 = 0, $end5 = Names.length - 1; $l5 <= $end5; $l5++) {
+          N = $l5;
+          Choices.push($impl.Pair(Names[N],pas.Admin_List.PartLabel(Names[N])));
+        };
+        Result = Choices;
+        return Result;
+      },function (X, K) {
+        var Result = undefined;
+        Result = pas.Admin_List.Same(X["part"],K);
+        return Result;
+      })),"noun",$impl.Noun("%d row","%d rows")]));
+      Box.appendChild(pas.Admin_List.C.el("h3","",window.t("Busiest paths today")));
+      pas.Admin_List.ListView(Box,pas.JS.New(["id","v-paths","key",$impl.FieldOf("path"),"sort","-requests","search",window.t("Filter paths"),"rows",Data["paths"],"columns",Array.of($impl.Column("path",window.t("Path"),"",null,$impl.PageOf("path"),""),$impl.Column("requests",window.t("Requests"),"n",null,null,"")),"noun",$impl.Noun("%d path","%d paths")]));
+    };
+    $impl.DrawConcerns = function (Box, R, Period) {
+      var Concerns = null;
+      var Kinds = null;
+      var BlockWords = null;
+      function Reasons(Concern) {
+        var Result = null;
+        Result = Concern["reasons"];
+        return Result;
+      };
+      Box.replaceChildren();
+      Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("Every address is judged on its own, whatever it said it was: its busiest minute, how many browser strings and members it used, the pages it asked for that are not here, the scanner paths it probed, how often the guard turned it away, and whether it named a crawler it is not. A published crawler is welcome at any pace; an address on the allowed list (or this network) is not weighed. Pick a row for the whole story and the block buttons.")));
+      Concerns = R["concerns"];
+      if (Number(R["concerns_count"]) > Concerns.length) Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("The %s weighed heaviest are listed, of %s.",pas.Admin_List.LocaleNumber(Concerns.length),pas.Admin_List.LocaleNumber(R["concerns_count"]))));
+      Kinds = pas.Admin_List.ReasonKinds();
+      BlockWords = pas.JS.New(["forgood",window.t("For good"),"blocked",window.t("Blocked now"),"over",window.t("Block over")]);
+      pas.Admin_List.ListView(Box,pas.JS.New(["id","v-concerns","key",$impl.FieldOf("ip"),"sort","-score","csv","concerns-" + pas.Admin_List.WindowName(R),"search",window.t("Filter by address, bot or reason"),"rows",Concerns,"columns",Array.of($impl.Column("score",window.t("Weight"),"n",null,null,""),$impl.Column("ip",window.t("Address"),"",null,function (Concern) {
+        var Result = undefined;
+        Result = pas.Admin_List.C.el("b","lv-ip",Concern["ip"]);
+        return Result;
+      },""),$impl.Column("block",window.t("Blocked"),"",function (Concern) {
+        var Result = undefined;
+        Result = pas.Admin_List.Either(BlockWords["" + Concern["block"]],"");
+        return Result;
+      },function (Concern) {
+        var Result = undefined;
+        if (!Boolean(Concern["block"])) {
+          Result = pas.Admin_List.C.el("span","","")}
+         else if (pas.Admin_List.Same(Concern["block"],"over")) {
+          Result = pas.Admin_List.C.chip(BlockWords["" + Concern["block"]],"")}
+         else Result = pas.Admin_List.C.chip(BlockWords["" + Concern["block"]],"bad");
+        return Result;
+      },""),$impl.Column("what",window.t("Says it is"),"",function (Concern) {
+        var Result = undefined;
+        Result = pas.Admin_List.Either(pas.Admin_List.Either(Concern["crawler"],Concern["bot"]),window.t("a browser"));
+        return Result;
+      },null,""),$impl.Column("abuse",window.t("AbuseIPDB"),"n",function (Concern) {
+        var Result = undefined;
+        if (pas.Admin_List.IsUndef(Concern["abuse"]) || (Concern["abuse"] == null)) {
+          Result = -1}
+         else Result = Concern["abuse"];
+        return Result;
+      },function (Concern) {
+        var Result = undefined;
+        if (pas.Admin_List.IsUndef(Concern["abuse"]) || (Concern["abuse"] == null)) {
+          Result = pas.Admin_List.C.el("span","dim","")}
+         else if (Number(Concern["abuse"]) >= 75) {
+          Result = pas.Admin_List.C.chip("" + Concern["abuse"] + "%","bad")}
+         else Result = pas.Admin_List.C.chip("" + Concern["abuse"] + "%","");
+        return Result;
+      },""),$impl.Column("reasons",window.t("Why"),"s",function (Concern) {
+        var Result = undefined;
+        var Words = null;
+        var N = 0;
+        Words = new Array();
+        for (var $l = 0, $end = Reasons(Concern).length - 1; $l <= $end; $l++) {
+          N = $l;
+          Words.push(pas.Admin_List.ReasonWords(Reasons(Concern)[N]));
+        };
+        Result = Words.join("; ");
+        return Result;
+      },function (Concern) {
+        var Result = undefined;
+        var Chips = null;
+        var N = 0;
+        Chips = pas.Admin_List.C.el("span","lv-reasons");
+        for (var $l = 0, $end = Reasons(Concern).length - 1; $l <= $end; $l++) {
+          N = $l;
+          Chips.appendChild(pas.Admin_List.C.chip(pas.Admin_List.ReasonWords(Reasons(Concern)[N]),"open"));
+        };
+        Result = Chips;
+        return Result;
+      },"lv-text"),$impl.Column("requests",window.t("Requests"),"n",null,null,""),$impl.Column("peak",window.t("Busiest minute"),"nw",null,null,""),$impl.Column("last",window.t("Last seen"),"dw",null,$impl.StampOf("last"),"")),"filters",Array.of($impl.Filter("block",window.t("Blocked"),window.t("Blocked or not"),Array.of($impl.Pair("forgood",window.t("For good")),$impl.Pair("blocked",window.t("Blocked now")),$impl.Pair("over",window.t("Block over")),$impl.Pair("none",window.t("Never blocked"))),function (Concern, V) {
+        var Result = undefined;
+        if (V === "none") {
+          Result = !Boolean(Concern["block"])}
+         else Result = pas.Admin_List.Same(Concern["block"],V);
+        return Result;
+      }),$impl.Filter("kind",window.t("Reason"),window.t("Every reason"),function (Rows) {
+        var Result = undefined;
+        var Seen = null;
+        var N = 0;
+        var M = 0;
+        Seen = new Map();
+        for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+          N = $l;
+          for (var $l1 = 0, $end1 = Reasons(Rows[N]).length - 1; $l1 <= $end1; $l1++) {
+            M = $l1;
+            $impl.Count(Seen,Reasons(Rows[N])[M]["kind"]);
+          };
+        };
+        Result = $impl.Counted(Seen,Kinds);
+        return Result;
+      },function (Concern, K) {
+        var Result = undefined;
+        var N = 0;
+        Result = false;
+        for (var $l = 0, $end = Reasons(Concern).length - 1; $l <= $end; $l++) {
+          N = $l;
+          if (pas.Admin_List.Same(Reasons(Concern)[N]["kind"],K)) return true;
+        };
+        return Result;
+      })),"noun",$impl.Noun("%d address","%d addresses"),"empty",window.t("Nothing of concern in that period."),"detail",function (Concern, Holder, View) {
+        pas.Admin_Address.AddressPanel(Concern["ip"],Holder,Period);
+      }]));
+    };
+  };
+},["Admin_Address"]);
+rtl.module("Admin_Site",["System","JS","Web","Admin_List"],function () {
+  "use strict";
+  var $mod = this;
+  this.AdminStorage = function (Box) {
+    async function Draw() {
+      var Data = null;
+      var List = null;
+      var Sorted = null;
+      var Rows = null;
+      var Item = null;
+      var Used = 0.0;
+      var Share = 0.0;
+      var Sum = 0.0;
+      var Tiles = null;
+      var Disk = null;
+      var Meter = null;
+      var Fill = null;
+      var Cls = "";
+      var I = 0;
+      try {
+        Data = await pas.Admin_List.C.get("/api/admin/storage");
+        List = Data["items"];
+        if (Number(Data["disk_total"]) > 0) {
+          Used = Number(Data["disk_total"]) - Number(Data["disk_free"]);
+          Share = Used / Number(Data["disk_total"]);
+          Tiles = pas.Admin_List.C.el("div","tiles-admin");
+          if (Share > 0.9) {
+            Cls = "warn"}
+           else Cls = "";
+          Disk = pas.Admin_List.Stat(Tiles,String(Math.round(Share * 100)) + "%",window.t("Disk used"),pas.Admin_List.C.sizeText(Used) + " " + window.t("of") + " " + pas.Admin_List.C.sizeText(Data["disk_total"]),Cls);
+          if (Share > 0.95) {
+            Cls = "meter bad"}
+           else if (Share > 0.8) {
+            Cls = "meter warn"}
+           else Cls = "meter";
+          Meter = pas.Admin_List.C.el("div",Cls);
+          Fill = pas.Admin_List.C.el("i");
+          Fill.style["width"] = String(Math.round(Share * 100)) + "%";
+          Meter.appendChild(Fill);
+          Disk.appendChild(Meter);
+          pas.Admin_List.Stat(Tiles,pas.Admin_List.C.sizeText(Data["disk_free"]),window.t("Free"),undefined,undefined);
+          Sum = 0;
+          for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+            I = $l;
+            Sum = Sum + Number(List[I]["bytes"]);
+          };
+          pas.Admin_List.Stat(Tiles,pas.Admin_List.C.sizeText(Sum),window.t("The site uses"),window.t("database and folders"),undefined);
+          Box.appendChild(Tiles);
+        };
+        if (List.length > 0) {
+          Sorted = pas.Admin_List.SortBy(List.slice(0),function (A, B) {
+            var Result = 0.0;
+            Result = Number(B["bytes"]) - Number(A["bytes"]);
+            return Result;
+          });
+          Rows = new Array();
+          for (var $l1 = 0, $end1 = Sorted.length - 1; $l1 <= $end1; $l1++) {
+            I = $l1;
+            Item = Sorted[I];
+            Rows.push(pas.JS.New(["name",window.t(Item["caption"]),"value",Item["bytes"]]));
+          };
+          pas.Admin_List.Bars(Box,Rows,pas.Admin_List.C["sizeText"]);
+        };
+        Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("Measured in the background at most once an hour. Database sizes are engine estimates including indexes. Folder sizes exclude symbolic links.")));
+        if (List.length === 0) Box.appendChild(pas.Admin_List.C.el("p","notice",window.t("No storage measurement yet.")));
+        Rows = new Array();
+        for (var $l2 = 0, $end2 = List.length - 1; $l2 <= $end2; $l2++) {
+          I = $l2;
+          Item = List[I];
+          if (Boolean(Item["complete"])) {
+            Cls = window.t("Complete")}
+           else Cls = window.t("Partial");
+          Rows.push(Array.of(window.t(Item["caption"]),pas.Admin_List.C.sizeText(Item["bytes"]),window.dateTimeText(Item["measured"]),Cls));
+        };
+        pas.Admin_List.AdminTable(Box,Array.of(window.t("Group or folder"),window.t("Size"),window.t("Measured"),window.t("Status")),Rows);
+      } catch ($e) {
+        pas.Admin_List.C.failed($e);
+      };
+    };
+    Draw();
+  };
+  this.AdminOverview = function (Box, Data, Can) {
+    var Lit = null;
+    var Settings = null;
+    var Switches = null;
+    var List = null;
+    var Brought = null;
+    var Cards = null;
+    var Stats = null;
+    var Waiting = null;
+    var Holder = null;
+    var Names = null;
+    var Fronts = null;
+    var Extra = null;
+    var Cls = "";
+    var Lively = 0;
+    var I = 0;
+    function Card(P) {
+      var Part = null;
+      var Head = null;
+      var Tools = null;
+      var Flip = null;
+      var Name = "";
+      var Words = "";
+      var About = "";
+      async function Switch(E) {
+        var Fields = null;
+        Flip["disabled"] = true;
+        try {
+          Fields = new Object();
+          if (Boolean(P["on"])) {
+            Fields[Name] = "0"}
+           else Fields[Name] = "1";
+          await pas.Admin_List.C.post("/api/admin/settings",Fields);
+          location.reload();
+        } catch ($e) {
+          pas.Admin_List.C.failed($e);
+          Flip["disabled"] = false;
+        };
+      };
+      Name = "" + P["name"];
+      if (Boolean(P["on"])) {
+        Part = pas.Admin_List.C.el("div","part-card on")}
+       else Part = pas.Admin_List.C.el("div","part-card off");
+      Head = pas.Admin_List.C.el("h3","",pas.Admin_List.Either(Names[Name],window.t(Name.charAt(0).toUpperCase() + Name.slice(1))));
+      if (Boolean(P["on"])) {
+        Head.appendChild(pas.Admin_List.C.el("span","part-state",window.t("On")))}
+       else Head.appendChild(pas.Admin_List.C.el("span","part-state",window.t("Off")));
+      Part.appendChild(Head);
+      Words = window.t(P["caption"]);
+      if (Words.indexOf(": ",0) > 0) {
+        About = Words.slice(Words.indexOf(": ",0) + 2)}
+       else About = Words;
+      Part.appendChild(pas.Admin_List.C.el("p","",About.charAt(0).toUpperCase() + About.slice(1)));
+      Tools = pas.Admin_List.C.el("div","part-tools");
+      if (Boolean(P["change"])) {
+        if (Boolean(P["on"])) {
+          Flip = pas.Admin_List.C.el("button","",window.t("Turn off"))}
+         else Flip = pas.Admin_List.C.el("button","primary",window.t("Turn on"));
+        Flip["type"] = "button";
+        Flip.addEventListener("click",Switch);
+        Tools.appendChild(Flip);
+      };
+      if (Boolean(P["on"])) Tools.appendChild(pas.Admin_List.C.link(pas.Admin_List.Either(Fronts[Name],"/" + Name),"small-link",window.t("Open")));
+      Part.appendChild(Tools);
+      Cards.appendChild(Part);
+    };
+    Lit = String(pas.Admin_List.Either(Data["parts"],"")).split(" ");
+    Settings = pas.Admin_List.Either(Data["settings"],new Array());
+    Switches = new Array();
+    for (var $l = 0, $end = Settings.length - 1; $l <= $end; $l++) {
+      I = $l;
+      if (pas.Admin_List.Same(Settings[I]["group"],"Parts")) Switches.push(Settings[I]);
+    };
+    if (Boolean(Data["unlisted_proxies"])) Box.appendChild(pas.Admin_List.C.el("p","problem",window.t("Requests arrive through %s, which the config file does not name under proxies. Until it does, every visitor looks like that one address and the guard cannot tell them apart.",Data["unlisted_proxies"])));
+    Box.appendChild(pas.Admin_List.C.el("h2","",window.t("Community modules")));
+    Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("Each module can be on or off. A module that is off has no pages and no entries here; what it holds is kept.")));
+    Cards = pas.Admin_List.C.el("div","part-cards");
+    Box.appendChild(Cards);
+    Names = pas.JS.New(["chat",window.t("Chat"),"wiki",window.t("Wiki"),"forum",window.t("Forum")]);
+    Fronts = pas.JS.New(["chat","/","wiki","/wiki","forum","/forum"]);
+    List = new Array();
+    if (Switches.length > 0) {
+      for (var $l1 = 0, $end1 = Switches.length - 1; $l1 <= $end1; $l1++) {
+        I = $l1;
+        List.push(pas.JS.New(["name",Switches[I]["name"],"caption",Switches[I]["caption"],"on",pas.Admin_List.Same(Switches[I]["value"],"1"),"change",true]));
+      }}
+     else for (var $l2 = 0, $end2 = Lit.length - 1; $l2 <= $end2; $l2++) {
+      I = $l2;
+      if (Boolean(Lit[I])) List.push(pas.JS.New(["name",Lit[I],"caption","","on",true,"change",false]));
+    };
+    for (var $l3 = 0, $end3 = List.length - 1; $l3 <= $end3; $l3++) {
+      I = $l3;
+      Card(List[I]);
+    };
+    Box.appendChild(pas.Admin_List.C.el("h2","",window.t("The site")));
+    Stats = pas.Admin_List.C.el("div","tiles-admin");
+    Box.appendChild(Stats);
+    if (!pas.Admin_List.IsUndef(Data["members_total"])) pas.Admin_List.Stat(Stats,Data["members_total"],window.t("Members"),undefined,undefined);
+    if (Can("read-reports")) {
+      if (Number(pas.Admin_List.Either(Data["open_reports"],0)) > 0) {
+        Cls = "warn"}
+       else Cls = "";
+      Waiting = pas.Admin_List.Stat(Stats,pas.Admin_List.Either(Data["open_reports"],0),window.t("Reports"),"",Cls);
+      Waiting.style["cursor"] = "pointer";
+      Waiting.addEventListener("click",function (E) {
+        pas.Admin_List.S.adminTab("Reports");
+      });
+    };
+    Lively = 0;
+    for (var $l4 = 0, $end4 = List.length - 1; $l4 <= $end4; $l4++) {
+      I = $l4;
+      if (Boolean(List[I]["on"])) Lively += 1;
+    };
+    pas.Admin_List.Stat(Stats,Lively,window.t("Modules on"),undefined,undefined);
+    if (Boolean(Data["version"])) pas.Admin_List.Stat(Stats,Data["version"],window.t("Exedra version"),undefined,undefined);
+    Brought = pas.Admin_List.Extras["adminOverview"];
+    I = 0;
+    while (I < Brought.length) {
+      Extra = Brought[I];
+      if (!Boolean(Extra["permission"]) || Can("" + Extra["permission"])) {
+        Holder = pas.Admin_List.C.el("section","overview-extra");
+        Box.appendChild(Holder);
+        Extra.build(Holder);
+      };
+      I += 1;
+    };
+  };
+  this.AdminLook = function (Box) {
+    var Logo = null;
+    var Shown = "";
+    function Part(What, Title, Hint, Preview) {
+      var Form = null;
+      var Img = null;
+      var FileBox = null;
+      var Save = null;
+      var Remove = null;
+      async function Send(Fields) {
+        var Mark = "";
+        Fields.append("what",What);
+        try {
+          pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/look",Fields));
+          if (Preview.includes("?",0)) {
+            Mark = "&"}
+           else Mark = "?";
+          Img["src"] = Preview + Mark + String(Date.now());
+        } catch ($e) {
+          pas.Admin_List.C.failed($e);
+        };
+      };
+      Form = pas.Admin_List.C.el("form","settings look");
+      Form.appendChild(pas.Admin_List.C.el("h3","",Title));
+      Form.appendChild(pas.Admin_List.C.el("p","hint",Hint));
+      Img = pas.Admin_List.C.el("img","lookpreview " + What);
+      Img["alt"] = "";
+      Img.addEventListener("error",function (E) {
+        Img.hidden = true;
+      });
+      Img.addEventListener("load",function (E) {
+        Img.hidden = false;
+      });
+      Img["src"] = Preview;
+      FileBox = pas.Admin_List.C.el("input");
+      FileBox["type"] = "file";
+      FileBox["name"] = "picture";
+      FileBox["accept"] = "image/png,image/jpeg";
+      Save = pas.Admin_List.C.el("button","primary",window.t("Upload"));
+      Remove = pas.Admin_List.C.el("button","",window.t("Use none"));
+      Remove["type"] = "button";
+      Form.addEventListener("submit",function (E) {
+        E.preventDefault();
+        Send(new FormData(Form));
+      });
+      Remove.addEventListener("click",function (E) {
+        var Fields = null;
+        Fields = new FormData();
+        Fields.append("remove","1");
+        Send(Fields);
+      });
+      Form.append(Img,FileBox,Save,Remove);
+      Box.appendChild(Form);
+    };
+    Logo = pas.Admin_List.C.$(".brandlogo");
+    Part("icon",window.t("Icon"),window.t("One square PNG or JPEG, 512 by 512 pixels or more. It becomes the browser tab icon, the installed app's icon and the notification icon, in every size they need."),"/icon-192.png");
+    if (Boolean(Logo)) {
+      Shown = "" + Logo["src"]}
+     else Shown = "/site/logo.png";
+    Part("logo",window.t("Logo"),window.t('Shown in the header, 32 pixels high, beside the name or instead of it (Settings, "Show the name beside the logo"). It sits on the dark header bar in both themes, so use light lettering. A wide PNG with a clear background works best.'),Shown);
+  };
+});
+rtl.module("Admin_Settings",["System","JS","Web","Admin_List"],function () {
+  "use strict";
+  var $mod = this;
+  this.AdminSettings = function (Box, Data, Only, Key) {
+    var Layout = null;
+    var Side = null;
+    var Search = null;
+    var Nav = null;
+    var Picker = null;
+    var Panel = null;
+    var Empty = null;
+    var Groups = null;
+    var Settings = null;
+    var Sections = null;
+    var Pairs = null;
+    var S = null;
+    var Chosen = undefined;
+    var Kept = "";
+    var I = 0;
+    function Show() {
+      var Query = "";
+      var Found = false;
+      var Match = false;
+      var Section = null;
+      var Field = null;
+      var Matches = 0;
+      var N = 0;
+      var M = 0;
+      Query = Search["value"].trim().toLowerCase();
+      Found = false;
+      for (var $l = 0, $end = Sections.length - 1; $l <= $end; $l++) {
+        N = $l;
+        Section = Sections[N];
+        Matches = 0;
+        for (var $l1 = 0, $end1 = Section.fields.length - 1; $l1 <= $end1; $l1++) {
+          M = $l1;
+          Field = Section.fields[M];
+          Match = (Query === "") || Field["words"].includes(Query,0);
+          Field["label"].hidden = !Match;
+          Field["input"]["disabled"] = !Match;
+          if (Match) Matches += 1;
+        };
+        if (Query !== "") {
+          Section.form.hidden = Matches === 0}
+         else Section.form.hidden = !pas.Admin_List.Same(Section.group,Chosen);
+        pas.Admin_List.Toggle(Section.button,"on",pas.Admin_List.Same(Section.group,Chosen));
+        if (pas.Admin_List.Same(Section.group,Chosen)) {
+          Section.button.setAttribute("aria-pressed","true")}
+         else Section.button.setAttribute("aria-pressed","false");
+        if (!Section.form.hidden) Found = true;
+      };
+      Picker["value"] = Chosen;
+      Empty.hidden = Found;
+    };
+    function Select(Group) {
+      Chosen = Group;
+      pas.Admin_List.C.shared(Kept,Group);
+      Search["value"] = "";
+      Show();
+    };
+    function AddSection(Group, Settings) {
+      var Button = null;
+      var Option = null;
+      var Form = null;
+      var Save = null;
+      var Fields = null;
+      var N = 0;
+      function AddField(S) {
+        var FieldLabel = null;
+        var Caption = null;
+        var Input = null;
+        var O = null;
+        var Choices = null;
+        var Names = null;
+        var Long = false;
+        var M = 0;
+        FieldLabel = pas.Admin_List.C.el("label");
+        Caption = pas.Admin_List.C.el("span","setting-caption",window.t(S["caption"]));
+        Caption.appendChild(pas.Admin_List.C.el("small","hint",window.t(S["name"])));
+        FieldLabel.appendChild(Caption);
+        if (pas.Admin_List.Same(S["kind"],"yesno") || S["kind"].startsWith("choice:")) {
+          Input = pas.Admin_List.C.el("select");
+          if (pas.Admin_List.Same(S["kind"],"yesno")) {
+            Choices = Array.of(Array.of("1",window.t("yes")),Array.of("0",window.t("no")))}
+           else {
+            Choices = new Array();
+            Names = S["kind"].slice(7).split("|");
+            for (var $l = 0, $end = Names.length - 1; $l <= $end; $l++) {
+              M = $l;
+              Choices.push(Array.of(Names[M],window.t(Names[M])));
+            };
+          };
+          for (var $l1 = 0, $end1 = Choices.length - 1; $l1 <= $end1; $l1++) {
+            M = $l1;
+            O = pas.Admin_List.C.el("option","",Choices[M][1]);
+            O["value"] = Choices[M][0];
+            Input.appendChild(O);
+          };
+        } else {
+          Long = pas.Admin_List.Same(S["kind"],"longtext");
+          if (Long) {
+            Input = pas.Admin_List.C.el("textarea")}
+           else Input = pas.Admin_List.C.el("input");
+          if (Long) {
+            FieldLabel.classList.add("wide");
+            Input["rows"] = 3;
+            Input.addEventListener("keydown",function (E) {
+              if (E.key === "Enter") {
+                E.preventDefault();
+                Form.requestSubmit();
+              };
+            });
+            Input.addEventListener("input",function (E) {
+              if (Input["value"].includes("\n",0)) Input["value"] = Input["value"].replace(new RegExp("\\s*\\n\\s*","g")," ");
+            });
+          };
+          if (pas.Admin_List.Same(S["kind"],"number")) Input["type"] = "number";
+          Input["autocomplete"] = "off";
+          Input["spellcheck"] = false;
+          if (pas.Admin_List.Same(S["kind"],"secret")) {
+            Input.classList.add("secret");
+            Input.setAttribute("data-1p-ignore","");
+            Input.setAttribute("data-lpignore","true");
+            if (Boolean(S["set"])) {
+              Input["placeholder"] = window.t("set (empty keeps it)")}
+             else Input["placeholder"] = window.t("not set");
+          };
+        };
+        Input["name"] = S["name"];
+        Input["value"] = S["value"];
+        FieldLabel.appendChild(Input);
+        Form.appendChild(FieldLabel);
+        Fields.push(pas.JS.New(["label",FieldLabel,"input",Input,"words",Array.of(S["caption"],window.t(S["caption"]),S["name"]).join(" ").toLowerCase()]));
+      };
+      async function Submit(E) {
+        E.preventDefault();
+        Save["disabled"] = true;
+        try {
+          try {
+            pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/settings",new URLSearchParams(new FormData(Form))));
+          } catch ($e) {
+            pas.Admin_List.C.failed($e);
+          };
+        } finally {
+          Save["disabled"] = false;
+        };
+      };
+      Button = pas.Admin_List.C.el("button");
+      Button["type"] = "button";
+      Button.append(pas.Admin_List.C.el("span","",window.t(Group)),pas.Admin_List.C.chip(window.t("%d",Settings.length)));
+      Button.addEventListener("click",function (E) {
+        Select(Group);
+      });
+      Nav.appendChild(Button);
+      Option = pas.Admin_List.C.el("option","",window.t("%s (%d)",window.t(Group),Settings.length));
+      Option["value"] = Group;
+      Picker.appendChild(Option);
+      Form = pas.Admin_List.C.el("form","settings settings-section");
+      Form["autocomplete"] = "off";
+      Form.appendChild(pas.Admin_List.C.el("h3","",window.t(Group)));
+      if (pas.Admin_List.Same(Group,"Sign-in")) Form.appendChild(pas.Admin_List.C.el("p","hint",window.t("Make an OAuth app at each provider and give it this return address: %s followed by its name: github, gitlab, codeberg, google or microsoft. A provider shows on the sign-in page once its id and secret are here and it is switched on.",window.location.origin + window.SiteBase.url("/_oauth/"))));
+      Fields = new Array();
+      for (var $l = 0, $end = Settings.length - 1; $l <= $end; $l++) {
+        N = $l;
+        AddField(Settings[N]);
+      };
+      Save = pas.Admin_List.C.el("button","primary",window.t("Save settings"));
+      Save["type"] = "submit";
+      Form.appendChild(Save);
+      if (pas.Admin_List.Same(Group,"File scanning")) $mod.FileScanning(Form);
+      if (pas.Admin_List.Same(Group,"Search")) $mod.SearchIndex(Form);
+      Form.addEventListener("submit",Submit);
+      Panel.appendChild(Form);
+      Sections.push(pas.JS.New(["group",Group,"button",Button,"form",Form,"fields",Fields]));
+    };
+    Layout = pas.Admin_List.C.el("div","settings-layout");
+    Side = pas.Admin_List.C.el("div","settings-side");
+    Search = pas.Admin_List.C.el("input","lv-find");
+    Search["type"] = "search";
+    Search["autocomplete"] = "off";
+    Search["placeholder"] = window.t("Search settings");
+    Search.setAttribute("aria-label",window.t("Search settings"));
+    Nav = pas.Admin_List.C.el("nav","subtabs settings-nav");
+    Nav.setAttribute("aria-label",window.t("Settings sections"));
+    Picker = pas.Admin_List.C.el("select","lv-filter settings-picker");
+    Picker.setAttribute("aria-label",window.t("Settings section"));
+    Panel = pas.Admin_List.C.el("div","settings-panels");
+    Empty = pas.Admin_List.C.el("p","hint",window.t("No settings match your search."));
+    Empty.hidden = true;
+    Panel.appendChild(Empty);
+    Side.append(Search,Nav,Picker);
+    Layout.append(Side,Panel);
+    Box.appendChild(Layout);
+    Groups = new Map();
+    Settings = Data["settings"];
+    for (var $l = 0, $end = Settings.length - 1; $l <= $end; $l++) {
+      I = $l;
+      S = Settings[I];
+      if ((Only != null) && !Only(S["group"])) continue;
+      if (!Groups.has(S["group"])) Groups.set(S["group"],new Array());
+      Groups.get(S["group"]).push(S);
+    };
+    if (Boolean(Key)) {
+      Kept = "admin-settings-section-" + ("" + Key)}
+     else Kept = "admin-settings-section";
+    Chosen = pas.Admin_List.C.shared(Kept);
+    if (!Groups.has(Chosen)) Chosen = Groups.keys().next().value;
+    Sections = new Array();
+    Pairs = Array.from(Groups);
+    for (var $l1 = 0, $end1 = Pairs.length - 1; $l1 <= $end1; $l1++) {
+      I = $l1;
+      AddSection(Pairs[I][0],Pairs[I][1]);
+    };
+    Search.addEventListener("input",Show);
+    Picker.addEventListener("change",function (E) {
+      Select(Picker["value"]);
+    });
+    Show();
+  };
+  this.FileScanning = function (Form) {
+    var Status = null;
+    var Test = null;
+    var Said = null;
+    var List = null;
+    var Panel = null;
+    var First = undefined;
+    async function Show() {
+      var Result = undefined;
+      var D = null;
+      var F = null;
+      var Files = null;
+      var Rows = null;
+      var Ready = undefined;
+      var error = undefined;
+      var Result_ = undefined;
+      var N = 0;
+      D = await pas.Admin_List.C.get("/api/admin/scans");
+      if (Boolean(D["ready"])) {
+        Ready = window.t("Scanner ready: %s",pas.Admin_List.Either(D["version"],"?"))}
+       else Ready = D["problem"];
+      if (Boolean(D["last_error"])) {
+        error = window.t("Last error, %s: %s",window.dateTimeText(D["last_error_at"]),D["last_error"])}
+       else error = "";
+      if (Boolean(D["on"])) {
+        Status.textContent = Array.of(window.t("Scanning is on."),Ready,error).join(" ").trim()}
+       else Status.textContent = Array.of(window.t("Scanning is off."),Ready,error).join(" ").trim();
+      List.replaceChildren(pas.Admin_List.C.el("h3","",window.t("Files stopped or not checked")));
+      Files = D["files"];
+      if (Files.length === 0) {
+        List.appendChild(pas.Admin_List.C.el("p","hint",window.t("Nothing yet.")));
+        return Result;
+      };
+      Rows = new Array();
+      for (var $l = 0, $end = Files.length - 1; $l <= $end; $l++) {
+        N = $l;
+        F = Files[N];
+        if (Boolean(F["found"])) {
+          Result_ = window.t("refused, found %s",F["names"])}
+         else if (Boolean(F["kept"])) {
+          Result_ = window.t("kept unchecked: %s",F["names"])}
+         else Result_ = window.t("refused unchecked: %s",F["names"]);
+        Rows.push(Array.of(window.dateTimeText(F["when"]),F["member"],F["route"],F["name"],pas.Admin_List.C.sizeText(F["size"]),Result_,F["sha256"]));
+      };
+      pas.Admin_List.AdminTable(List,Array.of(window.t("When"),window.t("Member"),window.t("Where"),window.t("File"),window.t("Size"),window.t("Result"),"SHA-256"),Rows);
+      return Result;
+    };
+    async function TestClick(E) {
+      var R = null;
+      Test["disabled"] = true;
+      Said.textContent = "";
+      try {
+        try {
+          R = JSON.parse(await pas.Admin_List.C.post("/api/admin/scans/test",new Object()));
+          if (Boolean(R["caught"])) {
+            Said.textContent = window.t("The scanner caught the test file: %s",R["words"])}
+           else if (Boolean(R["error"])) {
+            Said.textContent = window.t("The scanner could not check the test file: %s",R["words"])}
+           else Said.textContent = window.t("The scanner did not catch the test file.");
+          if (Boolean(R["caught"]) && !Boolean(R["limits"])) Said.textContent = Said.textContent + " " + window.t("It does not report the files it stops reading at a limit, so those would count as clean: set AlertExceedsMax yes in clamd.conf.");
+          await Show();
+        } catch ($e) {
+          pas.Admin_List.C.failed($e);
+        };
+      } finally {
+        Test["disabled"] = false;
+      };
+    };
+    Status = pas.Admin_List.C.el("p","hint");
+    Status.setAttribute("role","status");
+    Test = pas.Admin_List.C.el("button","",window.t("Test the scanner"));
+    Test["type"] = "button";
+    Said = pas.Admin_List.C.el("p");
+    Said.setAttribute("role","status");
+    List = pas.Admin_List.C.el("div","scan-list");
+    Panel = pas.Admin_List.C.el("div","scan-panel");
+    Panel.append(pas.Admin_List.C.el("h3","",window.t("The scanner")),Status,pas.Admin_List.C.el("p","hint",window.t("The test scans the EICAR test file, a harmless file that every virus scanner reports.")),Test,Said,List);
+    Form.appendChild(Panel);
+    Test.addEventListener("click",TestClick);
+    First = Show();
+    First.catch(pas.Admin_List.C["failed"]);
+  };
+  this.SearchIndex = function (Form) {
+    var Panel = null;
+    var First = undefined;
+    async function Show() {
+      var Result = undefined;
+      var D = null;
+      var P = null;
+      var Parts = null;
+      var Count = "";
+      var Words = "";
+      var Line = null;
+      var Builds = false;
+      var N = 0;
+      D = await pas.Admin_List.C.get("/api/admin/search");
+      Panel.replaceChildren(pas.Admin_List.C.el("h3","",window.t("Search index")));
+      if (Boolean(D["cgi"])) {
+        Panel.appendChild(pas.Admin_List.C.el("p","hint",window.t("This program runs as CGI and keeps no index: the database search answers.")));
+        return Result;
+      };
+      Parts = D["parts"];
+      if (Parts.length === 0) Panel.appendChild(pas.Admin_List.C.el("p","hint",window.t("Nothing here is searched through the index yet.")));
+      Builds = false;
+      for (var $l = 0, $end = Parts.length - 1; $l <= $end; $l++) {
+        N = $l;
+        P = Parts[N];
+        Count = pas.Admin_List.LocaleNumber(P["documents"]);
+        if (pas.Admin_List.Same(P["state"],"ready")) {
+          Words = window.t("%s documents, ready",Count)}
+         else if (pas.Admin_List.Same(P["state"],"building")) {
+          Words = window.t("building, %s",pas.Admin_List.Either(P["step"],""))}
+         else if (pas.Admin_List.Same(P["state"],"failed")) {
+          Words = window.t("failed: %s",P["problem"])}
+         else if (pas.Admin_List.Same(P["state"],"waiting")) {
+          Words = window.t("waiting to be built")}
+         else Words = window.t("off");
+        if (Boolean(P["queued"])) Words = Words + ", " + window.t("%s changes waiting",pas.Admin_List.LocaleNumber(P["queued"]));
+        if (Boolean(P["refused"])) Words = Words + ", " + window.t("%s found but not shown",pas.Admin_List.LocaleNumber(P["refused"]));
+        Line = pas.Admin_List.C.el("p","hint","" + P["part"] + ": " + Words);
+        Line.setAttribute("role","status");
+        Panel.appendChild(Line);
+        if (pas.Admin_List.Same(P["state"],"building")) Builds = true;
+      };
+      if (Boolean(Form["isConnected"]) && Builds) window.setTimeout(function () {
+        var Again = undefined;
+        Again = Show();
+        Again.catch(pas.Admin_List.C["failed"]);
+      },2000);
+      return Result;
+    };
+    Panel = pas.Admin_List.C.el("div","scan-panel");
+    Form.appendChild(Panel);
+    First = Show();
+    First.catch(pas.Admin_List.C["failed"]);
+  };
+});
+rtl.module("Admin_Chat",["System","JS","Web","Admin_List"],function () {
+  "use strict";
+  var $mod = this;
+  this.AdminChannels = function (Box, Data) {
+    var Table = null;
+    var Channels = null;
+    var I = 0;
+    function AddRow(Channel) {
+      var Tr = null;
+      var Slug = null;
+      var Topic = null;
+      var Policy = null;
+      var AsSent = null;
+      var AsSentLabel = null;
+      var ArchivedLabel = null;
+      var Archived = null;
+      var IconCell = null;
+      var Img = null;
+      var Pick = null;
+      var Save = null;
+      var O = null;
+      var Td = null;
+      var Choices = null;
+      var Cells = null;
+      var N = 0;
+      async function Picked(E) {
+        var Fields = null;
+        Fields = new FormData();
+        Fields.append("file",Pick["files"][0]);
+        Fields.append("room_icon",Channel["slug"]);
+        try {
+          Img["src"] = JSON.parse(await pas.Admin_List.C.post("/api/upload",Fields))["url"];
+          Img.hidden = false;
+          IconCell.querySelector("span").textContent = "";
+          pas.Admin_List.C.toast(window.t("Icon saved."));
+        } catch ($e) {
+          pas.Admin_List.C.failed($e);
+        };
+      };
+      async function SaveClick(E) {
+        var IsArchived = "";
+        var IsAsSent = "";
+        try {
+          if (Boolean(Archived["checked"])) {
+            IsArchived = "1"}
+           else IsArchived = "0";
+          if (Boolean(AsSent["checked"])) {
+            IsAsSent = "1"}
+           else IsAsSent = "0";
+          pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/channel",pas.JS.New(["slug",Slug["value"],"topic",Topic["value"],"policy",Policy["value"],"archived",IsArchived,"as_sent",IsAsSent])));
+          if (!Boolean(Channel["slug"])) pas.Admin_List.C.route("/admin",false);
+        } catch ($e) {
+          pas.Admin_List.C.failed($e);
+        };
+      };
+      Tr = pas.Admin_List.C.el("tr");
+      Slug = pas.Admin_List.C.el("input");
+      Slug["value"] = pas.Admin_List.Either(Channel["slug"],"");
+      Slug["readOnly"] = Boolean(Channel["slug"]);
+      Slug["placeholder"] = window.t("new-channel");
+      Topic = pas.Admin_List.C.el("input");
+      Topic["value"] = pas.Admin_List.Either(Channel["topic"],"");
+      Topic["placeholder"] = window.t("What it is for");
+      Policy = pas.Admin_List.C.el("select");
+      Choices = Array.of(Array.of("all",window.t("everyone posts")),Array.of("readonly",window.t("read only: some post, all reply")),Array.of("closed",window.t("closed: only some post or reply")));
+      for (var $l = 0, $end = Choices.length - 1; $l <= $end; $l++) {
+        N = $l;
+        O = pas.Admin_List.C.el("option","",Choices[N][1]);
+        O["value"] = Choices[N][0];
+        Policy.appendChild(O);
+      };
+      if (pas.Admin_List.Same(Channel["policy"],"readonly") || pas.Admin_List.Same(Channel["policy"],"closed")) {
+        Policy["value"] = Channel["policy"]}
+       else Policy["value"] = "all";
+      AsSent = pas.Admin_List.C.el("input");
+      AsSent["type"] = "checkbox";
+      AsSent["checked"] = Boolean(Channel["as_sent"]);
+      AsSentLabel = pas.Admin_List.C.el("label","aslabel","");
+      AsSentLabel.append(AsSent," " + window.t("as sent"));
+      AsSentLabel.title = window.t("Messages stay as they were sent: nobody changes or deletes one, a moderator neither.");
+      ArchivedLabel = pas.Admin_List.C.el("label","aslabel","");
+      Archived = pas.Admin_List.C.el("input");
+      Archived["type"] = "checkbox";
+      Archived["checked"] = Boolean(Channel["archived"]);
+      Archived.title = window.t("Archived");
+      ArchivedLabel.append(Archived," " + window.t("archived"));
+      IconCell = pas.Admin_List.C.el("label","chanicon");
+      if (Boolean(Channel["slug"])) {
+        Img = pas.Admin_List.C.el("img");
+        Img["alt"] = "";
+        if (Boolean(Channel["avatar"])) {
+          Img["src"] = Channel["avatar"]}
+         else Img.hidden = true;
+        Pick = pas.Admin_List.C.el("input");
+        Pick["type"] = "file";
+        Pick["accept"] = "image/png,image/jpeg,image/webp";
+        Pick.hidden = true;
+        IconCell.title = window.t("Change the icon");
+        if (Boolean(Channel["avatar"])) {
+          IconCell.append(Img,pas.Admin_List.C.el("span","",""),Pick)}
+         else IconCell.append(Img,pas.Admin_List.C.el("span","",window.t("Icon")),Pick);
+        Pick.addEventListener("change",Picked);
+      };
+      if (Boolean(Channel["slug"])) {
+        Save = pas.Admin_List.C.el("button","",window.t("Save"))}
+       else Save = pas.Admin_List.C.el("button","",window.t("Create"));
+      Save["type"] = "button";
+      Save.addEventListener("click",SaveClick);
+      Cells = Array.of(IconCell,Slug,Topic,Policy,AsSentLabel,ArchivedLabel,Save);
+      for (var $l1 = 0, $end1 = Cells.length - 1; $l1 <= $end1; $l1++) {
+        N = $l1;
+        Td = pas.Admin_List.C.el("td");
+        Td.appendChild(Cells[N]);
+        Tr.appendChild(Td);
+      };
+      Table.appendChild(Tr);
+    };
+    Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("Public channels everyone follows when they join. Members open their own private channels from the + in the sidebar.")));
+    Table = pas.Admin_List.C.el("table","grid");
+    Channels = Data["channels"];
+    for (var $l = 0, $end = Channels.length - 1; $l <= $end; $l++) {
+      I = $l;
+      AddRow(Channels[I]);
+    };
+    AddRow(new Object());
+    Box.appendChild(Table);
+  };
+  this.AdminPrivate = function (Box) {
+    var List = null;
+    var Body = null;
+    var Find = null;
+    var First = undefined;
+    function When(Iso) {
+      var Result = "";
+      if (Boolean(Iso)) {
+        Result = pas.Admin_List.C.ago(Iso)}
+       else Result = window.t("nothing yet");
+      return Result;
+    };
+    function Count(N) {
+      var Result = "";
+      Result = window.tn(N,"%d message","%d messages");
+      return Result;
+    };
+    function People(Channel) {
+      var Result = undefined;
+      var Members = null;
+      var Names = null;
+      var N = 0;
+      Members = Channel["members"];
+      Names = new Array();
+      for (var $l = 0, $end = Members.length - 1; $l <= $end; $l++) {
+        N = $l;
+        if (pas.Admin_List.Same(Members[N],Channel["owner"])) {
+          Names.push(window.t("%s (owner)",Members[N]))}
+         else Names.push(Members[N]);
+      };
+      if (Boolean(Channel["owner"]) && (Members.indexOf(Channel["owner"]) < 0)) Names.unshift(window.t("%s (owner, left)",Channel["owner"]));
+      Result = pas.Admin_List.Either(Names.join(", "),window.t("nobody"));
+      return Result;
+    };
+    function RemoveButton(Ask, Fields, Show) {
+      var Result = null;
+      var Remove = null;
+      async function Click(E) {
+        if (!window.confirm("" + Ask)) return;
+        try {
+          pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/private/delete",Fields));
+          await Show();
+        } catch ($e) {
+          pas.Admin_List.C.failed($e);
+        };
+      };
+      Remove = pas.Admin_List.C.el("button","small-link bad",window.t("Delete"));
+      Remove["type"] = "button";
+      Remove.addEventListener("click",Click);
+      Result = Remove;
+      return Result;
+    };
+    function Part(Rows, Empty) {
+      var Result = null;
+      var Wrap = null;
+      var Table = null;
+      var N = 0;
+      Wrap = pas.Admin_List.C.el("div","gridwrap");
+      if (Rows.length === 0) {
+        Wrap.appendChild(pas.Admin_List.C.el("p","dim",Empty));
+        return Wrap;
+      };
+      Table = pas.Admin_List.C.el("table","grid privategrid");
+      for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+        N = $l;
+        Table.appendChild(Rows[N]);
+      };
+      Wrap.appendChild(Table);
+      Result = Wrap;
+      return Result;
+    };
+    function Row(Cells) {
+      var Result = null;
+      var Tr = null;
+      var Td = null;
+      var Cell = null;
+      var N = 0;
+      Tr = pas.Admin_List.C.el("tr");
+      for (var $l = 0, $end = Cells.length - 1; $l <= $end; $l++) {
+        N = $l;
+        Cell = Cells[N];
+        if (Boolean(Cell["dim"])) {
+          Td = pas.Admin_List.C.el("td","dim")}
+         else Td = pas.Admin_List.C.el("td","");
+        if (Boolean(Cell["node"])) {
+          Td.appendChild(Cell["node"])}
+         else Td["textContent"] = Cell["text"];
+        Tr.appendChild(Td);
+      };
+      Result = Tr;
+      return Result;
+    };
+    function Fill() {
+      var Q = "";
+      var Channels = null;
+      var Talks = null;
+      var Given = null;
+      var Members = null;
+      var Channel = null;
+      var Empty = undefined;
+      var Head = undefined;
+      var Locked = undefined;
+      var Among = false;
+      var N = 0;
+      var M = 0;
+      function Has(Text) {
+        var Result = false;
+        Result = (Q === "") || (String(Text).toLowerCase().indexOf(Q,0) >= 0);
+        return Result;
+      };
+      Q = Find["value"].trim().toLowerCase();
+      Channels = new Array();
+      Given = List["channels"];
+      for (var $l = 0, $end = Given.length - 1; $l <= $end; $l++) {
+        N = $l;
+        Channel = Given[N];
+        Among = Has(Channel["slug"]) || Has(Channel["title"]) || Has(Channel["owner"]);
+        if (!Among) {
+          Members = Channel["members"];
+          for (var $l1 = 0, $end1 = Members.length - 1; $l1 <= $end1; $l1++) {
+            M = $l1;
+            if (Has(Members[M])) {
+              Among = true;
+              break;
+            };
+          };
+        };
+        if (!Among) continue;
+        if (Boolean(Channel["archived"])) {
+          Head = window.t("#%s (archived)",Channel["slug"])}
+         else Head = "#" + ("" + Channel["slug"]);
+        Channels.push(Row(Array.of(pas.JS.New(["node",pas.Admin_List.C.el("b","",Head)]),pas.JS.New(["text",People(Channel)]),pas.JS.New(["text",Count(Channel["messages"]),"dim",true]),pas.JS.New(["text",When(Channel["last"]),"dim",true]),pas.JS.New(["node",RemoveButton(window.t("Delete #%s for good?\n\nIts messages, threads and files go for everyone in it. This cannot be undone.",Channel["slug"]),pas.JS.New(["kind","channel","slug",Channel["slug"]]),Show)]))));
+      };
+      Talks = new Array();
+      Given = List["conversations"];
+      for (var $l2 = 0, $end2 = Given.length - 1; $l2 <= $end2; $l2++) {
+        N = $l2;
+        Channel = Given[N];
+        if (!(Has(Channel["a"]) || Has(Channel["b"]))) continue;
+        if (Boolean(Channel["locked"])) {
+          Locked = window.t("locked")}
+         else Locked = window.t("plain");
+        Talks.push(Row(Array.of(pas.JS.New(["node",pas.Admin_List.C.el("b","",window.t("%s and %s",Channel["a"],Channel["b"]))]),pas.JS.New(["text",Locked,"dim",true]),pas.JS.New(["text",Count(Channel["messages"]),"dim",true]),pas.JS.New(["text",When(Channel["last"]),"dim",true]),pas.JS.New(["node",RemoveButton(window.t("Delete the conversation between %s and %s for good?\n\nEvery message and file goes from both sides. This cannot be undone.",Channel["a"],Channel["b"]),pas.JS.New(["kind","conversation","a",Channel["a"],"b",Channel["b"]]),Show)]))));
+      };
+      if (Q !== "") {
+        Empty = window.t("None match.")}
+       else Empty = window.t("There are none.");
+      Body.replaceChildren(pas.Admin_List.C.el("h2","",window.t("Private channels")),Part(Channels,Empty),pas.Admin_List.C.el("h2","",window.t("Private conversations")),Part(Talks,Empty));
+    };
+    async function Show() {
+      var Result = undefined;
+      List = await pas.Admin_List.C.get("/api/admin/private");
+      Fill();
+      return Result;
+    };
+    List = null;
+    Body = pas.Admin_List.C.el("div");
+    Find = pas.Admin_List.C.el("input");
+    Find["type"] = "search";
+    Find["placeholder"] = window.t("Find a member or channel");
+    Find.addEventListener("input",Fill);
+    Box.append(pas.Admin_List.C.el("p","hint",window.t("Who talks in private and how much. What they say does not come here.")),Find,Body);
+    First = Show();
+    First.catch(pas.Admin_List.C["failed"]);
+  };
+});
+rtl.module("Admin_Members",["System","JS","Web","Admin_List"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.AdminPermissions = function (Box, Data) {
+    var Wrap = null;
+    var Table = null;
+    var HeadRow = null;
+    var Th = null;
+    var Roles = null;
+    var Form = null;
+    var Name = null;
+    var Caption = null;
+    var Scope = null;
+    var Add = null;
+    var Opt = null;
+    var List = null;
+    var Choices = null;
+    var R = null;
+    var I = 0;
+    function PermissionRow(P) {
+      var Tr = null;
+      var Cell = null;
+      var Have = null;
+      var N = 0;
+      function RoleCell(Role) {
+        var Td = null;
+        var Box2 = null;
+        Td = pas.Admin_List.C.el("td");
+        Box2 = pas.Admin_List.C.el("input");
+        Box2.type = "checkbox";
+        Box2.checked = pas.Admin_List.Same(Role["name"],"admin") || (Have.indexOf(Role["name"]) >= 0);
+        Box2.disabled = pas.Admin_List.Same(Role["name"],"admin");
+        Box2.title = "" + $impl.RoleTitle(Role["name"]) + ": " + window.t(P["caption"]);
+        Box2.addEventListener("change",async function (E) {
+          if (Box2.checked) {
+            Have.push(Role["name"])}
+           else Have.splice(Have.indexOf(Role["name"]),1);
+          try {
+            await pas.Admin_List.C.post("/api/admin/permission",pas.JS.New(["name",P["name"],"roles",Have.join(",")]));
+          } catch ($e) {
+            pas.Admin_List.C.failed($e);
+            Box2.checked = !Box2.checked;
+          };
+        });
+        Td.appendChild(Box2);
+        Tr.appendChild(Td);
+      };
+      Tr = pas.Admin_List.C.el("tr");
+      Cell = pas.Admin_List.C.el("td","pname",window.t(P["caption"]));
+      Cell["title"] = P["name"];
+      Tr.appendChild(Cell);
+      Have = $impl.Filled(P["roles"]);
+      for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+        N = $l;
+        RoleCell(List[N]);
+      };
+      Table.appendChild(Tr);
+    };
+    function RoleRow(Role) {
+      var Tr = null;
+      var Td = null;
+      var X = null;
+      var Where = "";
+      Tr = pas.Admin_List.C.el("tr");
+      if (pas.Admin_List.Same(Role["scope"],"room")) {
+        Where = window.t("in one channel")}
+       else Where = window.t("site");
+      Tr.append(pas.Admin_List.C.el("td","",$impl.RoleTitle(Role["name"])),pas.Admin_List.C.el("td","dim",Where),pas.Admin_List.C.el("td","dim",Role["caption"]));
+      Td = pas.Admin_List.C.el("td");
+      if (!Boolean(Role["builtin"])) {
+        X = pas.Admin_List.C.el("button","small-link",window.t("Delete"));
+        X["type"] = "button";
+        X.addEventListener("click",async function (E) {
+          if (!window.confirm(window.t("Delete the role %s? Members who have it lose it.",Role["name"]))) return;
+          try {
+            await pas.Admin_List.C.post("/api/admin/role",pas.JS.New(["name",Role["name"],"delete","1"]));
+            pas.Admin_List.C.route("/admin",false);
+          } catch ($e) {
+            pas.Admin_List.C.failed($e);
+          };
+        });
+        Td.appendChild(X);
+      };
+      Tr.appendChild(Td);
+      Roles.appendChild(Tr);
+    };
+    Box.appendChild(pas.Admin_List.C.el("p","hint",window.t("Tick which roles may do what. Admins may always do everything. The channel roles (channel owner, channel moderator) count only in their channel. To give one member one extra right, make a role with it and give them that role under Members.")));
+    Wrap = pas.Admin_List.C.el("div","gridwrap");
+    Table = pas.Admin_List.C.el("table","grid perms");
+    HeadRow = pas.Admin_List.C.el("tr");
+    HeadRow.appendChild(pas.Admin_List.C.el("th","",""));
+    List = Data["roles"];
+    for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+      I = $l;
+      R = List[I];
+      if (pas.Admin_List.Same(R["scope"],"room")) {
+        Th = pas.Admin_List.C.el("th","roomrole",$impl.RoleTitle(R["name"]))}
+       else Th = pas.Admin_List.C.el("th","",$impl.RoleTitle(R["name"]));
+      Th["title"] = R["caption"];
+      HeadRow.appendChild(Th);
+    };
+    Table.appendChild(HeadRow);
+    for (var $l1 = 0, $end1 = Data["permissions"].length - 1; $l1 <= $end1; $l1++) {
+      I = $l1;
+      PermissionRow(Data["permissions"][I]);
+    };
+    Wrap.appendChild(Table);
+    Box.appendChild(Wrap);
+    Box.appendChild(pas.Admin_List.C.el("h2","",window.t("Roles")));
+    Roles = pas.Admin_List.C.el("table","grid");
+    for (var $l2 = 0, $end2 = List.length - 1; $l2 <= $end2; $l2++) {
+      I = $l2;
+      RoleRow(List[I]);
+    };
+    Box.appendChild(Roles);
+    Form = pas.Admin_List.C.el("form","invite");
+    Name = pas.Admin_List.C.el("input");
+    Name.placeholder = window.t("new-role");
+    Caption = pas.Admin_List.C.el("input");
+    Caption.placeholder = window.t("What it is for");
+    Scope = pas.Admin_List.C.el("select");
+    Choices = Array.of(Array.of("site",window.t("site")),Array.of("room",window.t("in one channel")));
+    for (var $l3 = 0, $end3 = Choices.length - 1; $l3 <= $end3; $l3++) {
+      I = $l3;
+      Opt = pas.Admin_List.C.el("option","",Choices[I][1]);
+      Opt["value"] = Choices[I][0];
+      Scope.appendChild(Opt);
+    };
+    Add = pas.Admin_List.C.el("button","primary",window.t("Make the role"));
+    Form.append(Name,Caption,Scope,Add);
+    Form.addEventListener("submit",async function (E) {
+      E.preventDefault();
+      try {
+        await pas.Admin_List.C.post("/api/admin/role",pas.JS.New(["name",Name.value,"caption",Caption.value,"scope",Scope.value]));
+        pas.Admin_List.C.route("/admin",false);
+      } catch ($e) {
+        pas.Admin_List.C.failed($e);
+      };
+    });
+    Box.appendChild(Form);
+  };
+  this.AdminMembers = function (Box, Data, Can) {
+    var Giveable = null;
+    var Columns = null;
+    var RoleChoices = null;
+    var R = null;
+    var Search = "";
+    var I = 0;
+    function Detail(U, Holder, View) {
+      var Head = null;
+      var Sect = null;
+      var Panel = null;
+      var List = null;
+      var Roles = null;
+      var Acts = null;
+      var Facts = null;
+      var Have = null;
+      var Joined = undefined;
+      var Seen = undefined;
+      var Title = undefined;
+      var ClosedBy = undefined;
+      var N = 0;
+      function AddressLine(A) {
+        var Li = null;
+        var B = null;
+        Li = pas.Admin_List.C.el("li");
+        B = pas.Admin_List.C.el("button","lv-link",A["ip"]);
+        B["type"] = "button";
+        B.title = window.t("Its whole story under Address: score, blocks, requests");
+        B.addEventListener("click",function (E) {
+          var Today = "";
+          var Back = "";
+          Today = (new Date()).toISOString().slice(0,10);
+          Back = (new Date(Math.max(Date.parse("" + A["seen"]) - 864e5,Date.now() - (30 * 864e5)))).toISOString().slice(0,10);
+          pas.Admin_Address.AddressPanel(A["ip"],Panel,pas.JS.New(["from",Back,"to",Today]));
+        });
+        Li.append(B,document.createTextNode(" " + pas.Admin_List.C.ago(A["seen"]) + ", " + window.tn(A["times"],"%d time","%d times")));
+        List.appendChild(Li);
+      };
+      function RoleTick(Role) {
+        var Label_ = null;
+        var Tick = null;
+        Label_ = pas.Admin_List.C.el("label");
+        Tick = pas.Admin_List.C.el("input");
+        Tick.type = "checkbox";
+        Tick.checked = Have.indexOf(Role["name"]) >= 0;
+        Tick.disabled = pas.Admin_List.Same(U["name"],pas.Admin_List.Me["name"]) || !Can("manage-members");
+        Tick.addEventListener("change",async function (E) {
+          if (Tick.checked) {
+            Have.push(Role["name"])}
+           else Have.splice(Have.indexOf(Role["name"]),1);
+          try {
+            pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/member",pas.JS.New(["name",U["name"],"roles",Have.join(",")])));
+            U["roles"] = Have.join(",");
+            View.changed(U);
+          } catch ($e) {
+            pas.Admin_List.C.failed($e);
+            Tick.checked = !Tick.checked;
+          };
+        });
+        Label_.append(Tick,document.createTextNode(" " + ("" + Role["name"])));
+        Roles.appendChild(Label_);
+      };
+      function Act(Caption, Cls, Run) {
+        var B = null;
+        B = pas.Admin_List.C.el("button",Cls,Caption);
+        B["type"] = "button";
+        B.addEventListener("click",async function (E) {
+          try {
+            await Run();
+          } catch ($e) {
+            pas.Admin_List.C.failed($e);
+          };
+        });
+        Acts.appendChild(B);
+      };
+      function Again() {
+        View.unpick();
+        View.reload();
+      };
+      async function Reopen() {
+        var Result = undefined;
+        pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/member",pas.JS.New(["name",U["name"],"reopen","1"])));
+        pas.Admin_List.C.toast(window.t("It has no password now: make a password link for %s.",U["name"]));
+        Again();
+        return Result;
+      };
+      async function Ban() {
+        var Result = undefined;
+        var Banned = "";
+        if (!Boolean(U["banned"]) && !window.confirm(window.t("Ban %s? They are signed out and can only read.",U["name"]))) return Result;
+        if (Boolean(U["banned"])) {
+          Banned = "0"}
+         else Banned = "1";
+        pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/member",pas.JS.New(["name",U["name"],"banned",Banned])));
+        U["banned"] = !Boolean(U["banned"]);
+        View.changed(U);
+        return Result;
+      };
+      async function PasswordLink() {
+        var Result = undefined;
+        var Address = "";
+        var Shown = null;
+        var Copy = null;
+        var Made = null;
+        var Old = null;
+        Address = (await pas.Admin_List.C.post("/api/admin/member",pas.JS.New(["name",U["name"],"password_link","1"]))).trim();
+        if (Address.charAt(0) === "/") Address = window.location.origin + window.SiteBase.url(Address);
+        Shown = pas.Admin_List.C.el("pre","newtoken",Address);
+        Copy = pas.Admin_List.C.el("button","",window.t("Copy"));
+        Copy["type"] = "button";
+        Copy.addEventListener("click",function (E) {
+          window.navigator["clipboard"].writeText(Address).then(function (Done) {
+            var Result = undefined;
+            Copy.textContent = window.t("Copied");
+            return Result;
+          });
+        });
+        Made = pas.Admin_List.C.el("div","lv-actions member-link");
+        Made.append(Shown,Copy,pas.Admin_List.C.el("p","hint",window.t("Give this link to %s. It sets a new password, works once and for a week. Private conversations locked with the old password stay closed.",U["name"])));
+        Old = pas.Admin_List.C.$(".member-link",Holder);
+        if (Boolean(Old)) {
+          Old.replaceWith(Made)}
+         else Acts.after(Made);
+        return Result;
+      };
+      async function Rename() {
+        var Result = undefined;
+        var Name = undefined;
+        Name = window.prompt(window.t("A new name for %s. Mentions of the old name stay as they were written.",U["name"]),"" + U["name"]);
+        if (!Boolean(Name) || pas.Admin_List.Same(Name.trim(),U["name"])) return Result;
+        pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/member",pas.JS.New(["name",U["name"],"rename",Name.trim()])));
+        Again();
+        return Result;
+      };
+      async function CloseAccount() {
+        var Result = undefined;
+        var Reason = undefined;
+        Reason = window.prompt(window.t("Close the account of %s? They are signed out for good; their address, password and profile are wiped, and what they wrote stays. Why? (kept with the account)",U["name"]),"");
+        if (!Boolean(Reason) || !Boolean(Reason.trim())) return Result;
+        pas.Admin_List.C.toast(await pas.Admin_List.C.post("/api/admin/member",pas.JS.New(["name",U["name"],"close","1","reason",Reason.trim()])));
+        Again();
+        return Result;
+      };
+      Head = pas.Admin_List.C.el("div","lv-detail-head");
+      Head.appendChild(pas.Admin_List.C.link("/u/" + pas.Admin_List.C.enc(U["name"]),"",U["name"]));
+      if (Boolean(U["banned"])) Head.appendChild(pas.Admin_List.C.chip(window.t("Banned"),"bad"));
+      if (Boolean(U["closed"])) Head.appendChild(pas.Admin_List.C.chip(window.t("Closed"),"bad"));
+      Holder.appendChild(Head);
+      if (Boolean(U["joined"])) {
+        Joined = window.dateText(U["joined"])}
+       else Joined = "";
+      if (Boolean(U["seen"])) {
+        Seen = pas.Admin_List.C.ago(U["seen"])}
+       else Seen = window.t("never back");
+      Facts = Array.of(Array.of(window.t("Joined"),Joined),Array.of(window.t("Last here"),Seen),Array.of(window.t("Messages"),pas.Admin_List.LocaleNumber(U["posts"])));
+      if (Boolean(U["closed"])) {
+        if (pas.Admin_List.Same(U["closed_by"],U["name"])) {
+          ClosedBy = window.t("the member")}
+         else ClosedBy = U["closed_by"];
+        Facts = Facts.concat(Array.of(Array.of(window.t("Closed"),window.dateText(U["closed"])),Array.of(window.t("Closed by"),ClosedBy),Array.of(window.t("Reason"),U["closed_reason"])));
+      };
+      pas.Admin_List.C.facts(Holder,Facts);
+      if (Boolean(U["addresses"])) {
+        Sect = pas.Admin_List.C.el("div","member-addresses");
+        if (Number(U["address_count"]) > U["addresses"].length) {
+          Title = window.t("Addresses: the %d newest of %d",U["addresses"].length,U["address_count"])}
+         else Title = window.t("Addresses");
+        Sect.appendChild(pas.Admin_List.C.el("h4","",Title));
+        Panel = pas.Admin_List.C.el("div","lv-detail");
+        List = pas.Admin_List.C.el("ul","member-address-list");
+        for (var $l = 0, $end = U["addresses"].length - 1; $l <= $end; $l++) {
+          N = $l;
+          AddressLine(U["addresses"][N]);
+        };
+        Sect.append(List,Panel);
+        Holder.appendChild(Sect);
+      };
+      Have = $impl.Filled(U["roles"]);
+      Roles = pas.Admin_List.C.el("div","lv-actions rolechecks");
+      Roles.hidden = Boolean(U["closed"]);
+      Roles.appendChild(pas.Admin_List.C.el("span","dim",window.t("Roles") + ":"));
+      for (var $l1 = 0, $end1 = Giveable.length - 1; $l1 <= $end1; $l1++) {
+        N = $l1;
+        RoleTick(Giveable[N]);
+      };
+      Holder.appendChild(Roles);
+      if (pas.Admin_List.Same(U["name"],pas.Admin_List.Me["name"])) {
+        Holder.appendChild(pas.Admin_List.C.el("p","hint",window.t("Ask another admin to change your own account.")));
+        return;
+      };
+      Acts = pas.Admin_List.C.el("div","lv-actions");
+      if (Boolean(U["closed"])) {
+        if (Can("manage-members")) Act(window.t("Reopen the account"),"",Reopen);
+      } else if (Can("ban")) {
+        if (Boolean(U["banned"])) {
+          Act(window.t("Lift the ban"),"",Ban)}
+         else Act(window.t("Ban"),"bad",Ban);
+      };
+      if (Can("manage-members")) {
+        if (!Boolean(U["closed"])) Act(window.t("Password link"),"",PasswordLink);
+        Act(window.t("Rename"),"",Rename);
+        if (!Boolean(U["closed"])) Act(window.t("Close the account"),"bad",CloseAccount);
+      };
+      if (Acts.children.length > 0) Holder.appendChild(Acts);
+    };
+    async function Remote(State) {
+      var Result = null;
+      var A = null;
+      var Filters = null;
+      Filters = State["filters"];
+      A = await pas.Admin_List.C.get("/api/admin/members?q=" + pas.Admin_List.C.enc(State["q"]) + "&sort=" + pas.Admin_List.C.enc(State["sort"]) + "&role=" + pas.Admin_List.C.enc(pas.Admin_List.Either(Filters["role"],"")) + "&state=" + pas.Admin_List.C.enc(pas.Admin_List.Either(Filters["state"],"")) + "&page=" + ("" + State["page"]));
+      Result = pas.JS.New(["rows",A["members"],"total",A["total"]]);
+      return Result;
+    };
+    function RolesCell(U) {
+      var Result = undefined;
+      var Span = null;
+      var Names = null;
+      var N = 0;
+      Span = pas.Admin_List.C.el("span","chips");
+      Names = $impl.Filled(U["roles"]);
+      for (var $l = 0, $end = Names.length - 1; $l <= $end; $l++) {
+        N = $l;
+        if (pas.Admin_List.Same(Names[N],"admin")) {
+          Span.appendChild(pas.Admin_List.C.chip(Names[N],"admin"))}
+         else Span.appendChild(pas.Admin_List.C.chip(Names[N],""));
+      };
+      if (Boolean(U["banned"])) Span.appendChild(pas.Admin_List.C.chip(window.t("Banned"),"bad"));
+      if (Boolean(U["closed"])) Span.appendChild(pas.Admin_List.C.chip(window.t("Closed"),"bad"));
+      Result = Span;
+      return Result;
+    };
+    function AddressesCell(U) {
+      var Result = undefined;
+      if (!Boolean(U["addresses"]) || !Boolean(U["addresses"].length)) return "";
+      Result = "" + U["addresses"][0]["ip"];
+      if (Number(U["address_count"]) > 1) Result = "" + Result + " +" + String(Number(U["address_count"]) - 1);
+      return Result;
+    };
+    Giveable = new Array();
+    for (var $l = 0, $end = Data["roles"].length - 1; $l <= $end; $l++) {
+      I = $l;
+      R = Data["roles"][I];
+      if (pas.Admin_List.Same(R["scope"],"site") && !pas.Admin_List.Same(R["name"],"member") && !pas.Admin_List.Same(R["name"],"guest")) Giveable.push(R);
+    };
+    if (Can("view-member-addresses")) {
+      Search = window.t("Find a member by name or address")}
+     else Search = window.t("Find a member by name");
+    Columns = Array.of(pas.JS.New(["key","name","title",window.t("Member"),"cell",function (U) {
+      var Result = undefined;
+      Result = pas.Admin_List.C.link("/u/" + pas.Admin_List.C.enc(U["name"]),"",U["name"]);
+      return Result;
+    }]),pas.JS.New(["key","roles","title",window.t("Roles"),"nosort",true,"cell",RolesCell]),pas.JS.New(["key","posts","title",window.t("Messages"),"num",true]),pas.JS.New(["key","joined","title",window.t("Joined"),"down",true,"wide",true,"cell",function (U) {
+      var Result = undefined;
+      if (Boolean(U["joined"])) {
+        Result = window.dateText(U["joined"])}
+       else Result = "";
+      return Result;
+    }]),pas.JS.New(["key","seen","title",window.t("Last here"),"down",true,"cell",function (U) {
+      var Result = undefined;
+      if (Boolean(U["seen"])) {
+        Result = pas.Admin_List.C.ago(U["seen"])}
+       else Result = window.t("never back");
+      return Result;
+    }]));
+    if (Can("view-member-addresses")) Columns = Columns.concat(Array.of(pas.JS.New(["key","addresses","title",window.t("Address"),"nosort",true,"wide",true,"cell",AddressesCell])));
+    RoleChoices = new Array();
+    for (var $l1 = 0, $end1 = Giveable.length - 1; $l1 <= $end1; $l1++) {
+      I = $l1;
+      RoleChoices.push(Array.of(Giveable[I]["name"],Giveable[I]["name"]));
+    };
+    RoleChoices = RoleChoices.concat(Array.of(Array.of("none",window.t("No role given"))));
+    pas.Admin_List.ListView(Box,pas.JS.New(["id","members","key",function (U) {
+      var Result = undefined;
+      Result = U["name"];
+      return Result;
+    },"sort","-seen","csv","members","search",Search,"remote",Remote,"columns",Columns,"filters",Array.of(pas.JS.New(["key","role","title",window.t("Role"),"all",window.t("Every role"),"options",RoleChoices]),pas.JS.New(["key","state","title",window.t("Banned or closed"),"all",window.t("Everyone"),"options",Array.of(Array.of("active",window.t("Neither")),Array.of("banned",window.t("Banned")),Array.of("closed",window.t("Closed")))])),"noun",function (N) {
+      var Result = undefined;
+      Result = window.tn(N,"%d member","%d members");
+      return Result;
+    },"detail",Detail]));
+  };
+  $mod.$implcode = function () {
+    $impl.Filled = function (List) {
+      var Result = null;
+      var Parts = null;
+      var I = 0;
+      Parts = List.split(",");
+      Result = new Array();
+      for (var $l = 0, $end = Parts.length - 1; $l <= $end; $l++) {
+        I = $l;
+        if (Boolean(Parts[I])) Result.push(Parts[I]);
+      };
+      return Result;
+    };
+    $impl.RoleTitle = function (Name) {
+      var Result = undefined;
+      Result = pas.Admin_List.Either(pas.JS.New(["owner",window.t("channel owner"),"room-moderator",window.t("channel moderator")])["" + Name],Name);
+      return Result;
+    };
+  };
+},["Admin_Address"]);
+rtl.module("AdminPage",["System"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  $mod.$implcode = function () {
+    $impl.OpenAdmin = async function () {
+      var Result = undefined;
+      var Generation = undefined;
+      var Data = null;
+      var Head = null;
+      var Menu = null;
+      var Page = null;
+      var Nav = null;
+      var Rooms = null;
+      var Body = null;
+      var Parts = null;
+      var Scripts = null;
+      var Tabs = null;
+      var Settings = null;
+      var Lit = null;
+      var Modules = null;
+      var Groups = null;
+      var Order = null;
+      var Members = null;
+      var PartOfGroup = null;
+      var Extra = null;
+      var Last = undefined;
+      var Selected = null;
+      var I = 0;
+      var J = 0;
+      function Can(P) {
+        var Result = false;
+        Result = Data["can"].indexOf(P) >= 0;
+        return Result;
+      };
+      function Tab(Title, Build, Caption, Count, Group) {
+        var B = null;
+        var Badge = null;
+        var Holder = null;
+        var Built = false;
+        function SetCount(N) {
+          Badge.hidden = !(Number(N) > 0);
+          if (Number(N) > 0) {
+            Badge.textContent = String(N)}
+           else Badge.textContent = "";
+        };
+        B = pas.Admin_List.C.el("button","room");
+        B["type"] = "button";
+        B.appendChild(pas.Admin_List.C.el("span","name",pas.Admin_List.Either(pas.Admin_List.Either(Caption,pas.JS.New(["Members",window.t("Members"),"Permissions",window.t("Permissions"),"Settings",window.t("Settings"),"Look",window.t("Look"),"Channels",window.t("Channels"),"Private",window.t("Private"),"Reports",window.t("Reports"),"Blocked",window.t("Blocked")])["" + Title]),Title)));
+        Badge = pas.Admin_List.C.el("span","badge mention");
+        Badge.hidden = true;
+        B.appendChild(Badge);
+        if (typeof(Count) === "number") {
+          SetCount(Count)}
+         else if (typeof(Count) === "function") Promise.resolve().then(Count).then(SetCount).catch(function (Why) {
+          var Result = undefined;
+          return Result;
+        });
+        Holder = pas.Admin_List.C.el("section","part");
+        Holder.hidden = true;
+        Page.appendChild(Holder);
+        Built = false;
+        B.addEventListener("click",function (E) {
+          var N = 0;
+          for (var $l = 0, $end = Parts.length - 1; $l <= $end; $l++) {
+            N = $l;
+            Parts[N].button.classList.remove("active");
+            Parts[N].holder.hidden = true;
+          };
+          B.classList.add("active");
+          Holder.hidden = false;
+          if (!Built) {
+            Built = true;
+            Build(Holder);
+          };
+          if (Body.classList.contains("menu")) pas.Admin_List.C.toggleMenu();
+          pas.Admin_List.Stream.scrollTop = 0;
+          try {
+            window.localStorage.setItem("admin-tab","" + Title);
+          } catch ($e) {
+          };
+        });
+        Parts.push(pas.JS.New(["button",B,"holder",Holder,"title",Title,"setCount",SetCount,"group",pas.Admin_List.Either(Group,"More")]));
+      };
+      function PartSettings(Group) {
+        var Result = false;
+        var N = 0;
+        Result = false;
+        for (var $l = 0, $end = Settings.length - 1; $l <= $end; $l++) {
+          N = $l;
+          if (pas.Admin_List.Same(PartOfGroup["" + Settings[N]["group"]],Group)) return true;
+        };
+        return Result;
+      };
+      function PartTab(Group) {
+        Tab(Group + " settings",function (Box) {
+          pas.Admin_Settings.AdminSettings(Box,Data,function (G) {
+            var Result = false;
+            Result = pas.Admin_List.Same(PartOfGroup["" + G],Group);
+            return Result;
+          },Group);
+        },window.t("Settings"),undefined,Group);
+      };
+      function PartByTitle(Title) {
+        var Result = null;
+        var N = 0;
+        for (var $l = 0, $end = Parts.length - 1; $l <= $end; $l++) {
+          N = $l;
+          if (pas.Admin_List.Same(Parts[N].title,Title)) return Parts[N];
+        };
+        Result = undefined;
+        return Result;
+      };
+      function AdminTab(Title) {
+        var Result = false;
+        var P = null;
+        P = PartByTitle(Title);
+        if (Boolean(P)) P.button.click();
+        Result = Boolean(P);
+        return Result;
+      };
+      function AdminCount(Title, N) {
+        var P = null;
+        P = PartByTitle(Title);
+        if (Boolean(P)) P.setCount(N);
+      };
+      Generation = pas.Admin_List.S["generation"];
+      try {
+        Scripts = pas.Admin_List.Extras["adminScripts"];
+        I = 0;
+        while (I < Scripts.length) {
+          await pas.Admin_List.C.loadScript(Scripts[I]["src"]);
+          I += 1;
+        };
+      } catch ($e) {
+        pas.Admin_List.C.failed($e);
+        return Result;
+      };
+      if (!pas.Admin_List.Same(Generation,pas.Admin_List.S["generation"])) return Result;
+      Data = await pas.Admin_List.C.get("/api/admin");
+      if (!pas.Admin_List.Same(Generation,pas.Admin_List.S["generation"])) return Result;
+      pas.Admin_List.S["title"] = window.t("Admin");
+      Head = pas.Admin_List.C.$("#roomhead");
+      Menu = pas.Admin_List.C.iconButton("menu",window.t("Channels"),"menubtn");
+      Menu.addEventListener("click",pas.Admin_List.C["toggleMenu"]);
+      Head.append(Menu,pas.Admin_List.C.el("div","titles"));
+      pas.Admin_List.C.$(".titles",Head).appendChild(pas.Admin_List.C.el("h1","",window.t("Running %s",pas.Admin_List.SiteName)));
+      if (!pas.Admin_List.IsUndef(Data["members_total"])) pas.Admin_List.C.$(".titles",Head).appendChild(pas.Admin_List.C.el("p","topic",window.tn(Data["members_total"],"%d members","%d members")));
+      Page = pas.Admin_List.C.el("div","admin");
+      pas.Admin_List.Stream["noPin"] = true;
+      pas.Admin_List.Stream["pinned"] = false;
+      pas.Admin_List.Stream.appendChild(Page);
+      pas.Admin_List.Stream.scrollTop = 0;
+      Body = document.body;
+      Nav = pas.Admin_List.C.$("#adminnav");
+      if (!Boolean(Nav)) {
+        Nav = pas.Admin_List.C.el("nav");
+        Nav.id = "adminnav";
+        Rooms = pas.Admin_List.C.$("#roomlist");
+        if (Boolean(Rooms) && Boolean(Rooms["after"])) {
+          Rooms.after(Nav)}
+         else Page.appendChild(Nav);
+      };
+      Nav.hidden = false;
+      Nav.setAttribute("aria-label",window.t("Admin"));
+      Nav.replaceChildren();
+      Body.classList.add("admin-view");
+      Parts = new Array();
+      pas.Admin_List.FilePaths = pas.Admin_List.Either(Data["file_paths"],new Array());
+      Lit = String(pas.Admin_List.Either(Data["parts"],"")).split(" ");
+      PartOfGroup = Object.assign(pas.JS.New(["Chat","Chat","Wiki","Wiki","Forum","Forum"]),pas.Admin_List.Extras["settingGroups"]);
+      Settings = pas.Admin_List.Either(Data["settings"],new Array());
+      Modules = new Array();
+      for (var $l = 0, $end = Settings.length - 1; $l <= $end; $l++) {
+        I = $l;
+        if (pas.Admin_List.Same(Settings[I]["group"],"Parts")) Modules.push(Settings[I]["name"]);
+      };
+      if (Boolean(Data["settings"]) || Can("view-admin")) Tab("Overview",function (Box) {
+        pas.Admin_Site.AdminOverview(Box,Data,Can);
+      },window.t("Overview"),undefined,"Site");
+      Tabs = pas.Admin_List.Extras["adminTabs"];
+      I = 0;
+      while (I < Tabs.length) {
+        Extra = Tabs[I];
+        if (Boolean(Extra["first"]) && Boolean(Extra["permission"]) && Can("" + Extra["permission"])) Tab(Extra["title"],Extra["build"],window.t(Extra["title"]),Extra["badge"],pas.Admin_List.Either(Extra["group"],"Site"));
+        I += 1;
+      };
+      if (Boolean(Data["settings"]) && Can("manage-settings")) Tab("Settings",function (Box) {
+        pas.Admin_Settings.AdminSettings(Box,Data,function (Group) {
+          var Result = false;
+          Result = !pas.Admin_List.Same(Group,"Parts") && !Boolean(PartOfGroup["" + Group]);
+          return Result;
+        },undefined);
+      },undefined,undefined,"Site");
+      if (Boolean(Data["settings"]) && Can("manage-settings")) Tab("Look",pas.Admin_Site.AdminLook,undefined,undefined,"Site");
+      if (Boolean(Data["members"])) Tab("Members",function (Box) {
+        pas.Admin_Members.AdminMembers(Box,Data,Can);
+      },undefined,undefined,"Site");
+      if (Boolean(Data["permissions"])) Tab("Permissions",function (Box) {
+        pas.Admin_Members.AdminPermissions(Box,Data);
+      },undefined,undefined,"Site");
+      if (Can("read-reports")) Tab("Reports",pas.Admin_Reports.AdminReports,undefined,pas.Admin_List.Either(Data["open_reports"],0),"Site");
+      if (Can("view-visitors") || Can("manage-blocks")) Tab("Visitors",pas.Admin_Visitors.AdminVisitors,window.t("Visitors"),undefined,"Server");
+      if (Can("view-storage")) Tab("Storage",pas.Admin_Site.AdminStorage,window.t("Storage"),undefined,"Server");
+      if (Can("manage-backups")) Tab("Backup",pas.Admin_Backup.AdminBackup,window.t("Backup"),undefined,"Server");
+      if (Boolean(Data["channels"])) Tab("Channels",function (Box) {
+        pas.Admin_Chat.AdminChannels(Box,Data);
+      },undefined,undefined,"Chat");
+      if ((Lit.indexOf("chat") >= 0) && Can("manage-private")) Tab("Private",pas.Admin_Chat.AdminPrivate,undefined,undefined,"Chat");
+      I = 0;
+      while (I < Tabs.length) {
+        Extra = Tabs[I];
+        if (!Boolean(Extra["first"]) && Boolean(Extra["permission"]) && Can("" + Extra["permission"]) && (!Boolean(Extra["part"]) || (Lit.indexOf(Extra["part"]) >= 0))) Tab(Extra["title"],Extra["build"],window.t(Extra["title"]),Extra["badge"],Extra["group"]);
+        I += 1;
+      };
+      if (Boolean(Data["settings"])) {
+        Groups = Array.of("Chat","Wiki","Forum").concat(Object.values(pas.Admin_List.Extras["settingGroups"]));
+        for (var $l1 = 0, $end1 = Groups.length - 1; $l1 <= $end1; $l1++) {
+          I = $l1;
+          if ((Groups.indexOf(Groups[I]) === I) && PartSettings("" + Groups[I]) && ((Modules.indexOf(Groups[I].toLowerCase()) < 0) || (Lit.indexOf(Groups[I].toLowerCase()) >= 0))) PartTab("" + Groups[I]);
+        };
+      };
+      Order = Array.of("Site","Server","Chat","Wiki","Forum");
+      for (var $l2 = 0, $end2 = Parts.length - 1; $l2 <= $end2; $l2++) {
+        I = $l2;
+        if (Order.indexOf(Parts[I].group) < 0) Order.push(Parts[I].group);
+      };
+      for (var $l3 = 0, $end3 = Order.length - 1; $l3 <= $end3; $l3++) {
+        I = $l3;
+        Members = new Array();
+        for (var $l4 = 0, $end4 = Parts.length - 1; $l4 <= $end4; $l4++) {
+          J = $l4;
+          if (pas.Admin_List.Same(Parts[J].group,Order[I])) Members.push(Parts[J]);
+        };
+        if (Members.length === 0) continue;
+        Nav.appendChild(pas.Admin_List.C.el("div","group",window.t(Order[I])));
+        for (var $l5 = 0, $end5 = Members.length - 1; $l5 <= $end5; $l5++) {
+          J = $l5;
+          Nav.appendChild(Members[J].button);
+        };
+      };
+      pas.Admin_List.S["adminCan"] = Can;
+      pas.Admin_List.S["adminTab"] = AdminTab;
+      pas.Admin_List.S["adminCount"] = AdminCount;
+      if (Parts.length > 0) {
+        Last = Parts[0].title}
+       else Last = "Overview";
+      try {
+        Last = pas.Admin_List.Either(window.localStorage.getItem("admin-tab"),Last);
+      } catch ($e) {
+      };
+      Selected = PartByTitle(Last);
+      if (!Boolean(Selected)) Selected = Parts[0];
+      if (Boolean(Selected)) Selected.button.click();
+      pas.Admin_List.C.syncNow(true);
+      return Result;
+    };
+  };
+  $mod.$init = function () {
+    pas.Admin_List.C["listView"] = pas.Admin_List.ListView;
+    pas.Admin_List.C["stat"] = pas.Admin_List.Stat;
+    pas.Admin_List.C["adminTable"] = pas.Admin_List.AdminTable;
+    pas.Admin_List.C["openAdmin"] = $impl.OpenAdmin;
+  };
+},["JS","Web","Admin_List","Admin_Address","Admin_Backup","Admin_Reports","Admin_Visitors","Admin_Site","Admin_Settings","Admin_Chat","Admin_Members"]);
 
-  C.listView = listView;
-  C.stat = stat;
-  C.adminTable = adminTable;
-  C.openAdmin = openAdmin;
-})();
+rtl.run('AdminPage');
+}

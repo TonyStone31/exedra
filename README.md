@@ -10,8 +10,10 @@ They share the same members, sign-in, roles, search and admin page. Each
 one is a module you switch on or off, so a site can run just the chat,
 just the forum, or all four.
 
-Exedra is written in Free Pascal and runs as a single native program. It
-keeps its data in MariaDB, MySQL, PostgreSQL or SQLite, your choice.
+Exedra is written in Free Pascal from end to end. The server is a single
+native program, and the scripts that run in the browser are Pascal too,
+compiled to JavaScript with pas2js. It keeps its data in MariaDB, MySQL,
+PostgreSQL or SQLite, your choice.
 There are ready-built releases for Linux (x86_64 and 64-bit ARM, so a
 Raspberry Pi works) and FreeBSD.
 
@@ -72,8 +74,10 @@ member limit, nothing held back.
 
 - **Chat.** Channels, threads, reactions, answers, mentions, files and
   link previews. Private conversations are encrypted end to end, so the
-  server cannot read them. Notifications on the phone. An IRC side for
-  people who live in HexChat or irssi.
+  server cannot read them. That part is young and needs much more
+  testing ([SECURITY.md](SECURITY.md) says what to expect of it).
+  Notifications on the phone. An IRC side for people who live in HexChat
+  or irssi.
 - **Forum.** Boards in categories, moderation, reactions, following a
   topic and mail about replies.
 - **Wiki.** Markdown pages with revisions, categories, pictures and more
@@ -127,10 +131,30 @@ small and quick.
   TLS, and nothing else.
 - **Quick to build.** The server is about 47,000 lines of Pascal, and a
   full rebuild takes about five seconds.
-- **Plain pages.** The browser gets HTML, CSS and JavaScript as written.
-  No framework, no bundler, no npm.
+- **Plain pages.** The server sends finished HTML and CSS, and the
+  scripts only add what a page does. No framework, no bundler, no npm.
 - **Easy to read.** A module is a unit, a page is a procedure, a setting
   is one line.
+
+### Pascal in the browser too
+
+The page scripts are written in Object Pascal and compiled to JavaScript
+with [pas2js](https://wiki.freepascal.org/pas2js): about 22,000 lines in
+53 units, one or a few for each script. They used to be hand-written
+JavaScript. Moving them over found a handful of small bugs in pas2js
+itself, and the fixes are going back upstream.
+
+- **Small and quick in the browser.** All the page units are compiled
+  as one program, so whatever no page uses is left out. A page's scripts
+  take about a megabyte and a half of memory in the browser, and a first
+  visit downloads about 70 KB of them. Later pages fetch only what they
+  have not seen yet.
+- **Nothing extra to build or install.** The compiled scripts are in the
+  repository and in every release. You need pas2js only to change them.
+- **Three small files stay JavaScript on purpose:** the line other sites
+  paste to show the chat on their pages, the chat that line brings
+  (so those pages need nothing else), and the service worker, which runs
+  apart from any page.
 
 ### It is not an old CGI script
 
@@ -265,7 +289,8 @@ and say which. That decides what gets built first.
   read receipts the admin or each member can turn off. Each conversation
   shows a safety code the two members can compare, and says when the
   other member's key has changed. [SECURITY.md](SECURITY.md) says what
-  this protects against and what it does not.
+  this protects against and what it does not, and that it still needs
+  much more testing.
 - Files in a private channel or conversation open only for those who may
   read the message.
 - Beams: a file sent straight from one browser to another.
@@ -319,8 +344,8 @@ younger than the server, so take it as a preview for now.
 - **The API.** Everything the chat's page does goes through a JSON API,
   so an app or a bot can do the same: [docs/API.md](docs/API.md).
 - **The source.** The server's units are in `server/src`: `core` and a
-  folder for each module. [docs/CODE-MAP.md](docs/CODE-MAP.md) is a map
-  of it.
+  folder for each module. The page scripts' units are in
+  `server/src/pages`. [docs/CODE-MAP.md](docs/CODE-MAP.md) is a map of it.
 - **Your own module.** [docs/MODULES.md](docs/MODULES.md).
 
 ## Requirements
@@ -334,6 +359,10 @@ younger than the server, so take it as a preview for now.
   [SimpleBaseLib4Pascal](https://github.com/Xor-el/SimpleBaseLib4Pascal)
   and [TlsLib4Pascal](https://github.com/Xor-el/TlsLib4Pascal). All four
   are MIT licensed.
+- **To change the page scripts:** pas2js 3.3.1 as well (it comes with
+  Free Pascal's main branch) and its RTL units.
+  `server/src/pages/build.sh` builds them. The built files are in the
+  repository, so building the server does not need it.
 - **About the compiler:** Exedra is built with the development version
   of Free Pascal (3.3.1, "trunk"). It uses the Markdown, code coloring
   and WebSocket units that the released 3.2 does not have yet. Trunk

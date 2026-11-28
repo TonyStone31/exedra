@@ -31,7 +31,8 @@
       }
       document.body.appendChild(spot);
       const s = document.createElement('script');
-      s.src = base + '/static/live.js';
+      // the corner chat as one plain script, so the page it sits on needs nothing else
+      s.src = base + '/static/live-embed.js';
       document.body.appendChild(s);
     })
     .catch(function () { });

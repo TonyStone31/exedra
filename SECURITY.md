@@ -46,8 +46,16 @@ you run a site, put it behind a proxy with TLS and keep backups.
 ## What the encryption does and does not cover
 
 A locked private conversation is encrypted in the two members' browsers,
-and the server stores only what it cannot read. Two things are worth
-knowing before you rely on it.
+and the server stores only what it cannot read.
+
+**This part of Exedra is young.** It has had far less testing by real
+people than the rest, and it needs much more of that, and more
+development time, before anyone should lean on it. Take a locked
+conversation as more private than a plain one. Do not take it as
+something to trust with your safety. If you try it and something looks
+wrong, please say so.
+
+Two more things are worth knowing before you rely on it.
 
 - The server hands out the members' public keys and the page's own
   scripts. Someone who controls the server could hand out a key or a

@@ -18,6 +18,7 @@ server/
   src/wiki/           the wiki module
   src/forum/          the forum module
   src/catalog/        the catalog module
+  src/pages/          the page scripts, in Pascal: build.sh compiles them to site/static
   site/templates/     the HTML pages, with {{places}} the server fills
   site/static/        the scripts and stylesheets a browser loads
   site/lang/          the site's words in other languages
@@ -209,7 +210,14 @@ only in the server program.
 
 ## In the browser
 
-There is no build step: a page loads the files below as they are.
+Each file below is compiled from Pascal units in `src/pages` with
+pas2js: `<name>.pas`, and for a large script also `<name>_<part>.pas`.
+`build.sh` there compiles all of them as one program, so what no page
+uses is left out, and cuts the result into `pas-runtime.js` (what the
+scripts share, loaded first on every page) and one file per script.
+The built files are kept in the repository. `scripts.list` names the
+scripts. `embed.js`, `live-embed.js` and `sw.js` are written in
+JavaScript.
 
 | File | What it does |
 |---|---|
@@ -222,7 +230,7 @@ There is no build step: a page loads the files below as they are.
 | `chat.js` | the chat, which adds itself to `app.js` |
 | `reactions.js` | reactions as the chat and the forum both show them: the chips, who gave one, the emoji to pick from |
 | `emoji-names.js` | emoji typed by name (`:thu` offers 👍), for the chat's message boxes and the editor alike: it finds the name being typed and the emoji that fit, from the list in `emoji-names.txt` |
-| `live.js`, `embed.js` | the corner chat on a page (it loads its own `live.css`); the one line that puts it on another site's pages (with `live-embed.css` for its colors there) |
+| `live.js`, `embed.js`, `live-embed.js` | the corner chat on a page (it loads its own `live.css`); the one line that puts it on another site's pages (with `live-embed.css` for its colors there); the corner chat as one plain script, which is what `embed.js` loads there |
 | `admin.js` | the admin page, loaded when it is opened |
 | `editor.js` | the editor the wiki and the forum share |
 | `wiki.js`, `wiki-edit.js`, `wiki-files.js`, `wiki-admin.js` | the wiki's pages, its side of the editor, its files, its Emoji tab |

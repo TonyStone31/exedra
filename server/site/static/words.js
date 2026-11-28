@@ -1,74 +1,156 @@
-// The site's words in the reader's language.  window.WORDS comes from
-// /words.js, which the page loads first; the English text is the key, so a
-// word with no translation shows as English.  %s and %d fill in order;
-// %1:s picks an argument by number, for languages that reorder a sentence.
-(function () {
-  const words = window.WORDS || {};
-  window.t = function (english) {
-    const args = Array.prototype.slice.call(arguments, 1);
-    const text = Object.prototype.hasOwnProperty.call(words, english) && words[english] ? words[english] : english;
-    let next = 0;
-    return text.replace(/%(?:(\d+):)?[sd]/g, function (whole, number) {
-      const at = number === undefined ? next++ : Number(number);
-      return at < args.length ? String(args[at]) : whole;
-    });
+if (!pas.WordsPage) {
+rtl.module("WordsPage",["System","JS","Web"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  $mod.$implcode = function () {
+    $impl.Words = null;
+    $impl.T = function (English) {
+      var Result = "";
+      var Args = null;
+      var Found = undefined;
+      var Next = 0;
+      Args = Array.prototype.slice.call(arguments,1);
+      if (Object.prototype.hasOwnProperty.call($impl.Words,English) && Boolean(Reflect.get($impl.Words,English))) {
+        Found = Reflect.get($impl.Words,English)}
+       else Found = English;
+      Next = 0;
+      Result = Found.replace(new RegExp("%(?:(\\d+):)?[sd]","g"),function (Whole, Digits, Offset, Whole2) {
+        var Result = "";
+        var At = 0.0;
+        if (typeof(Digits) === "undefined") {
+          At = Next;
+          Next += 1;
+        } else At = Number(Digits);
+        if (At < Args.length) {
+          Result = String(Reflect.get(Args,At))}
+         else Result = Whole;
+        return Result;
+      });
+      return Result;
+    };
+    $impl.TN = function (N, One, Many) {
+      var Result = undefined;
+      var Form = undefined;
+      if (N === 1) {
+        Form = One}
+       else Form = Many;
+      Result = window.t.apply(null,(new Array(Form,N)).concat(Array.prototype.slice.call(arguments,3)));
+      return Result;
+    };
+    $impl.Parts = function (Value) {
+      var Result = null;
+      var date = null;
+      if (rtl.isString(Value) && (new RegExp("^\\d{4}-\\d{2}-\\d{2}$")).test("" + Value)) return pas.JS.New(["y",Number(Value.slice(0,4)),"m",Number(Value.slice(5,7)),"d",Number(Value.slice(8,10)),"date",new Date("" + Value + "T00:00:00")]);
+      if (pas.JS.jsInstanceOf(Value,Date)) {
+        date = Value}
+       else date = new Date(Value);
+      if (isNaN(date)) {
+        Result = null}
+       else Result = pas.JS.New(["y",date.getFullYear(),"m",date.getMonth() + 1,"d",date.getDate(),"date",date]);
+      return Result;
+    };
+    $impl.Lang = function () {
+      var Result = undefined;
+      Result = document.documentElement.lang;
+      if (!Boolean(Result)) Result = undefined;
+      return Result;
+    };
+    $impl.Two = function (N) {
+      var Result = "";
+      Result = String(N).padStart(2,"0");
+      return Result;
+    };
+    $impl.DateText = function (Value) {
+      var Result = "";
+      var P = null;
+      var Pattern = undefined;
+      P = $impl.Parts(Value);
+      if (P === null) {
+        if (Boolean(Value)) return String(Value);
+        return String("");
+      };
+      Pattern = window["DATE_FORMAT"];
+      if (!Boolean(Pattern)) Pattern = "m-d-yyyy";
+      if (Pattern == "reader") return P["date"].toLocaleDateString($impl.Lang());
+      Result = Pattern.replace(new RegExp("yyyy|mm|dd|m|d","g"),function (K) {
+        var Result = "";
+        if (K === "yyyy") {
+          Result = String(P["y"])}
+         else if (K === "mm") {
+          Result = $impl.Two(P["m"])}
+         else if (K === "dd") {
+          Result = $impl.Two(P["d"])}
+         else if (K === "m") {
+          Result = String(P["m"])}
+         else Result = String(P["d"]);
+        return Result;
+      });
+      return Result;
+    };
+    $impl.DateTimeText = function (Value) {
+      var Result = "";
+      var P = null;
+      P = $impl.Parts(Value);
+      if (P === null) {
+        if (Boolean(Value)) return String(Value);
+        return String("");
+      };
+      Result = window.dateText(Value) + " " + P["date"].toLocaleTimeString($impl.Lang(),pas.JS.New(["hour","numeric","minute","2-digit"]));
+      return Result;
+    };
+    $impl.Language = function (Form) {
+      var Button = null;
+      Button = Form.querySelector("button");
+      if (Button !== null) Button.hidden = true;
+      Form.querySelector("select").addEventListener("change",function (E) {
+        Form.querySelector("[name=return]").value = SiteBase.path() + window.location.search;
+        Form.submit();
+      });
+    };
+    $impl.Ready = function (E) {
+      var List = null;
+      var I = 0;
+      var El = null;
+      var At = "";
+      if (window["DATE_FORMAT"] == "reader") {
+        List = document.querySelectorAll("time[data-show]");
+        for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+          I = $l;
+          El = List.item(I);
+          At = El.getAttribute("datetime");
+          if (El.dataset["show"] === "datetime") {
+            El.textContent = window.dateTimeText(At)}
+           else El.textContent = window.dateText(At.slice(0,10));
+        };
+      };
+      if (SiteBase.path() !== "/signin") {
+        List = document.querySelectorAll('a[href="' + SiteBase.url("/signin") + '"]');
+        for (var $l1 = 0, $end1 = List.length - 1; $l1 <= $end1; $l1++) {
+          I = $l1;
+          List.item(I).href = "/signin?return=" + encodeURIComponent(SiteBase.path() + window.location.search);
+        };
+      };
+      List = document.querySelectorAll(".site-language");
+      for (var $l2 = 0, $end2 = List.length - 1; $l2 <= $end2; $l2++) {
+        I = $l2;
+        $impl.Language(List.item(I));
+      };
+    };
+    $impl.Start = function () {
+      $impl.Words = window["WORDS"];
+      if (!Boolean($impl.Words)) $impl.Words = new Object();
+      window["t"] = $impl.T;
+      window["tn"] = $impl.TN;
+      window["dateText"] = $impl.DateText;
+      window["dateTimeText"] = $impl.DateTimeText;
+      document.addEventListener("DOMContentLoaded",$impl.Ready);
+    };
   };
-  // A sentence about a number, with %d in both forms: tn(3, '%d reply', '%d replies').
-  window.tn = function (n, one, many) {
-    const args = Array.prototype.slice.call(arguments, 3);
-    return window.t.apply(null, [n === 1 ? one : many, n].concat(args));
+  $mod.$init = function () {
+    $impl.Start();
   };
+},["PageKit"]);
 
-  // Dates as the admin chose to show them (window.DATE_FORMAT from
-  // /words.js, m-d-yyyy to begin with: 1-30-2020); "reader" gives the
-  // reader's own language.  A date-only text (2020-01-30) is that day
-  // wherever the reader is; a time is shown in the reader's time zone.
-  function parts(value) {
-    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value))
-      return {y: +value.slice(0, 4), m: +value.slice(5, 7), d: +value.slice(8, 10), date: new Date(value + 'T00:00:00')};
-    const date = value instanceof Date ? value : new Date(value);
-    return isNaN(date) ? null : {y: date.getFullYear(), m: date.getMonth() + 1, d: date.getDate(), date: date};
-  }
-  const lang = function () { return document.documentElement.lang || undefined; };
-  window.dateText = function (value) {
-    const p = parts(value);
-    if (!p) return String(value || '');
-    const pattern = window.DATE_FORMAT || 'm-d-yyyy';
-    if (pattern === 'reader') return p.date.toLocaleDateString(lang());
-    const two = function (n) { return String(n).padStart(2, '0'); };
-    return pattern.replace(/yyyy|mm|dd|m|d/g, function (k) {
-      return k === 'yyyy' ? String(p.y) : k === 'mm' ? two(p.m) : k === 'dd' ? two(p.d) : k === 'm' ? String(p.m) : String(p.d);
-    });
-  };
-  window.dateTimeText = function (value) {
-    const p = parts(value);
-    if (!p) return String(value || '');
-    return window.dateText(value) + ' ' + p.date.toLocaleTimeString(lang(), {hour: 'numeric', minute: '2-digit'});
-  };
-
-  // The picker works without scripts by its button.  With them it goes on a
-  // change, and comes back to wherever the chat has moved to since the page loaded.
-  document.addEventListener('DOMContentLoaded', function () {
-    // in the reader's own language: the dates the server left as yyyy-mm-dd
-    if (window.DATE_FORMAT === 'reader') {
-      document.querySelectorAll('time[data-show]').forEach(function (el) {
-        const at = el.getAttribute('datetime');
-        el.textContent = el.dataset.show === 'datetime' ? window.dateTimeText(at) : window.dateText(at.slice(0, 10));
-      });
-    }
-    // Sign in and Join bring the reader back to this page afterwards.
-    if (SiteBase.path() !== '/signin') {
-      document.querySelectorAll('a[href="' + SiteBase.url('/signin') + '"]').forEach(function (a) {
-        a.href = '/signin?return=' + encodeURIComponent(SiteBase.path() + location.search);
-      });
-    }
-    document.querySelectorAll('.site-language').forEach(function (form) {
-      const button = form.querySelector('button');
-      if (button) button.hidden = true;
-      form.querySelector('select').addEventListener('change', function () {
-        form.querySelector('[name=return]').value = SiteBase.path() + location.search;
-        form.submit();
-      });
-    });
-  });
-})();
+rtl.run('WordsPage');
+}

@@ -53,6 +53,9 @@ Where Exedra stands and what comes next. Dates are not promised.
 - Color schemes for the whole site, chosen on the admin page.
 - Feeds (Atom) for a board, a topic, the wiki's changes and new catalog
   entries, so a reader or another program can follow the site.
+- The end to end encryption of private conversations: much more testing
+  by people on real devices, and more work on it, before it is something
+  to rely on. SECURITY.md says where it stands.
 - Two-step sign-in with a code from an authenticator app. Off on a new
   site. Any member may turn it on for their own account, and the site's
   admin decides who must: nobody, the staff, or every member.

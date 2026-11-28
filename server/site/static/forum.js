@@ -1,351 +1,612 @@
-// Forms on the server-rendered forum pages.
-(function () {
-  'use strict';
-
-  async function post(path, fields) {
-    const response = await fetch(path, {method: 'POST', body: fields, credentials: 'same-origin'});
-    if (!response.ok) throw new Error(await response.text() || t('Could not save the forum.'));
-    return response.json();
-  }
-
-  function topicAddress(id, page, postId) {
-    const path = '/forum/t/' + Number(id);
-    return path + (page > 1 ? '?page=' + Number(page) : '') + (postId ? '#post-' + Number(postId) : '');
-  }
-
-  function codeButtons(box) {
-    box.querySelectorAll('.code').forEach(function (block) {
-      const copy = block.querySelector('.copy');
-      if (copy) {
-        copy.dataset.forumCode = '1';
-        copy.textContent = t('Copy');
-        copy.addEventListener('click', async function () {
-          try {
-            await navigator.clipboard.writeText(block.querySelector('pre code').textContent);
-            copy.textContent = t('Copied');
-          } catch (err) { alert(t('Could not copy the code.')); }
-        });
-      }
-      const flip = block.querySelector('.flip');
-      if (flip) {
-        flip.dataset.forumCode = '1';
-        flip.textContent = t('Source');
-        flip.addEventListener('click', function () {
-          flip.textContent = block.classList.toggle('source') ? t('Document') : t('Source');
-        });
-      }
-    });
-  }
-
-  // The post box gets the shared editor (editor.js): its toolbar, and the
-  // post as it will look from the forum's own renderer.
-  function editor(textarea) {
-    if (!window.Editor) return;
-    const form = textarea.closest('form');
-    const files = fileRules(textarea);
-    window.Editor.attach(textarea, {
-      compact: true,
-      mode: 'write',
-      storeKey: 'forum-edit-mode',
-      viewClass: 'forum-body body',
-      emptyWords: t('The post shows here as you write.'),
-      preview: async function (text, signal) {
-        const fields = new URLSearchParams(new FormData(form));
-        fields.set('body', text);
-        const response = await fetch('/api/forum/preview', {method: 'POST', body: fields, credentials: 'same-origin', signal: signal});
-        if (!response.ok) throw new Error(await response.text());
-        return (await response.json()).html;
-      },
-      afterPreview: codeButtons,
-      // emoji by name, as in the chat: :thu offers 👍
-      emoji: function () { return EmojiNames.list(); },
-      // the button that sends the form and its error stay in view full screen too
-      sendRow: [form.querySelector(':scope > button'), form.querySelector(':scope > .forum-error')],
-      hint: files ? t('Markdown. Drag, paste or') : undefined,
-      linkTools: files ? function (editor) {
-        editor.tool(t('Add a file'), '', editor.svg('<path d="M20 11.5l-8.2 8.2a5 5 0 0 1-7-7l8.5-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.4 8.5a1.7 1.7 0 0 1-2.4-2.4l7.7-7.8"/>'), editor.choose);
-      } : undefined,
-      pictures: files
-    });
-  }
-
-  // Files in a post: the page says the largest size and the kinds the
-  // admin accepts; the forum keeps the file and the post names it.
-  function fileRules(textarea) {
-    const kinds = (textarea.dataset.uploadTypes || '').split(' ').filter(Boolean);
-    const most = Number(textarea.dataset.uploadMb || 0);
-    if (!kinds.length || !most) return null;
-    return {
-      accept: kinds.map(function (k) { return '.' + k; }).join(','),
-      gallery: 'image/*' + (kinds.some(function (k) { return /^(mp4|webm|mov|m4v)$/.test(k); }) ? ',video/*' : ''),
-      label: t('add files'),
-      refuses: function (file) {
-        const kind = (/\.([A-Za-z0-9]+)$/.exec(file.name || '') || ['', ''])[1].toLowerCase();
-        // a pasted screenshot has no name of its own; it is a picture
-        if (!kind && /^image\/(png|jpeg|gif|webp)$/.test(file.type)) return '';
-        if (kinds.indexOf(kind) < 0) return t('%s is not a kind of file accepted here.', file.name || '');
-        if (file.size > most * 1024 * 1024) return t('%s is too big: files can be %d MB at most here.', file.name || '', most);
-        return '';
-      },
-      send: async function (file, name) {
-        const body = new FormData();
-        body.append('file', file, name);
-        const response = await fetch('/api/forum/upload', {method: 'POST', body: body, credentials: 'same-origin'});
-        if (!response.ok) throw new Error((await response.text()).trim().slice(0, 200) || t('The file could not be uploaded.'));
-        const answer = await response.json();
-        const words = answer.name.replace(/[\[\]]/g, '');
-        // a blank or a parenthesis in the name would end the link early
-        const address = answer.url.replace(/ /g, '%20').replace(/\(/g, '%28').replace(/\)/g, '%29');
-        return {put: (answer.image ? '!' : '') + '[' + words + '](' + address + ')', words: t('%s is uploaded.', answer.name)};
-      }
+if (!pas.ForumPage) {
+rtl.module("ForumPage",["System"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  $mod.$implcode = function () {
+    $impl.TextOr = function (Value, Fallback) {
+      var Result = "";
+      if (Boolean(Value)) {
+        Result = "" + Value}
+       else Result = Fallback;
+      return Result;
     };
-  }
-
-  document.querySelectorAll('form[data-forum-form]').forEach(function (form) {
-    form.addEventListener('submit', async function (event) {
-      event.preventDefault();
-      if (form.dataset.busy) return;
-      const path = SiteBase.strip(form.getAttribute('action'));
-      if (form.dataset.confirm && !confirm(form.dataset.confirm)) return;
-      const fields = new URLSearchParams(new FormData(form));
-      const error = form.querySelector('.forum-error');
-      const buttons = form.querySelectorAll('button');
-      error.textContent = '';
-      form.dataset.busy = '1';
-      buttons.forEach(function (button) { button.disabled = true; });
-      try {
-        const data = await post(path, fields);
-        if (data.topic_id) {
-          const to = SiteBase.url(topicAddress(data.topic_id, data.page || 1, data.post_id));
-          // the same page with another anchor is only a jump: read it again for the new post
-          const same = to.split('#')[0] === location.pathname + location.search;
-          location.assign(to);
-          if (same) location.reload();
-        }
-        else if (data.topic_deleted) location.assign(SiteBase.url('/forum'));
-        else if (data.reported) {
-          // the page stays as it is; the form gives way to a word of thanks
-          const thanks = document.createElement('p');
-          thanks.textContent = t('Reported. The moderators will take a look.');
-          form.replaceWith(thanks);
-        }
-        else location.reload();
-      } catch (err) {
-        error.textContent = err.message;
-        // the text is still unsaved: the editor goes on warning before the page is left
-        form.querySelectorAll('textarea').forEach(function (box) { if (box.editor && box.editor.notSaved) box.editor.notSaved(); });
-      }
-      finally {
-        delete form.dataset.busy;
-        buttons.forEach(function (button) { button.disabled = false; });
-      }
-    });
-  });
-  function quoteMarkdown(author, topic, postId, body) {
-    // Names are literal Markdown, including brackets and formatting characters.
-    const name = author.replace(/([\\`*_[\]<>])/g, '\\$1');
-    return '> **' + name + '** ' + t('wrote') + ' ([' + t('post') + '](/forum/t/' + Number(topic) + '?post=' + Number(postId) + '#post-' + Number(postId) + ')):\n' +
-      body.replace(/\r\n?/g, '\n').split('\n').map(function (line) { return '> ' + line; }).join('\n') + '\n\n';
-  }
-
-  function addQuote(author, topic, postId, text) {
-    const reply = document.querySelector('#quick-reply');
-    if (!reply) return;
-    const textarea = reply.querySelector('.forum-editor');
-    textarea.value += (textarea.value ? '\n\n' : '') + quoteMarkdown(author, topic, postId, text);
-    // the editor hears of the new text as it would of typing
-    textarea.dispatchEvent(new Event('input', {bubbles: true}));
-    textarea.focus(); reply.scrollIntoView({block: 'start'});
-  }
-  document.querySelectorAll('.forum-quote').forEach(function (button) {
-    button.addEventListener('click', function () {
-      addQuote(button.dataset.author, button.dataset.topic, button.dataset.post, button.dataset.body);
-    });
-  });
-
-  // The Markdown of a drawn piece of a post, so that what is quoted keeps
-  // its code blocks (with their language), pictures, links and emphasis.
-  function markdownOf(node, inCode) {
-    if (node.nodeType === 3) return inCode ? node.nodeValue : node.nodeValue.replace(/\s+/g, ' ');
-    if (node.nodeType !== 1 && node.nodeType !== 11) return '';
-    const kids = function (code) { return Array.from(node.childNodes).map(function (k) { return markdownOf(k, code); }).join(''); };
-    const fence = function (lang, text) { return '\n\n```' + lang + '\n' + text.replace(/\n+$/, '') + '\n```\n\n'; };
-    if (node.nodeType === 11) return kids(inCode);
-    const tag = node.tagName;
-    if (node.classList.contains('code')) {
-      const lang = node.querySelector('.codebar span'), pre = node.querySelector('pre');
-      return pre ? fence(lang ? lang.textContent.trim() : '', pre.textContent) : '';
-    }
-    if (node.classList.contains('codebar') || tag === 'BUTTON') return '';
-    if (tag === 'PRE') return fence('', node.textContent);
-    if (tag === 'IMG') return '![' + (node.getAttribute('alt') || '') + '](' + SiteBase.strip(node.getAttribute('src') || '') + ')';
-    if (tag === 'A') return '[' + kids(false) + '](' + SiteBase.strip(node.getAttribute('href') || '') + ')';
-    if (tag === 'B' || tag === 'STRONG') return '**' + kids(false) + '**';
-    if (tag === 'I' || tag === 'EM') return '*' + kids(false) + '*';
-    if (tag === 'DEL' || tag === 'S') return '~~' + kids(false) + '~~';
-    if (tag === 'CODE') return '`' + node.textContent + '`';
-    if (tag === 'BR') return '\n';
-    if (/^H[1-6]$/.test(tag)) return '\n\n' + '#'.repeat(Number(tag.charAt(1))) + ' ' + kids(false) + '\n\n';
-    if (tag === 'LI') return (node.parentElement && node.parentElement.tagName === 'OL' ? '1. ' : '- ') + kids(false).trim() + '\n';
-    if (tag === 'UL' || tag === 'OL') return '\n\n' + kids(false) + '\n';
-    if (tag === 'BLOCKQUOTE') return '\n\n' + kids(false).trim().split('\n').map(function (line) { return '> ' + line; }).join('\n') + '\n\n';
-    if (tag === 'TR') return '| ' + Array.from(node.children).map(function (c) { return markdownOf(c, false).trim(); }).join(' | ') + ' |\n';
-    if (tag === 'THEAD') return kids(false) + '|' + Array.from(node.querySelectorAll('th')).map(function () { return '---|'; }).join('') + '\n';
-    if (tag === 'TABLE') return '\n\n' + kids(false) + '\n';
-    if (tag === 'P' || tag === 'DIV') return '\n\n' + kids(false) + '\n\n';
-    return kids(inCode);
-  }
-
-  // What a selection holds, as Markdown.  A selection inside one code block
-  // is that part of the code, fenced with the block's language.
-  function selectionMarkdown(range) {
-    const from = range.commonAncestorContainer;
-    const at = from.nodeType === 1 ? from : from.parentElement;
-    const block = at ? at.closest('.code') : null;
-    if (block && at.closest('pre')) {
-      const lang = block.querySelector('.codebar span');
-      const text = range.toString().replace(/\n+$/, '');
-      return text.trim() ? '```' + (lang ? lang.textContent.trim() : '') + '\n' + text + '\n```' : '';
-    }
-    // spaces left between the blocks go; lines of code keep theirs
-    let code = false;
-    return markdownOf(range.cloneContents(), false).split('\n').map(function (line) {
-      if (/^\s*```/.test(line)) { code = !code; return line.trim(); }
-      return code ? line : line.replace(/\s+$/, '').replace(/^ (?=\S)/, '');
-    }).join('\n').replace(/\n{3,}/g, '\n\n').trim();
-  }
-
-  // Quoting a piece: text selected inside one post brings up a button beside
-  // it, and the button puts just those words in the reply as a quote of
-  // that member.  Only where the reader may reply, and only for a selection
-  // that stays inside one post.
-  (function () {
-    if (!document.querySelector('#quick-reply') || !document.body || typeof window.getSelection !== 'function') return;
-    const offer = document.createElement('button');
-    offer.type = 'button';
-    offer.className = 'forum-quote-selection';
-    offer.textContent = t('Quote selection');
-    offer.hidden = true;
-    document.body.appendChild(offer);
-    let picked = null;
-    // the text of a post a node sits in; not the editor's preview, which
-    // is drawn the same way
-    function bodyOf(node) {
-      const at = node && (node.nodeType === 1 ? node : node.parentElement);
-      const body = at ? at.closest('.forum-body') : null;
-      return body && body.parentElement && body.parentElement.classList.contains('forum-post-content') ? body : null;
-    }
-    function look() {
-      offer.hidden = true;
-      picked = null;
-      const chosen = window.getSelection();
-      if (!chosen || chosen.isCollapsed || !chosen.rangeCount) return;
-      const body = bodyOf(chosen.anchorNode);
-      const text = body ? selectionMarkdown(chosen.getRangeAt(0)) : '';
-      if (!text || !body || body !== bodyOf(chosen.focusNode)) return;
-      const button = body.closest('.forum-post').querySelector('.forum-quote');
-      if (!button) return;
-      picked = {author: button.dataset.author, topic: button.dataset.topic, post: button.dataset.post, text: text};
-      const box = chosen.getRangeAt(0).getBoundingClientRect();
-      offer.hidden = false;
-      offer.style.top = (window.scrollY + box.bottom + 6) + 'px';
-      offer.style.left = (window.scrollX + Math.max(8, Math.min(box.left, document.documentElement.clientWidth - offer.offsetWidth - 8))) + 'px';
-    }
-    // after the browser has settled the selection; a phone has no mouseup
-    let later = 0;
-    function soon() { clearTimeout(later); later = setTimeout(look, 150); }
-    document.addEventListener('mouseup', soon);
-    document.addEventListener('keyup', soon);
-    document.addEventListener('selectionchange', soon);
-    // pressing the button must not drop the selection it is about
-    offer.addEventListener('mousedown', function (event) { event.preventDefault(); });
-    offer.addEventListener('click', function () {
-      if (!picked) return;
-      addQuote(picked.author, picked.topic, picked.post, picked.text);
-      window.getSelection().removeAllRanges();
-      offer.hidden = true;
-    });
-  })();
-  // Reactions under a post.  The server drew the chips; here each row is
-  // drawn again by reactions.js, so a chip says who gave it and, for a
-  // member who may react, puts theirs on or takes it back.  A row marked
-  // data-add ends in the button that offers the forum's emoji.
-  (function () {
-    const offered = document.getElementById('forum-reactions');
-    const lists = offered ? {shown: offered.dataset.shown.split(' ').filter(Boolean), more: offered.dataset.more.split(' ').filter(Boolean)} : null;
-    function draw(row, list) {
-      const id = row.dataset.post, add = lists && 'add' in row.dataset;
-      const react = async function (emoji) {
+    $impl.Post = async function (Path, Fields) {
+      var Result = undefined;
+      var Response = null;
+      Response = await pas.PageKit.Post(Path,Fields,null);
+      if (!Response.ok) throw new Error($impl.TextOr(await Response.text(),window.t("Could not save the forum.")));
+      Result = await Response.json();
+      return Result;
+    };
+    $impl.TopicAddress = function (Id, Page, PostId) {
+      var Result = "";
+      Result = "/forum/t/" + ("" + Number(Id));
+      if (Number(Page) > 1) Result = Result + "?page=" + ("" + Number(Page));
+      if (Boolean(PostId)) Result = Result + "#post-" + ("" + Number(PostId));
+      return Result;
+    };
+    $impl.CodeBlock = function (Block) {
+      var Copy = null;
+      var Flip = null;
+      async function CopyCode(E) {
         try {
-          draw(fresh, (await post('/api/forum/react', new URLSearchParams({post: id, r: emoji}))).reactions);
-        } catch (err) { alert(err.message); }
+          await window.navigator.clipboard.writeText(Block.querySelector("pre code").textContent);
+          Copy.textContent = window.t("Copied");
+        } catch ($e) {
+          window.alert(window.t("Could not copy the code."));
+        };
       };
-      const fresh = Reactions.chips(list, {
-        // where nothing may be added, one's own still comes off
-        toggle: function (r) { if (add || (lists && r.mine)) react(r.r); },
-        who: async function (r) {
-          const response = await fetch('/api/forum/reacted?post=' + id + '&r=' + encodeURIComponent(r.r), {credentials: 'same-origin'});
-          if (!response.ok) throw new Error(await response.text());
-          return response.json();
-        }
+      Copy = Block.querySelector(".copy");
+      if (Copy !== null) {
+        Copy.dataset["forumCode"] = "1";
+        Copy.textContent = window.t("Copy");
+        Copy.addEventListener("click",CopyCode);
+      };
+      Flip = Block.querySelector(".flip");
+      if (Flip !== null) {
+        Flip.dataset["forumCode"] = "1";
+        Flip.textContent = window.t("Source");
+        Flip.addEventListener("click",function (E) {
+          if (Block.classList.toggle("source")) {
+            Flip.textContent = window.t("Document")}
+           else Flip.textContent = window.t("Source");
+        });
+      };
+    };
+    $impl.CodeButtons = function (Box) {
+      var Blocks = null;
+      var I = 0;
+      Blocks = Box.querySelectorAll(".code");
+      for (var $l = 0, $end = Blocks.length - 1; $l <= $end; $l++) {
+        I = $l;
+        $impl.CodeBlock(Blocks.item(I));
+      };
+    };
+    $impl.FileRules = function (Textarea) {
+      var Result = null;
+      var Kinds = null;
+      var Most = 0.0;
+      var Gallery = "";
+      function Refuses(AFile) {
+        var Result = "";
+        var Found = null;
+        var Kind = "";
+        Found = (new RegExp("\\.([A-Za-z0-9]+)$")).exec($impl.TextOr(AFile["name"],""));
+        if (Found !== null) {
+          Kind = Found["1"].toLowerCase()}
+         else Kind = "";
+        if ((Kind === "") && (new RegExp("^image\\/(png|jpeg|gif|webp)$")).test("" + AFile["type"])) return "";
+        if (Kinds.indexOf(Kind) < 0) return window.t("%s is not a kind of file accepted here.",$impl.TextOr(AFile["name"],""));
+        if (Number(AFile["size"]) > (Most * 1024 * 1024)) return window.t("%s is too big: files can be %d MB at most here.",$impl.TextOr(AFile["name"],""),Most);
+        Result = "";
+        return Result;
+      };
+      async function Send(AFile, Name) {
+        var Result = undefined;
+        var Body = null;
+        var Response = null;
+        var Answer = null;
+        var Words = "";
+        var Address = "";
+        var Mark = "";
+        Body = new FormData();
+        Body.append("file",AFile,Name);
+        Response = await pas.PageKit.Post("/api/forum/upload",Body,null);
+        if (!Response.ok) throw new Error($impl.TextOr((await Response.text()).trim().slice(0,200),window.t("The file could not be uploaded.")));
+        Answer = await Response.json();
+        Words = Answer["name"].replace(new RegExp("[\\[\\]]","g"),"");
+        Address = Answer["url"].replace(new RegExp(" ","g"),"%20").replace(new RegExp("\\(","g"),"%28").replace(new RegExp("\\)","g"),"%29");
+        if (Boolean(Answer["image"])) {
+          Mark = "!"}
+         else Mark = "";
+        Result = pas.JS.New(["put",Mark + "[" + Words + "](" + Address + ")","words",window.t("%s is uploaded.",Answer["name"])]);
+        return Result;
+      };
+      Kinds = $impl.TextOr(Textarea.dataset["uploadTypes"],"").split(" ").filter(Boolean);
+      Most = Number($impl.TextOr(Textarea.dataset["uploadMb"],"0"));
+      if ((Kinds.length === 0) || !Boolean(Most)) return null;
+      Gallery = "image/*";
+      if (Kinds.some(function (K, I, A) {
+        var Result = false;
+        Result = (new RegExp("^(mp4|webm|mov|m4v)$")).test("" + K);
+        return Result;
+      })) Gallery = Gallery + ",video/*";
+      Result = pas.JS.New(["accept",Kinds.map(function (K, I, A) {
+        var Result = undefined;
+        Result = "." + ("" + K);
+        return Result;
+      }).join(","),"gallery",Gallery,"label",window.t("add files"),"refuses",Refuses,"send",Send]);
+      return Result;
+    };
+    $impl.FileTool = function (Made) {
+      Made.tool(window.t("Add a file"),"",Made.svg('<path d="M20 11.5l-8.2 8.2a5 5 0 0 1-7-7l8.5-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.4 8.5a1.7 1.7 0 0 1-2.4-2.4l7.7-7.8"/>'),Made.choose);
+    };
+    $impl.AttachEditor = function (Textarea) {
+      var Form = null;
+      var Files = null;
+      var Hint = undefined;
+      var LinkTools = undefined;
+      async function Preview(Text, Signal) {
+        var Result = undefined;
+        var Fields = null;
+        var Response = null;
+        Fields = new URLSearchParams(new FormData(Form));
+        Fields.set("body",Text);
+        Response = await window.fetch("/api/forum/preview",pas.JS.New(["method","POST","body",Fields,"credentials","same-origin","signal",Signal]));
+        if (!Response.ok) throw new Error(await Response.text());
+        Result = (await Response.json())["html"];
+        return Result;
+      };
+      function Emoji() {
+        var Result = undefined;
+        Result = window.EmojiNames.list();
+        return Result;
+      };
+      if (!Boolean(window["Editor"])) return;
+      Form = Textarea.closest("form");
+      Files = $impl.FileRules(Textarea);
+      Hint = undefined;
+      LinkTools = undefined;
+      if (Files !== null) {
+        Hint = window.t("Markdown. Drag, paste or");
+        LinkTools = $impl.FileTool;
+      };
+      window.Editor.attach(Textarea,pas.JS.New(["compact",true,"mode","write","storeKey","forum-edit-mode","viewClass","forum-body body","emptyWords",window.t("The post shows here as you write."),"preview",Preview,"afterPreview",$impl.CodeButtons,"emoji",Emoji,"sendRow",Array.of(Form.querySelector(":scope > button"),Form.querySelector(":scope > .forum-error")),"hint",Hint,"linkTools",LinkTools,"pictures",Files]));
+    };
+    $impl.ForumForm = function (Form) {
+      async function Submit(Event) {
+        var Path = "";
+        var Target = "";
+        var Fields = null;
+        var error = null;
+        var Buttons = null;
+        var Boxes = null;
+        var Data = null;
+        var Page = undefined;
+        var Made = null;
+        var Same = false;
+        var Thanks = null;
+        var I = 0;
+        Event.preventDefault();
+        if (Boolean(Form.dataset["busy"])) return;
+        Path = window.SiteBase.strip(Form.getAttribute("action"));
+        if (Boolean(Form.dataset["confirm"]) && !window.confirm(Form.dataset["confirm"])) return;
+        Fields = new URLSearchParams(new FormData(Form));
+        error = Form.querySelector(".forum-error");
+        Buttons = Form.querySelectorAll("button");
+        error.textContent = "";
+        Form.dataset["busy"] = "1";
+        for (var $l = 0, $end = Buttons.length - 1; $l <= $end; $l++) {
+          I = $l;
+          Buttons.item(I).disabled = true;
+        };
+        try {
+          try {
+            Data = await $impl.Post(Path,Fields);
+            if (Boolean(Data["topic_id"])) {
+              if (Boolean(Data["page"])) {
+                Page = Data["page"]}
+               else Page = 1;
+              Target = window.SiteBase.url($impl.TopicAddress(Data["topic_id"],Page,Data["post_id"]));
+              Same = Target.split("#")[0] === (window.location.pathname + window.location.search);
+              window.location.assign(Target);
+              if (Same) window.location.reload();
+            } else if (Boolean(Data["topic_deleted"])) {
+              window.location.assign(window.SiteBase.url("/forum"))}
+             else if (Boolean(Data["reported"])) {
+              Thanks = document.createElement("p");
+              Thanks.textContent = window.t("Reported. The moderators will take a look.");
+              Form.replaceWith(Thanks);
+            } else window.location.reload();
+          } catch ($e) {
+            error["textContent"] = $e["message"];
+            Boxes = Form.querySelectorAll("textarea");
+            for (var $l1 = 0, $end1 = Boxes.length - 1; $l1 <= $end1; $l1++) {
+              I = $l1;
+              Made = Boxes.item(I)["editor"];
+              if (Boolean(Made) && Boolean(Made["notSaved"])) Made["notSaved"].call(Made);
+            };
+          };
+        } finally {
+          pas.JS.JSDelete(Form.dataset,"busy");
+          for (var $l2 = 0, $end2 = Buttons.length - 1; $l2 <= $end2; $l2++) {
+            I = $l2;
+            Buttons.item(I).disabled = false;
+          };
+        };
+      };
+      Form.addEventListener("submit",Submit);
+    };
+    $impl.QuoteLines = function (Text) {
+      var Result = "";
+      Result = Text.split("\n").map(function (Line, I, A) {
+        var Result = undefined;
+        Result = "> " + ("" + Line);
+        return Result;
+      }).join("\n");
+      return Result;
+    };
+    $impl.QuoteMarkdown = function (Author, Topic, PostId, Body) {
+      var Result = "";
+      var Name = "";
+      var Number_ = "";
+      Name = Author.replace(new RegExp("([\\\\`*_[\\]<>])","g"),"\\$1");
+      Number_ = "" + Number(PostId);
+      Result = "> **" + Name + "** " + window.t("wrote") + " ([" + window.t("post") + "](/forum/t/" + ("" + Number(Topic)) + "?post=" + Number_ + "#post-" + Number_ + ")):\n" + $impl.QuoteLines(Body.replace(new RegExp("\\r\\n?","g"),"\n")) + "\n\n";
+      return Result;
+    };
+    $impl.AddQuote = function (Author, Topic, PostId, Text) {
+      var Reply = null;
+      var Textarea = null;
+      var Gap = "";
+      Reply = document.querySelector("#quick-reply");
+      if (Reply === null) return;
+      Textarea = Reply.querySelector(".forum-editor");
+      if (Textarea.value !== "") {
+        Gap = "\n\n"}
+       else Gap = "";
+      Textarea.value = Textarea.value + Gap + $impl.QuoteMarkdown(Author,Topic,PostId,Text);
+      Textarea.dispatchEvent(new Event("input",pas.JS.New(["bubbles",true])));
+      Textarea.focus();
+      Reply.scrollIntoView(pas.JS.New(["block","start"]));
+    };
+    $impl.QuoteButton = function (Button) {
+      Button.addEventListener("click",function (E) {
+        var Said = null;
+        Said = Button.dataset;
+        $impl.AddQuote(Said["author"],Said["topic"],Said["post"],Said["body"]);
       });
-      Object.assign(fresh.dataset, row.dataset);
-      if (add && lists.shown.length + lists.more.length) {
-        const more = Side.iconButton('react', t('Add a reaction'), 'forum-react-add');
-        more.addEventListener('click', function () { Reactions.choose(more, lists, react); });
-        fresh.appendChild(more);
-      }
-      const here = row.contains(document.activeElement);
-      row.replaceWith(fresh);
-      if (here && fresh.lastElementChild) fresh.lastElementChild.focus({preventScroll: true});
-    }
-    document.querySelectorAll('.forum-post .reacts').forEach(function (row) {
-      draw(row, Array.from(row.children).map(function (chip) {
-        return {r: chip.dataset.r, n: Number(chip.dataset.n), mine: chip.classList.contains('mine')};
-      }));
-    });
-  })();
-  document.querySelectorAll('[data-forum-new]').forEach(function (anchor) {
-    anchor.addEventListener('click', function () { document.querySelector('#new-topic').open = true; });
-  });
-  document.querySelectorAll('[data-forum-panel]').forEach(function (button) {
-    button.addEventListener('click', function () {
-      const panel = document.getElementById(button.dataset.forumPanel);
-      const opening = panel.hidden;
-      const post = button.closest('.forum-post-content');
-      post.querySelectorAll('.forum-action-panel').forEach(function (other) { other.hidden = true; });
-      post.querySelectorAll('[data-forum-panel]').forEach(function (other) { other.setAttribute('aria-expanded', 'false'); });
-      panel.hidden = !opening;
-      button.setAttribute('aria-expanded', String(opening));
-      if (opening) {
-        const field = panel.querySelector('textarea, input:not([type=hidden]), button');
-        if (field) field.focus();
-      }
-    });
-  });
-  // Back to a list the browser kept as it was: what was unread then may
-  // have been read since, so the list is fetched again.
-  window.addEventListener('pageshow', function (e) {
-    if (e.persisted && document.querySelector('.forum-topics, .forum-boards')) location.reload();
-  });
-  // Who started the topic ticks the reply that solved it: the page comes
-  // again with the mark on it and on the topic.
-  document.querySelectorAll('input[data-forum-solve]').forEach(function (box) {
-    box.addEventListener('change', async function () {
-      box.disabled = true;
-      try {
-        const response = await fetch('/api/forum/solved', {method: 'POST', credentials: 'same-origin',
-          body: new URLSearchParams({post: box.dataset.forumSolve, on: box.checked ? '1' : '0'})});
-        if (!response.ok) throw new Error((await response.text()).trim().slice(0, 200));
-        location.reload();
-      } catch (e) {
-        box.checked = !box.checked;
-        box.disabled = false;
-        alert(e.message);
-      }
-    });
-  });
-  document.querySelectorAll('.forum-editor').forEach(editor);
-  codeButtons(document);
-  document.querySelectorAll('[data-forum-tools]').forEach(function (tools) { tools.hidden = false; });
-})();
+    };
+    $impl.MarkdownOf = function (Node, InCode) {
+      var Result = "";
+      var El = null;
+      var Lang = null;
+      var Pre = null;
+      var Tag = "";
+      var Mark = "";
+      var Cells = null;
+      var I = 0;
+      function Kids(Code) {
+        var Result = "";
+        var K = 0;
+        Result = "";
+        for (var $l = 0, $end = Node.childNodes.length - 1; $l <= $end; $l++) {
+          K = $l;
+          Result = Result + $impl.MarkdownOf(Node.childNodes.item(K),Code);
+        };
+        return Result;
+      };
+      function Fence(Language, Text) {
+        var Result = "";
+        Result = "\n\n```" + Language + "\n" + Text.replace(new RegExp("\\n+$"),"") + "\n```\n\n";
+        return Result;
+      };
+      if (Node.nodeType === 3) {
+        if (InCode) return Node.nodeValue;
+        return Node.nodeValue.replace(new RegExp("\\s+","g")," ");
+      };
+      if ((Node.nodeType !== 1) && (Node.nodeType !== 11)) return "";
+      if (Node.nodeType === 11) return Kids(InCode);
+      El = Node;
+      Tag = El.tagName;
+      if (El.classList.contains("code")) {
+        Lang = El.querySelector(".codebar span");
+        Pre = El.querySelector("pre");
+        if (Pre === null) return "";
+        if (Lang !== null) return Fence(Lang.textContent.trim(),Pre.textContent);
+        return Fence("",Pre.textContent);
+      };
+      if (El.classList.contains("codebar") || (Tag === "BUTTON")) return "";
+      if (Tag === "PRE") return Fence("",El.textContent);
+      if (Tag === "IMG") return "![" + $impl.TextOr(El.getAttribute("alt"),"") + "](" + window.SiteBase.strip($impl.TextOr(El.getAttribute("src"),"")) + ")";
+      if (Tag === "A") return "[" + Kids(false) + "](" + window.SiteBase.strip($impl.TextOr(El.getAttribute("href"),"")) + ")";
+      if ((Tag === "B") || (Tag === "STRONG")) return "**" + Kids(false) + "**";
+      if ((Tag === "I") || (Tag === "EM")) return "*" + Kids(false) + "*";
+      if ((Tag === "DEL") || (Tag === "S")) return "~~" + Kids(false) + "~~";
+      if (Tag === "CODE") return "`" + El.textContent + "`";
+      if (Tag === "BR") return "\n";
+      if ((new RegExp("^H[1-6]$")).test(Tag)) return "\n\n" + "#".repeat(Number(Tag.charAt(1))) + " " + Kids(false) + "\n\n";
+      if (Tag === "LI") {
+        if ((El.parentElement !== null) && (El.parentElement.tagName === "OL")) {
+          Mark = "1. "}
+         else Mark = "- ";
+        return Mark + Kids(false).trim() + "\n";
+      };
+      if ((Tag === "UL") || (Tag === "OL")) return "\n\n" + Kids(false) + "\n";
+      if (Tag === "BLOCKQUOTE") return "\n\n" + $impl.QuoteLines(Kids(false).trim()) + "\n\n";
+      if (Tag === "TR") {
+        Cells = new Array();
+        for (var $l = 0, $end = El.children.length - 1; $l <= $end; $l++) {
+          I = $l;
+          Cells.push($impl.MarkdownOf(El.children.item(I),false).trim());
+        };
+        return "| " + Cells.join(" | ") + " |\n";
+      };
+      if (Tag === "THEAD") return Kids(false) + "|" + "---|".repeat(El.querySelectorAll("th").length) + "\n";
+      if (Tag === "TABLE") return "\n\n" + Kids(false) + "\n";
+      if ((Tag === "P") || (Tag === "DIV")) return "\n\n" + Kids(false) + "\n\n";
+      Result = Kids(InCode);
+      return Result;
+    };
+    $impl.SelectionMarkdown = function (Range) {
+      var Result = "";
+      var From = null;
+      var At = null;
+      var Block = null;
+      var Lang = null;
+      var Text = "";
+      var Line = "";
+      var Code = false;
+      var Lines = null;
+      var I = 0;
+      From = Range.commonAncestorContainer;
+      if (From.nodeType === 1) {
+        At = From}
+       else At = From.parentElement;
+      if (At !== null) {
+        Block = At.closest(".code")}
+       else Block = null;
+      if ((Block !== null) && (At.closest("pre") !== null)) {
+        Lang = Block.querySelector(".codebar span");
+        Text = Range.toString().replace(new RegExp("\\n+$"),"");
+        if (Text.trim() === "") return "";
+        if (Lang !== null) return "```" + Lang.textContent.trim() + "\n" + Text + "\n```";
+        return "```\n" + Text + "\n```";
+      };
+      Code = false;
+      Lines = $impl.MarkdownOf(Range.cloneContents(),false).split("\n");
+      for (var $l = 0, $end = Lines.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Line = "" + Lines[I];
+        if ((new RegExp("^\\s*```")).test(Line)) {
+          Code = !Code;
+          Lines[I] = Line.trim();
+        } else if (!Code) Lines[I] = Line.replace(new RegExp("\\s+$"),"").replace(new RegExp("^ (?=\\S)"),"");
+      };
+      Result = Lines.join("\n").replace(new RegExp("\\n{3,}","g"),"\n\n").trim();
+      return Result;
+    };
+    $impl.QuoteSelection = function () {
+      var Offer = null;
+      var Picked = null;
+      var Later = 0;
+      function BodyOf(Node) {
+        var Result = null;
+        var At = null;
+        var Body = null;
+        Result = null;
+        if (!Boolean(Node)) return Result;
+        if (Node.nodeType === 1) {
+          At = Node}
+         else At = Node.parentElement;
+        if (At !== null) {
+          Body = At.closest(".forum-body")}
+         else Body = null;
+        if ((Body !== null) && (Body.parentElement !== null) && Body.parentElement.classList.contains("forum-post-content")) Result = Body;
+        return Result;
+      };
+      function Look() {
+        var Chosen = null;
+        var Body = null;
+        var Text = "";
+        var Button = null;
+        var Box = null;
+        Offer.hidden = true;
+        Picked = null;
+        Chosen = window.getSelection();
+        if ((Chosen === null) || Chosen.isCollapsed || (Chosen.rangeCount === 0)) return;
+        Body = BodyOf(Chosen.anchorNode);
+        if (Body !== null) {
+          Text = $impl.SelectionMarkdown(Chosen.getRangeAt(0))}
+         else Text = "";
+        if ((Text === "") || (Body === null) || (Body !== BodyOf(Chosen.focusNode))) return;
+        Button = Body.closest(".forum-post").querySelector(".forum-quote");
+        if (Button === null) return;
+        Picked = pas.JS.New(["author",Button.dataset["author"],"topic",Button.dataset["topic"],"post",Button.dataset["post"],"text",Text]);
+        Box = Chosen.getRangeAt(0).getBoundingClientRect();
+        Offer.hidden = false;
+        Offer.style.setProperty("top","" + (window.scrollY + Box.bottom + 6) + "px");
+        Offer.style.setProperty("left","" + (window.scrollX + Math.max(8,Math.min(Box.left,document.documentElement.clientWidth - Offer.offsetWidth - 8))) + "px");
+      };
+      function Soon(E) {
+        window.clearTimeout(Later);
+        Later = window.setTimeout(rtl.createSafeCallback(null,Look),150);
+      };
+      if (!Boolean(document.querySelector("#quick-reply")) || !Boolean(document.body) || (typeof(window["getSelection"]) !== "function")) return;
+      Offer = document.createElement("button");
+      Offer.type = "button";
+      Offer.className = "forum-quote-selection";
+      Offer.textContent = window.t("Quote selection");
+      Offer.hidden = true;
+      document.body.appendChild(Offer);
+      Picked = null;
+      Later = 0;
+      document.addEventListener("mouseup",Soon);
+      document.addEventListener("keyup",Soon);
+      document.addEventListener("selectionchange",Soon);
+      Offer.addEventListener("mousedown",function (E) {
+        E.preventDefault();
+      });
+      Offer.addEventListener("click",function (E) {
+        if (Picked === null) return;
+        $impl.AddQuote(Picked["author"],Picked["topic"],Picked["post"],Picked["text"]);
+        window.getSelection().removeAllRanges();
+        Offer.hidden = true;
+      });
+    };
+    $impl.PostReactions = function () {
+      var Offered = null;
+      var Lists = null;
+      var Rows = null;
+      var I = 0;
+      function Words(Text) {
+        var Result = null;
+        Result = Text.split(" ").filter(Boolean);
+        return Result;
+      };
+      function Draw(Row, List) {
+        var Id = undefined;
+        var Add = false;
+        var Here = false;
+        var Fresh = null;
+        var More = null;
+        async function React(Emoji) {
+          try {
+            Draw(Fresh,(await $impl.Post("/api/forum/react",new URLSearchParams(pas.JS.New(["post",Id,"r",Emoji]))))["reactions"]);
+          } catch ($e) {
+            window.alert("" + $e["message"]);
+          };
+        };
+        function Toggle(R) {
+          if (Add || ((Lists !== null) && Boolean(R["mine"]))) React(R["r"]);
+        };
+        async function Who(R) {
+          var Result = undefined;
+          var Response = null;
+          Response = await pas.PageKit.Get("/api/forum/reacted?post=" + ("" + Id) + "&r=" + encodeURIComponent("" + R["r"]),null);
+          if (!Response.ok) throw new Error(await Response.text());
+          Result = await Response.json();
+          return Result;
+        };
+        Id = Row.dataset["post"];
+        Add = (Lists !== null) && pas.JS.jsIn("add",Row.dataset);
+        Fresh = window.Reactions.chips(List,pas.JS.New(["toggle",Toggle,"who",Who]));
+        Object.assign(Fresh.dataset,Row.dataset);
+        if (Add && ((Lists["shown"].length + Lists["more"].length) > 0)) {
+          More = window.Side.iconButton("react",window.t("Add a reaction"),"forum-react-add");
+          More.addEventListener("click",function (E) {
+            window.Reactions.choose(More,Lists,React);
+          });
+          Fresh.appendChild(More);
+        };
+        Here = Row.contains(document.activeElement);
+        Row.replaceWith(Fresh);
+        if (Here && (Fresh.lastElementChild !== null)) Fresh.lastElementChild.focus(pas.JS.New(["preventScroll",true]));
+      };
+      function Drawn(Row) {
+        var Result = null;
+        Result = Array.from(Row.children).map(function (Chip, N, A) {
+          var Result = undefined;
+          Result = pas.JS.New(["r",Chip.dataset["r"],"n",Number(Chip.dataset["n"]),"mine",Chip.classList.contains("mine")]);
+          return Result;
+        });
+        return Result;
+      };
+      Offered = document.getElementById("forum-reactions");
+      if (Offered !== null) {
+        Lists = pas.JS.New(["shown",Words(Offered.dataset["shown"]),"more",Words(Offered.dataset["more"])])}
+       else Lists = null;
+      Rows = document.querySelectorAll(".forum-post .reacts");
+      for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Draw(Rows.item(I),Drawn(Rows.item(I)));
+      };
+    };
+    $impl.NewTopicLink = function (Anchor) {
+      Anchor.addEventListener("click",function (E) {
+        document.querySelector("#new-topic")["open"] = true;
+      });
+    };
+    $impl.PanelButton = function (Button) {
+      Button.addEventListener("click",function (E) {
+        var Panel = null;
+        var Field = null;
+        var Opening = false;
+        var Content = null;
+        var Others = null;
+        var I = 0;
+        Panel = document.getElementById(Button.dataset["forumPanel"]);
+        Opening = Panel.hidden;
+        Content = Button.closest(".forum-post-content");
+        Others = Content.querySelectorAll(".forum-action-panel");
+        for (var $l = 0, $end = Others.length - 1; $l <= $end; $l++) {
+          I = $l;
+          Others.item(I).hidden = true;
+        };
+        Others = Content.querySelectorAll("[data-forum-panel]");
+        for (var $l1 = 0, $end1 = Others.length - 1; $l1 <= $end1; $l1++) {
+          I = $l1;
+          Others.item(I).setAttribute("aria-expanded","false");
+        };
+        Panel.hidden = !Opening;
+        Button.setAttribute("aria-expanded","" + Opening);
+        if (Opening) {
+          Field = Panel.querySelector("textarea, input:not([type=hidden]), button");
+          if (Field !== null) Field.focus();
+        };
+      });
+    };
+    $impl.SolveBox = function (Box) {
+      async function Changed(E) {
+        var Response = null;
+        var Mark = "";
+        Box.disabled = true;
+        try {
+          if (Box.checked) {
+            Mark = "1"}
+           else Mark = "0";
+          Response = await pas.PageKit.Post("/api/forum/solved",new URLSearchParams(pas.JS.New(["post",Box.dataset["forumSolve"],"on",Mark])),null);
+          if (!Response.ok) throw new Error((await Response.text()).trim().slice(0,200));
+          window.location.reload();
+        } catch ($e) {
+          Box.checked = !Box.checked;
+          Box.disabled = false;
+          window.alert("" + $e["message"]);
+        };
+      };
+      Box.addEventListener("change",Changed);
+    };
+    $impl.Start = function () {
+      var Nodes = null;
+      var I = 0;
+      Nodes = document.querySelectorAll("form[data-forum-form]");
+      for (var $l = 0, $end = Nodes.length - 1; $l <= $end; $l++) {
+        I = $l;
+        $impl.ForumForm(Nodes.item(I));
+      };
+      Nodes = document.querySelectorAll(".forum-quote");
+      for (var $l1 = 0, $end1 = Nodes.length - 1; $l1 <= $end1; $l1++) {
+        I = $l1;
+        $impl.QuoteButton(Nodes.item(I));
+      };
+      $impl.QuoteSelection();
+      $impl.PostReactions();
+      Nodes = document.querySelectorAll("[data-forum-new]");
+      for (var $l2 = 0, $end2 = Nodes.length - 1; $l2 <= $end2; $l2++) {
+        I = $l2;
+        $impl.NewTopicLink(Nodes.item(I));
+      };
+      Nodes = document.querySelectorAll("[data-forum-panel]");
+      for (var $l3 = 0, $end3 = Nodes.length - 1; $l3 <= $end3; $l3++) {
+        I = $l3;
+        $impl.PanelButton(Nodes.item(I));
+      };
+      window.addEventListener("pageshow",function (E) {
+        if (Boolean(E["persisted"]) && (document.querySelector(".forum-topics, .forum-boards") !== null)) window.location.reload();
+      });
+      Nodes = document.querySelectorAll("input[data-forum-solve]");
+      for (var $l4 = 0, $end4 = Nodes.length - 1; $l4 <= $end4; $l4++) {
+        I = $l4;
+        $impl.SolveBox(Nodes.item(I));
+      };
+      Nodes = document.querySelectorAll(".forum-editor");
+      for (var $l5 = 0, $end5 = Nodes.length - 1; $l5 <= $end5; $l5++) {
+        I = $l5;
+        $impl.AttachEditor(Nodes.item(I));
+      };
+      $impl.CodeButtons(document);
+      Nodes = document.querySelectorAll("[data-forum-tools]");
+      for (var $l6 = 0, $end6 = Nodes.length - 1; $l6 <= $end6; $l6++) {
+        I = $l6;
+        Nodes.item(I).hidden = false;
+      };
+    };
+  };
+  $mod.$init = function () {
+    $impl.Start();
+  };
+},["JS","Web","PageKit","PageGlobals"]);
+
+rtl.run('ForumPage');
+}

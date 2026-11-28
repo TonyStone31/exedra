@@ -1,89 +1,152 @@
-// The home page and the sign-in page: joining, a forgotten password, signing out, filtering a list.
-(function () {
-  // Back where the reader was before signing in, a page here only.
-  // Browsers drop tabs and line breaks from an address, so '/<tab>/elsewhere'
-  // would leave the site: control characters refuse it, and the address must
-  // stay on this site once read as a URL.
-  function returnAddress() {
-    const back = new URLSearchParams(location.search).get('return') || '';
-    if (back.charAt(0) !== '/' || /^.[\/\\]/.test(back) || /[\u0000-\u001f\u007f\\]/.test(back)) return '';
-    let url;
-    try { url = new URL(back, location.origin); } catch (e) { return ''; }
-    if (url.origin !== location.origin || url.pathname.indexOf('/signin') === 0) return '';
-    // the address as the site knows it; SiteBase.url puts the base back
-    return url.pathname + url.search + url.hash;
-  }
-
-  // The sign-in buttons for GitHub and the rest take it along.
-  if (returnAddress()) {
-    document.querySelectorAll('a.sso[href^="' + SiteBase.url('/signin-with/') + '"]').forEach(function (a) {
-      a.href = SiteBase.strip(a.getAttribute('href')).split('?')[0] + '?return=' + encodeURIComponent(returnAddress());
-    });
-  }
-
-  Keys.bindJoinForms(function () {
-    if (returnAddress()) { location.href = SiteBase.url(returnAddress()); return; }
-    const chat = document.querySelector('.topbar nav a');
-    location.href = chat ? chat.getAttribute('href') : SiteBase.url('/');
-  });
-
-  document.querySelectorAll('form.newpassword').forEach(function (form) {
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
+if (!pas.home) {
+rtl.module("home",["System"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  $mod.$implcode = function () {
+    $impl.ReturnAddress = function () {
+      var Result = "";
+      var Back = "";
+      var Value = undefined;
+      var Url = null;
+      Result = "";
+      Value = (new URLSearchParams(window.location.search)).get("return");
+      if (pas.JS.isNull(Value) || pas.JS.isUndefined(Value)) return Result;
+      Back = "" + Value;
+      if ((Back.charAt(0) !== "/") || (new RegExp("^.[/\\\\]")).test(Back) || (new RegExp("[\\u0000-\\u001f\\u007f\\\\]")).test(Back)) return Result;
       try {
-        await Keys.setNewPassword(form.dataset.token, form.dataset.name, form.elements.password.value);
-        location.href = SiteBase.url('/');
-      } catch (err) {
-        alert(err.message);
-      }
-    });
-  });
-
-  // Forgot the password: a link by mail, to the address the account confirmed.
-  // The box starts closed; how long it has been open goes along (-1: never
-  // opened), so a machine that fills it the moment the page shows is told
-  // the usual answer and nothing is mailed.  The hidden field likewise.
-  document.querySelectorAll('form.forgot').forEach(function (form) {
-    var box = form.closest('details'), opened = box && box.open ? Date.now() : 0;
-    if (box) box.addEventListener('toggle', function () { if (box.open && !opened) opened = Date.now(); });
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      try {
-        alert(await Keys.post('/api/forgot', {who: form.elements.who.value,
-          website: form.elements.website ? form.elements.website.value : '',
-          opened: opened ? Date.now() - opened : -1}));
-      } catch (err) {
-        alert(err.message);
-      }
-    });
-  });
-
-  document.querySelectorAll('.signout').forEach(function (a) {
-    a.addEventListener('click', async function (e) {
-      e.preventDefault();
-      await Keys.signOut();
-      location.reload();
-    });
-  });
-
-  document.querySelectorAll('pre.copy').forEach(function (pre) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'copybtn';
-    b.textContent = t('Copy');
-    b.addEventListener('click', function () {
-      navigator.clipboard.writeText(pre.textContent).then(function () { b.textContent = t('Copied'); });
-    });
-    pre.before(b);
-  });
-
-  const find = document.getElementById('find');
-  if (find) {
-    find.addEventListener('input', function () {
-      const words = this.value.toLowerCase().trim();
-      document.querySelectorAll('[data-find]').forEach(function (a) {
-        a.hidden = words !== '' && !a.dataset.find.includes(words);
+        Url = new URL(Back,window.location.origin);
+      } catch ($e) {
+        return Result;
+      };
+      if ((Url.origin !== window.location.origin) || (Url.pathname.indexOf("/signin",0) === 0)) return Result;
+      Result = Url.pathname + Url.search + Url.hash;
+      return Result;
+    };
+    $impl.Joined = function () {
+      var Chat = null;
+      if ($impl.ReturnAddress() !== "") {
+        window.location.href = window.SiteBase.url($impl.ReturnAddress());
+        return;
+      };
+      Chat = document.querySelector(".topbar nav a");
+      if (Chat !== null) {
+        window.location.href = Chat.getAttribute("href")}
+       else window.location.href = window.SiteBase.url("/");
+    };
+    $impl.NewPassword = function (Form) {
+      async function Save(E) {
+        E.preventDefault();
+        try {
+          await window.Keys.setNewPassword(Form.dataset["token"],Form.dataset["name"],Form.elements.namedItem("password").value);
+          window.location.href = window.SiteBase.url("/");
+        } catch ($e) {
+          window.alert("" + $e["message"]);
+        };
+      };
+      Form.addEventListener("submit",Save);
+    };
+    $impl.Forgot = function (Form) {
+      var Box = null;
+      var Opened = 0;
+      async function Send(E) {
+        var Website = null;
+        var Address = "";
+        var Age = 0;
+        E.preventDefault();
+        try {
+          Website = Form.elements.namedItem("website");
+          Address = "";
+          if (Website !== null) Address = Website.value;
+          Age = -1;
+          if (Opened !== 0) Age = Date.now() - Opened;
+          window.alert(await window.Keys.post("/api/forgot",pas.JS.New(["who",Form.elements.namedItem("who").value,"website",Address,"opened",Age])));
+        } catch ($e) {
+          window.alert("" + $e["message"]);
+        };
+      };
+      Box = Form.closest("details");
+      Opened = 0;
+      if ((Box !== null) && (Box["open"] == true)) Opened = Date.now();
+      if (Box !== null) Box.addEventListener("toggle",function (E) {
+        if ((Box["open"] == true) && (Opened === 0)) Opened = Date.now();
       });
-    });
-  }
-})();
+      Form.addEventListener("submit",Send);
+    };
+    $impl.SignOut = async function (E) {
+      E.preventDefault();
+      await window.Keys.signOut();
+      window.location.reload();
+    };
+    $impl.CopyText = function (Pre) {
+      var Button = null;
+      Button = pas.PageKit.MakeElement("button","copybtn");
+      Button.type = "button";
+      Button.textContent = pas.PageKit.Word("Copy");
+      Button.addEventListener("click",function (E) {
+        window.navigator.clipboard.writeText(Pre.textContent).then(function (Value) {
+          var Result = undefined;
+          Button.textContent = pas.PageKit.Word("Copied");
+          return Result;
+        });
+      });
+      Pre.before(Button);
+    };
+    $impl.Filter = function (E) {
+      var Words = "";
+      var Items = null;
+      var I = 0;
+      var Item = null;
+      Words = E.currentTarget.value.toLowerCase().trim();
+      Items = document.querySelectorAll("[data-find]");
+      for (var $l = 0, $end = Items.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Item = Items.item(I);
+        Item.hidden = (Words !== "") && !Item.dataset["find"].includes(Words,0);
+      };
+    };
+    $impl.Start = function () {
+      var Nodes = null;
+      var I = 0;
+      var A = null;
+      var Find = null;
+      if ($impl.ReturnAddress() !== "") {
+        Nodes = document.querySelectorAll('a.sso[href^="' + window.SiteBase.url("/signin-with/") + '"]');
+        for (var $l = 0, $end = Nodes.length - 1; $l <= $end; $l++) {
+          I = $l;
+          A = Nodes.item(I);
+          A.href = window.SiteBase.strip(A.getAttribute("href")).split("?")[0] + "?return=" + encodeURIComponent($impl.ReturnAddress());
+        };
+      };
+      window.Keys.bindJoinForms($impl.Joined);
+      Nodes = document.querySelectorAll("form.newpassword");
+      for (var $l1 = 0, $end1 = Nodes.length - 1; $l1 <= $end1; $l1++) {
+        I = $l1;
+        $impl.NewPassword(Nodes.item(I));
+      };
+      Nodes = document.querySelectorAll("form.forgot");
+      for (var $l2 = 0, $end2 = Nodes.length - 1; $l2 <= $end2; $l2++) {
+        I = $l2;
+        $impl.Forgot(Nodes.item(I));
+      };
+      Nodes = document.querySelectorAll(".signout");
+      for (var $l3 = 0, $end3 = Nodes.length - 1; $l3 <= $end3; $l3++) {
+        I = $l3;
+        Nodes.item(I).addEventListener("click",$impl.SignOut);
+      };
+      Nodes = document.querySelectorAll("pre.copy");
+      for (var $l4 = 0, $end4 = Nodes.length - 1; $l4 <= $end4; $l4++) {
+        I = $l4;
+        $impl.CopyText(Nodes.item(I));
+      };
+      Find = document.getElementById("find");
+      if (Find !== null) Find.addEventListener("input",$impl.Filter);
+    };
+  };
+  $mod.$init = function () {
+    $impl.Start();
+  };
+},["JS","Web","PageKit","PageGlobals"]);
+
+rtl.run('home');
+}

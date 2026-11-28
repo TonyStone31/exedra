@@ -1,116 +1,205 @@
-'use strict';
-document.querySelectorAll('.wiki-file-upload').forEach(form => {
-  const message = document.createElement('p');
-  message.setAttribute('role', 'status');
-  form.append(message);
-  form.addEventListener('submit', async event => {
-    event.preventDefault();
-    const button = form.querySelector('button');
-    button.disabled = true;
-    message.textContent = '';
-    try {
-      const response = await fetch(form.action, {method: 'POST', body: new FormData(form)});
-      if (!response.ok) {
-        const content = await response.text();
+if (!pas.WikiFilesPage) {
+rtl.module("WikiFilesPage",["System"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  $mod.$implcode = function () {
+    $impl.Say = function (Text) {
+      var Result = "";
+      if (Boolean(window["t"])) {
+        Result = window.t(Text)}
+       else Result = Text;
+      return Result;
+    };
+    $impl.Upload = function (Form) {
+      var Message = null;
+      async function Send(E) {
+        var Button = null;
+        var Response = null;
+        var Content = "";
+        var Conflict = null;
+        var Info = null;
+        E.preventDefault();
+        Button = Form.querySelector("button");
+        Button.disabled = true;
+        Message.textContent = "";
         try {
-          const conflict = JSON.parse(content);
-          if (conflict.conflict) {
-            form.elements.name.value = conflict.suggested;
-            message.textContent = window.t('That name is already used. A free name has been filled in.');
-            return;
-          }
-        } catch (_) { /* The server also returns plain text refusals. */ }
-        throw new Error(content);
-      }
-      const info = await response.json();
-      location.assign(SiteBase.url(info.page));
-    } catch (error) {
-      message.textContent = error.message;
-    } finally {
-      button.disabled = false;
-    }
-  });
-});
-// deleting takes every version: ask first
-document.querySelectorAll('form.wiki-file-delete[data-confirm]').forEach(form => {
-  form.addEventListener('submit', event => {
-    if (!window.confirm(form.dataset.confirm)) event.preventDefault();
-  });
-});
-// the library's viewer: a picture large, with its neighbours a key or a
-// swipe away; Escape, the close button or a click outside leaves it
-(() => {
-  const grid = document.querySelector('.wiki-file-grid');
-  if (!grid) return;
-  const items = Array.from(grid.querySelectorAll('a[data-view]'));
-  if (!items.length) return;
-  const t = window.t || (s => s);
-  const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
-  const box = make('div', 'wiki-viewer');
-  box.setAttribute('role', 'dialog');
-  box.setAttribute('aria-modal', 'true');
-  box.hidden = true;
-  const stage = make('div', 'wiki-viewer-stage');
-  const img = make('img');
-  img.alt = '';
-  stage.append(img);
-  const prev = make('button', 'wiki-viewer-prev', '‹');
-  const next = make('button', 'wiki-viewer-next', '›');
-  const close = make('button', 'wiki-viewer-close', '×');
-  prev.type = next.type = close.type = 'button';
-  prev.setAttribute('aria-label', t('Previous'));
-  next.setAttribute('aria-label', t('Next'));
-  close.setAttribute('aria-label', t('Close'));
-  const bar = make('div', 'wiki-viewer-bar');
-  const name = make('b');
-  const info = make('span');
-  const open = make('a', '', t('Open its page'));
-  bar.append(name, info, open);
-  box.append(stage, prev, next, close, bar);
-  document.body.append(box);
-  let at = 0, back = null;
-  const show = i => {
-    at = (i + items.length) % items.length;
-    const a = items[at];
-    img.src = a.dataset.view;
-    name.textContent = a.querySelector('.wiki-file-name').textContent;
-    info.textContent = a.dataset.size + ' · ' + (at + 1) + ' / ' + items.length;
-    open.href = SiteBase.strip(a.getAttribute('href'));
-    // the next one starts loading now, so a key press shows it at once
-    new Image().src = items[(at + 1) % items.length].dataset.view;
+          try {
+            Response = await window.fetch(Form.action,pas.JS.New(["method","POST","body",new FormData(Form)]));
+            if (!Response.ok) {
+              Content = await Response.text();
+              try {
+                Conflict = JSON.parse(Content);
+                if (Boolean(Conflict["conflict"])) {
+                  Form.elements.namedItem("name")["value"] = Conflict["suggested"];
+                  Message.textContent = window.t("That name is already used. A free name has been filled in.");
+                  return;
+                };
+              } catch ($e) {
+              };
+              throw new Error(Content);
+            };
+            Info = await Response.json();
+            window.location.assign(window.SiteBase.url("" + Info["page"]));
+          } catch ($e) {
+            Message.textContent = "" + $e["message"];
+          };
+        } finally {
+          Button.disabled = false;
+        };
+      };
+      Message = pas.PageKit.MakeElement("p","");
+      Message.setAttribute("role","status");
+      Form.appendChild(Message);
+      Form.addEventListener("submit",Send);
+    };
+    $impl.ConfirmDelete = function (Form) {
+      Form.addEventListener("submit",function (E) {
+        if (!window.confirm(Form.dataset["confirm"])) E.preventDefault();
+      });
+    };
+    $impl.Viewer = function () {
+      var Grid = null;
+      var Items = null;
+      var Box = null;
+      var Stage = null;
+      var Prev = null;
+      var Next = null;
+      var Close = null;
+      var Bar = null;
+      var Name = null;
+      var Info = null;
+      var Img = null;
+      var Open = null;
+      var At = 0;
+      var Back = null;
+      var StartX = undefined;
+      var I = 0;
+      function Show(N) {
+        var A = null;
+        At = (N + Items.length) % Items.length;
+        A = Items.item(At);
+        Img.src = A.dataset["view"];
+        Name.textContent = A.querySelector(".wiki-file-name").textContent;
+        Info.textContent = A.dataset["size"] + " · " + ("" + (At + 1)) + " / " + ("" + Items.length);
+        Open.href = window.SiteBase.strip(A.getAttribute("href"));
+        (new Image()).src = Items.item((At + 1) % Items.length).dataset["view"];
+      };
+      function Leave() {
+        Box.hidden = true;
+        document.documentElement.classList.remove("wiki-viewing");
+        if (Back !== null) Back.focus();
+      };
+      function Bind(A, N) {
+        A.addEventListener("click",function (E) {
+          var Click = null;
+          Click = E;
+          if (Click.ctrlKey || Click.metaKey || Click.shiftKey || (Click.button !== 0)) return;
+          E.preventDefault();
+          Back = A;
+          Show(N);
+          Box.hidden = false;
+          document.documentElement.classList.add("wiki-viewing");
+          Close.focus();
+        });
+      };
+      Grid = document.querySelector(".wiki-file-grid");
+      if (Grid === null) return;
+      Items = Grid.querySelectorAll("a[data-view]");
+      if (Items.length === 0) return;
+      Box = pas.PageKit.MakeElement("div","wiki-viewer");
+      Box.setAttribute("role","dialog");
+      Box.setAttribute("aria-modal","true");
+      Box.hidden = true;
+      Stage = pas.PageKit.MakeElement("div","wiki-viewer-stage");
+      Img = pas.PageKit.MakeElement("img","");
+      Img.alt = "";
+      Stage.appendChild(Img);
+      Prev = pas.PageKit.MakeElement("button","wiki-viewer-prev");
+      Prev.textContent = "‹";
+      Next = pas.PageKit.MakeElement("button","wiki-viewer-next");
+      Next.textContent = "›";
+      Close = pas.PageKit.MakeElement("button","wiki-viewer-close");
+      Close.textContent = "×";
+      Prev.type = "button";
+      Next.type = "button";
+      Close.type = "button";
+      Prev.setAttribute("aria-label",$impl.Say("Previous"));
+      Next.setAttribute("aria-label",$impl.Say("Next"));
+      Close.setAttribute("aria-label",$impl.Say("Close"));
+      Bar = pas.PageKit.MakeElement("div","wiki-viewer-bar");
+      Name = pas.PageKit.MakeElement("b","");
+      Info = pas.PageKit.MakeElement("span","");
+      Open = pas.PageKit.MakeElement("a","");
+      Open.textContent = $impl.Say("Open its page");
+      Bar.append(Name,Info,Open);
+      Box.append(Stage,Prev,Next,Close,Bar);
+      document.body.appendChild(Box);
+      At = 0;
+      Back = null;
+      for (var $l = 0, $end = Items.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Bind(Items.item(I),I);
+      };
+      Prev.addEventListener("click",function (E) {
+        Show(At - 1);
+      });
+      Next.addEventListener("click",function (E) {
+        Show(At + 1);
+      });
+      Close.addEventListener("click",function (E) {
+        Leave();
+      });
+      Box.addEventListener("click",function (E) {
+        if ((E.target === Box) || (E.target === Stage)) Leave();
+      });
+      document.addEventListener("keydown",function (E) {
+        var Key = "";
+        if (Box.hidden) return;
+        Key = E.key;
+        if (Key === "Escape") {
+          Leave()}
+         else if (Key === "ArrowLeft") {
+          Show(At - 1)}
+         else if (Key === "ArrowRight") {
+          Show(At + 1)}
+         else return;
+        E.preventDefault();
+      });
+      StartX = null;
+      Stage.addEventListener("touchstart",function (E) {
+        StartX = E.touches.item(0).clientX;
+      },pas.JS.New(["passive",true]));
+      Stage.addEventListener("touchend",function (E) {
+        var Dx = 0.0;
+        if (pas.JS.isNull(StartX)) return;
+        Dx = E.changedTouches.item(0).clientX - rtl.getNumber(StartX);
+        StartX = null;
+        if (Math.abs(Dx) > 50) if (Dx < 0) {
+          Show(At + 1)}
+         else Show(At - 1);
+      });
+    };
+    $impl.Start = function () {
+      var Forms = null;
+      var I = 0;
+      Forms = document.querySelectorAll(".wiki-file-upload");
+      for (var $l = 0, $end = Forms.length - 1; $l <= $end; $l++) {
+        I = $l;
+        $impl.Upload(Forms.item(I));
+      };
+      Forms = document.querySelectorAll("form.wiki-file-delete[data-confirm]");
+      for (var $l1 = 0, $end1 = Forms.length - 1; $l1 <= $end1; $l1++) {
+        I = $l1;
+        $impl.ConfirmDelete(Forms.item(I));
+      };
+      $impl.Viewer();
+    };
   };
-  const leave = () => {
-    box.hidden = true;
-    document.documentElement.classList.remove('wiki-viewing');
-    if (back) back.focus();
+  $mod.$init = function () {
+    $impl.Start();
   };
-  items.forEach((a, i) => a.addEventListener('click', event => {
-    if (event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) return;
-    event.preventDefault();
-    back = a;
-    show(i);
-    box.hidden = false;
-    document.documentElement.classList.add('wiki-viewing');
-    close.focus();
-  }));
-  prev.addEventListener('click', () => show(at - 1));
-  next.addEventListener('click', () => show(at + 1));
-  close.addEventListener('click', leave);
-  box.addEventListener('click', event => { if (event.target === box || event.target === stage) leave(); });
-  document.addEventListener('keydown', event => {
-    if (box.hidden) return;
-    if (event.key === 'Escape') leave();
-    else if (event.key === 'ArrowLeft') show(at - 1);
-    else if (event.key === 'ArrowRight') show(at + 1);
-    else return;
-    event.preventDefault();
-  });
-  let startX = null;
-  stage.addEventListener('touchstart', event => { startX = event.touches[0].clientX; }, {passive: true});
-  stage.addEventListener('touchend', event => {
-    if (startX === null) return;
-    const dx = event.changedTouches[0].clientX - startX;
-    startX = null;
-    if (Math.abs(dx) > 50) show(at + (dx < 0 ? 1 : -1));
-  });
-})();
+},["JS","weborworker","Web","PageKit","PageGlobals"]);
+
+rtl.run('WikiFilesPage');
+}

@@ -654,6 +654,8 @@ pre code .warning { color: var(--amber); }
 .profile .away { color: var(--amber); margin: 0 0 6px; font-size: 14px; }
 .msg.ignored .quote, .msg.ignored .body, .msg.ignored .files, .msg.ignored .reacts { display: none; }
 .msg .unfold { border: 0; background: none; padding: 0; color: var(--faint); font-size: 13px; font-style: italic; }
+.msg .body.folded { max-height: 32em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 75%, transparent); mask-image: linear-gradient(#000 75%, transparent); }
+.msg .unfold.whole { font-style: normal; color: var(--accent, inherit); cursor: pointer; margin-top: 2px; }
 .tokens { margin: 0 24px 14px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; }
 .tokens summary { cursor: pointer; font-weight: 600; }
 .tokens .invite { padding: 10px 0 0; }

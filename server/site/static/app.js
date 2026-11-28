@@ -1,1170 +1,1764 @@
-// The site's page: account, profiles, the side panel and the admin page,
-// moving between them without reloading.  Everything it shows comes from
-// the JSON API.  The parts of the suite that live on this page add
-// themselves to Chat.parts (chat.js: rooms, threads, private conversations)
-// and answer for their own addresses, the side list and the live updates.
-(function () {
-  'use strict';
-
-  const body = document.body;
-  const Me = {name: body.dataset.me || '', can: [], ignores: [], reactions: {shown: [], more: []}};
-  const Site = body.dataset.site;
-  const $ = function (s, root) { return (root || document).querySelector(s); };
-  const stream = $('#stream');
-  const panel = $('#panel');
-
-  const S = {
-    view: '', room: '', info: null, messages: new Map(), since: 0, lastRead: 0, divider: 0,
-    oldest: Infinity, older: true, thread: 0, threadMessages: new Map(), generation: 0,
-    rooms: [], dms: [], commands: null, typingSent: 0, tick: 0, alerts: {},
-    dm: '', dmLast: 0, dmFirst: 0, dmTimer: 0, beams: {}, typers: {}, here: []
+if (!pas.AppPage) {
+rtl.module("app_helpers",["System","JS","Web"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.Body = null;
+  this.Me = null;
+  this.SiteName = undefined;
+  this.Stream = null;
+  this.Panel = null;
+  this.S = null;
+  this.Extras = null;
+  this.SideEl = null;
+  this.SideLink = null;
+  this.SideAvatar = null;
+  this.SideIcon = null;
+  this.SideIconButton = null;
+  this.Icons = undefined;
+  this.KeysPost = null;
+  this.Trail = null;
+  this.Locale = undefined;
+  this.PinWatch = null;
+  this.Find = function (Selector, Root) {
+    var Result = null;
+    if (!Boolean(Root)) Root = document;
+    Result = Root.querySelector(Selector);
+    return Result;
   };
-
-  // What the member may do anywhere, from /api/me.
-  function may(p) { return Me.can.indexOf(p) >= 0; }
-  // What the member may do in the open room, from /api/room.
-  function mayHere(p) { return !!(S.info && S.info.can && S.info.can[p]); }
-
-  // ---------------------------------------------------------------- helpers
-
-  // drawn the same in every module: side.js
-  const el = Side.el, link = Side.link, avatar = Side.avatar,
-    Icons = Side.icons, icon = Side.icon, iconButton = Side.iconButton;
-
-  async function get(url) {
-    const answer = await fetch(url);
-    if (!answer.ok) throw new Error(await answer.text());
-    return answer.json();
-  }
-
-  const post = Keys.post;
-
-  function toast(text, kind) {
-    const t = el('div', 'toast ' + (kind || ''), text);
-    $('#toasts').appendChild(t);
-    setTimeout(function () { t.classList.add('going'); }, 4500);
-    setTimeout(function () { t.remove(); }, 5000);
-  }
-
-  // The last things that went wrong on this page, for a bug report.
-  const Trail = [];
-  function remember(what) {
-    Trail.push(new Date().toISOString().slice(11, 19) + ' ' + what);
-    if (Trail.length > 15) Trail.shift();
-  }
-  window.addEventListener('error', function (e) { remember('error: ' + e.message + ' (' + e.filename + ':' + e.lineno + ')'); });
-  window.addEventListener('unhandledrejection', function (e) { remember('promise: ' + (e.reason && e.reason.message || e.reason)); });
-
-  function failed(err) {
-    remember('shown: ' + (err.message || String(err)));
-    toast(err.message || String(err), 'bad');
-  }
-
-  // A color for a name: names that differ by one letter still look different.
-  let locale;
-  try { locale = Intl.getCanonicalLocales(document.documentElement.lang || '')[0]; } catch (err) { }
-
-  function clock(at) {
-    const d = new Date(at);
-    return isNaN(d) ? at : d.toLocaleTimeString(locale, {hour: '2-digit', minute: '2-digit'});
-  }
-
-  function dayLabel(d) {
-    const today = new Date();
-    const yesterday = new Date(Date.now() - 86400000);
-    if (d.toDateString() === today.toDateString()) return t('Today');
-    if (d.toDateString() === yesterday.toDateString()) return t('Yesterday');
-    if (d.getFullYear() !== today.getFullYear())
-      return d.toLocaleDateString(locale, {weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'});
-    return d.toLocaleDateString(locale, {weekday: 'long', month: 'long', day: 'numeric'});
-  }
-
-  function ago(iso) {
-    if (!iso) return '';
-    const minutes = Math.round((Date.now() - new Date(iso)) / 60000);
-    if (minutes < 2) return t('just now');
-    if (minutes < 60) return tn(minutes, '%d min ago', '%d min ago');
-    if (minutes < 48 * 60) return tn(Math.round(minutes / 60), '%d hours ago', '%d hours ago');
-    return tn(Math.round(minutes / 1440), '%d days ago', '%d days ago');
-  }
-
-  function sizeText(n) {
-    if (n < 1024) return t('%d B', n);
-    if (n < 1024 * 1024) return t('%d KB', Math.round(n / 1024));
-    if (n < 1024 * 1024 * 1024) return t('%s MB', (n / 1024 / 1024).toFixed(1));
-    if (n < 1024 * 1024 * 1024 * 1024) return t('%s GB', (n / 1024 / 1024 / 1024).toFixed(1));
-    return t('%s TB', (n / 1024 / 1024 / 1024 / 1024).toFixed(2));
-  }
-
-  function nearBottom(box) {
-    box = box || stream;
-    return box.scrollHeight - box.scrollTop - box.clientHeight < 160;
-  }
-
-  // A list read at its bottom stays there when it gets shorter (a phone's
-  // keyboard opening, the composer growing) or a message in it gets taller
-  // (a reaction, an edit, a picture arriving): neither sends a scroll
-  // event.  Watched are the list and each message drawn (chat.js).
-  const pinWatch = new ResizeObserver(function (entries) {
-    for (const e of entries) {
-      const box = 'pinned' in e.target ? e.target : e.target.parentNode;
-      if (!e.target.isConnected) pinWatch.unobserve(e.target);
-      else if (box.pinned && !box.noPin) {
-        box.scrollTop = box.scrollHeight;
-        box.pinTop = box.scrollTop;
-      }
-    }
-  });
-  function keepPinned(box) {
-    box.pinned = true;
-    // The scroll event of the watch's own move comes a frame late: a list
-    // still where the watch put it has not been left, however far its bottom now is.
-    box.addEventListener('scroll', function () {
-      box.pinned = !box.noPin && (nearBottom(box) || box.scrollTop === box.pinTop);
-      box.pinTop = -1;
+  this.May = function (P) {
+    var Result = false;
+    Result = $mod.Me.can.indexOf(P) >= 0;
+    return Result;
+  };
+  this.MayHere = function (P) {
+    var Result = false;
+    Result = Boolean($mod.S.info) && Boolean($mod.S.info["can"]) && Boolean($mod.S.info["can"]["" + P]);
+    return Result;
+  };
+  this.El = function (Tag, Cls, Words) {
+    var Result = null;
+    Result = $mod.SideEl.call(undefined,Tag,Cls,Words);
+    return Result;
+  };
+  this.Link = function (Href, Cls, Words) {
+    var Result = null;
+    Result = $mod.SideLink.call(undefined,Href,Cls,Words);
+    return Result;
+  };
+  this.Avatar = function (Name, Url, Cls) {
+    var Result = null;
+    Result = $mod.SideAvatar.call(undefined,Name,Url,Cls);
+    return Result;
+  };
+  this.Icon = function (Name) {
+    var Result = null;
+    Result = $mod.SideIcon.call(undefined,Name);
+    return Result;
+  };
+  this.IconButton = function (Name, Title, Cls) {
+    var Result = null;
+    Result = $mod.SideIconButton.call(undefined,Name,Title,Cls);
+    return Result;
+  };
+  this.Get = async function (Url) {
+    var Result = undefined;
+    var Answer = null;
+    Answer = await window.fetch(Url);
+    if (!Answer.ok) throw new Error(await Answer.text());
+    Result = Answer.json();
+    return Result;
+  };
+  this.Post = function (Url, Fields) {
+    var Result = undefined;
+    Result = $mod.KeysPost.call(undefined,Url,Fields);
+    return Result;
+  };
+  this.Toast = function (Words, Kind) {
+    var Note = null;
+    if (Boolean(Kind)) {
+      Note = $mod.El("div","toast " + ("" + Kind),Words)}
+     else Note = $mod.El("div","toast ",Words);
+    $mod.Find("#toasts",undefined).appendChild(Note);
+    window.setTimeout(function () {
+      Note.classList.add("going");
+    },4500);
+    window.setTimeout(function () {
+      Note.remove();
+    },5000);
+  };
+  this.Remember = function (What) {
+    $mod.Trail.push((new Date()).toISOString().slice(11,19) + " " + What);
+    if ($mod.Trail.length > 15) $mod.Trail.shift();
+  };
+  this.Failed = function (Err) {
+    var Words = undefined;
+    Words = Err["message"];
+    if (!Boolean(Words)) Words = String(Err);
+    $mod.Remember("shown: " + ("" + Words));
+    $mod.Toast(Words,"bad");
+  };
+  this.Clock = function (At) {
+    var Result = undefined;
+    var D = null;
+    D = new Date(At);
+    if (isNaN(D)) {
+      Result = At}
+     else Result = D.toLocaleTimeString($mod.Locale,pas.JS.New(["hour","2-digit","minute","2-digit"]));
+    return Result;
+  };
+  this.DayLabel = function (D) {
+    var Result = "";
+    var Today = null;
+    var Yesterday = null;
+    Today = new Date();
+    Yesterday = new Date(Date.now() - 86400000);
+    if (D.toDateString() === Today.toDateString()) {
+      Result = window.t("Today")}
+     else if (D.toDateString() === Yesterday.toDateString()) {
+      Result = window.t("Yesterday")}
+     else if (D.getFullYear() !== Today.getFullYear()) {
+      Result = D.toLocaleDateString($mod.Locale,pas.JS.New(["weekday","long","month","long","day","numeric","year","numeric"]))}
+     else Result = D.toLocaleDateString($mod.Locale,pas.JS.New(["weekday","long","month","long","day","numeric"]));
+    return Result;
+  };
+  this.Ago = function (Iso) {
+    var Result = "";
+    var Minutes = 0.0;
+    Result = "";
+    if (!Boolean(Iso)) return Result;
+    Minutes = Math.round((Date.now() - Number(new Date(Iso))) / 60000);
+    if (Minutes < 2) {
+      Result = window.t("just now")}
+     else if (Minutes < 60) {
+      Result = window.tn(Minutes,"%d min ago","%d min ago")}
+     else if (Minutes < (48 * 60)) {
+      Result = window.tn(Math.round(Minutes / 60),"%d hours ago","%d hours ago")}
+     else Result = window.tn(Math.round(Minutes / 1440),"%d days ago","%d days ago");
+    return Result;
+  };
+  this.SizeText = function (N) {
+    var Result = "";
+    if (N < 1024) {
+      Result = window.t("%d B",N)}
+     else if (N < (1024 * 1024)) {
+      Result = window.t("%d KB",Math.round(N / 1024))}
+     else if (N < (1024 * 1024 * 1024)) {
+      Result = window.t("%s MB",((N / 1024) / 1024).toFixed(1))}
+     else if (N < (1024 * 1024 * 1024 * 1024)) {
+      Result = window.t("%s GB",(((N / 1024) / 1024) / 1024).toFixed(1))}
+     else Result = window.t("%s TB",((((N / 1024) / 1024) / 1024) / 1024).toFixed(2));
+    return Result;
+  };
+  this.NearBottom = function (Box) {
+    var Result = false;
+    if (!Boolean(Box)) Box = $mod.Stream;
+    Result = (Box.scrollHeight - Box.scrollTop - Box.clientHeight) < 160;
+    return Result;
+  };
+  this.KeepPinned = function (Box) {
+    Box.pinned = true;
+    Box.addEventListener("scroll",function (E) {
+      Box.pinned = !Boolean(Box.noPin) && ($mod.NearBottom(Box) || (Box.scrollTop === Box.pinTop));
+      Box.pinTop = -1;
     });
-    pinWatch.observe(box);
-  }
-  keepPinned(stream);
-
-  // A phone browser that ignores interactive-widget leaves the page its full
-  // height under the keyboard; the page then takes the height shown.  Not
-  // while zoomed in, where the shown part is smaller on purpose.
-  if (window.visualViewport) {
-    const fitShown = function () {
-      const view = window.visualViewport;
-      const root = document.documentElement;
-      if (Math.abs(view.scale - 1) < 0.01 && view.height < root.clientHeight - 1) {
-        root.style.setProperty('--shown-height', view.height + 'px');
-        root.style.setProperty('--shown-top', view.offsetTop + 'px');
-      } else {
-        root.style.removeProperty('--shown-height');
-        root.style.removeProperty('--shown-top');
-      }
-    };
-    window.visualViewport.addEventListener('resize', fitShown);
-    window.visualViewport.addEventListener('scroll', fitShown);
-    fitShown();
-  }
-
-  function enc(s) { return encodeURIComponent(s); }
-
-  // ------------------------------------------------- app and notifications
-
-  // Phones only show notifications through the service worker.
-  async function notify(title, text) {
+    $mod.PinWatch.observe(Box);
+  };
+  this.Enc = function (Value) {
+    var Result = "";
+    Result = encodeURIComponent(Value);
+    return Result;
+  };
+  this.LoadMe = async function () {
+    var Result = undefined;
+    var Got = null;
+    Got = await $mod.Get("/api/me");
+    $mod.Me.avatar = Got["avatar"];
+    $mod.Me.can = Got["can"];
+    $mod.Me.away = Got["away"];
+    $mod.Me.ignores = Got["ignores"];
+    $mod.Me.wrapped = Got["wrapped"];
+    $mod.Me.verified = Got["verified"];
+    $mod.Me.email = Got["email"];
+    $mod.Me.mailNotes = Got["mail_notes"];
+    $mod.Me["autoAway"] = Got["auto_away"];
+    $mod.Me.mailHours = Got["mail_hours"];
+    $mod.Me.readReceipts = Got["read_receipts"];
+    $mod.Me.prefs = Got["prefs"];
+    $mod.Me.password = Got["password"];
+    $mod.Me.closedNames = Got["closed_names"];
+    if (Boolean(Got["reactions"])) $mod.Me.reactions = Got["reactions"];
+    return Result;
+  };
+  this.StartHelpers = function () {
+    var Name = undefined;
+    var Lang = undefined;
+    $mod.Body = document.body;
+    Name = $mod.Body.dataset["me"];
+    if (!Boolean(Name)) Name = "";
+    $mod.Me = pas.JS.New(["name",Name,"can",new Array(),"ignores",new Array(),"reactions",pas.JS.New(["shown",new Array(),"more",new Array()])]);
+    $mod.SiteName = $mod.Body.dataset["site"];
+    $mod.Stream = $mod.Find("#stream",undefined);
+    $mod.Panel = $mod.Find("#panel",undefined);
+    $mod.S = pas.JS.New(["view","","room","","info",null,"messages",new Map(),"since",0,"lastRead",0,"divider",0,"oldest",Infinity,"older",true,"thread",0,"threadMessages",new Map(),"generation",0,"rooms",new Array(),"dms",new Array(),"commands",null,"typingSent",0,"tick",0,"alerts",new Object(),"dm","","dmLast",0,"dmFirst",0,"dmTimer",0,"beams",new Object(),"typers",new Object(),"here",new Array()]);
+    $mod.SideEl = window.Side["el"];
+    $mod.SideLink = window.Side["link"];
+    $mod.SideAvatar = window.Side["avatar"];
+    $mod.Icons = window.Side["icons"];
+    $mod.SideIcon = window.Side["icon"];
+    $mod.SideIconButton = window.Side["iconButton"];
+    $mod.KeysPost = window.Keys["post"];
+    $mod.Trail = new Array();
+    window.addEventListener("error",function (E) {
+      $mod.Remember("error: " + ("" + E["message"]) + " (" + ("" + E["filename"]) + ":" + ("" + E["lineno"]) + ")");
+    });
+    window.addEventListener("unhandledrejection",function (E) {
+      var Reason = undefined;
+      Reason = E["reason"];
+      if (Boolean(Reason) && Boolean(Reason["message"])) Reason = Reason["message"];
+      $mod.Remember("promise: " + ("" + Reason));
+    });
     try {
-      const reg = await navigator.serviceWorker.ready;
-      await reg.showNotification(title, {body: text, tag: 'page', icon: SiteBase.url('/icon-192.png')});
-    } catch (err) {
-      new Notification(title, {body: text});
-    }
-  }
-
-  // Web Push: the browser's push address goes to the site, which uses it
-  // when a mention or a private message comes and no page is open.
-  async function subscribePush() {
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      const key = (await get('/api/push/key')).key;
-      const raw = atob(key.replace(/-/g, '+').replace(/_/g, '/'));
-      const bytes = Uint8Array.from(raw, function (c) { return c.charCodeAt(0); });
-      const sub = await reg.pushManager.getSubscription() ||
-        await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: bytes});
-      await post('/api/push', {endpoint: sub.endpoint});
-      return true;
-    } catch (err) {
-      remember('push: ' + (err.message || err));
-      return false;
-    }
-  }
-
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register(SiteBase.url('/sw.js')).catch(function (err) {
-    remember('service worker: ' + err.message);
-  });
-
-  // The browser says it can install the site as an app: offer it.
-  let installOffer = null;
-  window.addEventListener('beforeinstallprompt', function (e) {
-    e.preventDefault();
-    installOffer = e;
-    renderAccount();
-  });
-
-  // What this browser can do about notifications: on, off (not asked yet),
-  // blocked, or none (no push in this browser).
-  function notifyState() {
-    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return 'none';
-    return {granted: 'on', denied: 'blocked'}[Notification.permission] || 'off';
-  }
-
-  // A blocked site cannot ask again; only the browser's settings undo it.
-  // The installed app has no address bar, but it shares the browser's.
-  const BlockedHelp = matchMedia('(display-mode: standalone)').matches ?
-    t('Notifications are blocked for this site, and the app cannot ask again. Open %s in the browser itself, tap the icon left of the address, Permissions, and allow Notifications (or reset them); the app uses the same setting. In Brave, also turn on "Use Google services for push messaging" under Settings, Privacy and security.', location.host) :
-    t('Notifications are blocked for this site. Allow them in the browser\'s site settings (the icon left of the address, or Settings, Site settings, Notifications). In Brave, also turn on "Use Google services for push messaging" under Settings, Privacy and security.');
-
-  async function turnOnNotifications() {
-    const state = notifyState();
-    if (state === 'none') { toast(t('This browser cannot show notifications from sites.'), 'bad'); return; }
-    if (state === 'blocked') { toast(BlockedHelp, 'bad'); return; }
-    if (await Notification.requestPermission() !== 'granted') toast(BlockedHelp, 'bad');
-    else if (await subscribePush())
-      toast(t('Notifications are on: mentions and private messages, when the chat is not in front of you.'));
-    else toast(t('Notifications are allowed, but the browser would not sign up for push messages. In Brave, turn on "Use Google services for push messaging" under Settings, Privacy and security, then tap the bell again.'), 'bad');
-    renderAccount();
-    const bar = $('#notifybar');
-    if (bar) bar.remove();
-  }
-
-  // The bell beside Sign out: always there, saying how things stand.
-  function bellButton() {
-    const state = notifyState();
-    const bell = iconButton('bell', {on: t('Notifications are on'), off: t('Turn on notifications for mentions and private messages'),
-      blocked: t('Notifications are blocked: click to see how to allow them'), none: t('This browser cannot show notifications')}[state],
-      'bell-' + state);
-    bell.addEventListener('click', function () {
-      turnOnNotifications();   // when on, this checks the push sign-up again and says how it went
-    });
-    return bell;
-  }
-
-  // Once, after signing in: ask in plain sight rather than behind a menu,
-  // or say plainly why notifications cannot be had here.
-  function offerNotifications() {
-    let asked = '';
-    try { asked = localStorage.getItem('notify-asked-2') || ''; } catch (e) { }
-    const state = notifyState();
-    if (!Me.name || asked || state === 'on' || $('#notifybar')) return;
-    const bar = el('div', 'notifybar');
-    bar.id = 'notifybar';
-    const no = el('button', 'small-link', state === 'off' ? t('Not now') : t('OK'));
-    no.type = 'button';
-    no.addEventListener('click', function () {
-      try { localStorage.setItem('notify-asked-2', '1'); } catch (e) { }
-      bar.remove();
-    });
-    bar.appendChild(icon('bell'));
-    if (state === 'off') {
-      const yes = el('button', 'primary', t('Turn on'));
-      yes.type = 'button';
-      yes.addEventListener('click', turnOnNotifications);
-      bar.append(el('span', '', t('Get a notification when someone mentions you or sends you a private message?')), yes);
-    } else if (state === 'blocked') bar.appendChild(el('span', '', BlockedHelp));
-    else bar.appendChild(el('span', '', t('This browser cannot show notifications from sites, so mentions and private messages only show here.')));
-    bar.appendChild(no);
-    $('#main').prepend(bar);
-  }
-
-  // ---------------------------------------------------------------- account
-
-  // Whether the admin page has anything for this member.
-  function mayAdmin() {
-    return ['view-admin', 'manage-permissions', 'manage-settings', 'manage-channels', 'manage-private',
-      'read-reports', 'manage-blocks', 'view-visitors', 'view-storage'].some(may) ||
-      Extras.adminTabs.some(function (extra) { return extra.permission && may(extra.permission); }) ||
-      Extras.adminScripts.some(function (extra) { return extra.permissions.some(may); });
-  }
-
-  // The row at the bottom of the side: who you are, a few buttons, and a
-  // menu with the rest.  side.js draws it, as on the wiki and the forum;
-  // this page adds its own buttons.
-  function renderAccount() {
-    const tools = [];
-    const report = iconButton('bug', t('Report a problem'));
-    report.addEventListener('click', openReport);
-    tools.push(report);
-    if (installOffer) {
-      const install = iconButton('install', t('Install the app'));
-      install.addEventListener('click', async function () {
-        installOffer.prompt();
-        await installOffer.userChoice;
-        installOffer = null;
-        renderAccount();
-      });
-      tools.push(install);
-    }
-    if (Me.name) tools.push(bellButton());
-    Side.account({name: Me.name, avatar: Me.avatar, admin: mayAdmin(), tools: tools, links: Extras.accountLinks,
-      unconfirmed: Me.verified === false});
-  }
-
-  function joinForm(caption) {
-    const form = el('form', 'quickjoin');
-    form.appendChild(el('span', 'caption', caption));
-    const name = el('input');
-    name.name = 'name';
-    name.placeholder = t('Name');
-    name.maxLength = 24;
-    name.autocomplete = 'username';
-    name.required = true;
-    const pass = el('input');
-    pass.name = 'password';
-    pass.type = 'password';
-    pass.placeholder = t('Password');
-    pass.autocomplete = 'current-password';
-    pass.required = true;
-    const go = el('button', '', t('Join'));
-    form.append(name, pass, go);
-    if (body.dataset.sso) {
-      const row = el('div', 'ssolink');
-      row.appendChild(el('span', '', t('or sign in with')));
-      for (const p of body.dataset.sso.split(',')) {
-        const a = link('/signin-with/' + p, 'ssoicon');
-        a.title = t('Sign in with %s', {github: 'GitHub', gitlab: 'GitLab', codeberg: 'Codeberg', google: 'Google',
-          microsoft: 'Microsoft'}[p]);
-        a.appendChild(el('span', 'ssologo ' + p));
-        row.appendChild(a);
-      }
-      form.appendChild(row);
-    }
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      go.disabled = true;
-      go.textContent = t('One moment');
-      if (await Keys.joinFrom(form, failed)) location.reload();
-      go.disabled = false;
-      go.textContent = t('Join');
-    });
-    return form;
-  }
-
-  // A small menu under a button: [caption, what it does] pairs.  Any click
-  // closes it.
-  function popMenu(anchor, items) {
-    document.querySelectorAll('.popmenu').forEach(function (m) { m.remove(); });
-    const menu = el('nav', 'popmenu');
-    for (const item of items) {
-      const b = el('button', '', item[0]);
-      b.type = 'button';
-      b.addEventListener('click', function () { menu.remove(); item[1](); });
-      menu.appendChild(b);
-    }
-    const r = anchor.getBoundingClientRect();
-    menu.style.left = Math.min(r.left, innerWidth - 220) + 'px';
-    menu.style.top = (r.bottom + 4) + 'px';
-    document.body.appendChild(menu);
-    // no room below, as beside the message box: it opens above the button
-    const shown = window.visualViewport ? visualViewport.height : innerHeight;
-    if (r.bottom + 4 + menu.offsetHeight > shown) menu.style.top = Math.max(4, r.top - 4 - menu.offsetHeight) + 'px';
-    setTimeout(function () {
-      document.addEventListener('click', function close(e) {
-        if (menu.contains(e.target)) return;
-        menu.remove();
-        document.removeEventListener('click', close);
-      });
-    });
-  }
-
-  // ----------------------------------------------------------------- router
-
-  function isAppPath(path) { return /^\/(p|m|u|dm)\/|^\/(admin|chat-search)$/.test(path); }
-
-  document.addEventListener('click', function (e) {
-    const a = e.target.closest('a[href]');
-    if (!a || a.target || e.ctrlKey || e.metaKey || e.shiftKey || a.origin !== location.origin) return;
-    if (!isAppPath(SiteBase.strip(a.pathname))) return;
-    e.preventDefault();
-    // A room picked from the phone's room list takes the place of the one
-    // left, so Back leaves the chat once instead of room by room.
-    const fromList = body.classList.contains('menu') && a.closest('#side');
-    body.classList.remove('menu');
-    route(SiteBase.strip(a.pathname), fromList ? 'replace' : true);
-  });
-
-  // A link in a message opens a new tab and the conversation stays: all
-  // but a picture, shown over the page, and what the router above shows.
-  Side.newTabLinks('.msg', true, function (a) { return a.classList.contains('shot') || isAppPath(SiteBase.strip(a.pathname)); });
-
-  // ------------------------------------------------------------ the back key
-
-  // Back closes what is on top (the room list on a phone, the side panel, a
-  // picture) before it leaves the place.  Opening one
-  // adds a history entry, so Back has something to take away; closing one
-  // some other way takes the entry back out.
-  let layerEntry = false;
-  let afterMove = null;   // runs instead of the next popstate's usual work
-  // The width at which the room list slides over the chat (site.css).
-  const Narrow = matchMedia('(max-width: 860px)');
-
-  function onTop() {
-    return body.classList.contains('menu') || !panel.hidden || !$('#lightbox').hidden;
-  }
-
-  function layerOpened() {
-    if (layerEntry) return;
-    layerEntry = true;
-    history.pushState({}, '', SiteBase.path());
-  }
-
-  // Takes our entry back out once nothing is on top, then runs Then.
-  function layerClosed(then) {
-    if (!layerEntry || onTop()) {
-      if (then) then();
-      return;
-    }
-    layerEntry = false;
-    afterMove = then || function () { };
-    history.back();
-  }
-
-  // Closes the top one only: a picture over a thread leaves the thread.
-  function closeTop() {
-    if (!$('#lightbox').hidden) $('#lightbox').hidden = true;
-    else if (body.classList.contains('menu')) body.classList.remove('menu');
-    else if (!panel.hidden) {
-      closePanel();
-      if (SiteBase.path().startsWith('/m/') && S.room) history.replaceState({}, '', '/p/' + enc(S.room));
-    }
-  }
-
-  function toggleMenu() {
-    body.classList.toggle('menu');
-    if (body.classList.contains('menu')) layerOpened();
-    else layerClosed();
-  }
-
-  // On a phone, a tap beside the open room list closes it and does nothing
-  // else.
-  document.addEventListener('click', function (e) {
-    if (!body.classList.contains('menu') || e.target.closest('#side, .menubtn')) return;
-    e.preventDefault();
-    e.stopPropagation();
-    body.classList.remove('menu');
-    layerClosed();
-  }, true);
-
-  // Installed apps keep a guard history entry under the last page: Back
-  // asks once, then allows closing; a tap restores the page entry. Create
-  // entries on a tap because Chrome skips those added before interaction.
-  const Installed = matchMedia('(display-mode: standalone)').matches;
-  let guarded = false;
-  let here = SiteBase.path();   // the place shown, for the guard's entries
-  document.addEventListener('pointerdown', function () {
-    if (!Installed) return;
-    if (!guarded) {
-      guarded = true;
-      history.replaceState({guard: true}, '', SiteBase.path());
-      history.pushState({}, '', SiteBase.path());
-    } else if (history.state && history.state.guard) history.pushState({}, '', here);
-  }, true);
-
-  window.addEventListener('popstate', function () {
-    if (afterMove) {
-      const then = afterMove;
-      afterMove = null;
-      then();
-    } else if (history.state && history.state.guard) {
-      history.replaceState({guard: true}, '', here);
-      toast(t('Press back again to leave'));
-    } else if (layerEntry) {
-      layerEntry = false;
-      closeTop();
-      if (onTop()) layerOpened();
-    } else route(SiteBase.path(), false);
-  });
-
-  function clearView() {
-    S.generation++;
-    S.view = '';
-    S.room = '';
-    S.info = null;
-    S.messages.clear();
-    S.thread = 0;
-    S.threadMessages.clear();
-    S.dm = '';
-    S.typers = {};
-    clearTimeout(S.dmTimer);
-    stream.replaceChildren();
-    stream.className = '';
-    stream.noPin = false;
-    $('#roomhead').replaceChildren();
-    $('#card').replaceChildren();
-    $('#typing').replaceChildren();
-    $('#composer-area').replaceChildren();
-    // the admin page's list gives the side back to the parts
-    body.classList.remove('admin-view');
-    const adminNav = $('#adminnav');
-    if (adminNav) adminNav.hidden = true;
-    closePanel();
-  }
-
-  // Alt+Up and Alt+Down walk the sidebar; Ctrl+K jumps to a room by name.
-  document.addEventListener('keydown', function (e) {
-    if (e.ctrlKey && e.key === 'k') {
-      e.preventDefault();
-      if (Narrow.matches) {
-        body.classList.add('menu');
-        layerOpened();
-      }
-      $('#jump').focus();
-      return;
-    }
-    if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
-    const rooms = Array.from(document.querySelectorAll('#roomlist a.room'));
-    if (!rooms.length) return;
-    e.preventDefault();
-    let i = rooms.findIndex(function (a) { return a.classList.contains('active'); });
-    i = (i + (e.key === 'ArrowDown' ? 1 : rooms.length - 1)) % rooms.length;
-    route(SiteBase.strip(rooms[i].getAttribute('href')), true);
-  });
-
-  function firstRoom() {
-    const r = S.rooms.find(function (x) { return x.kind === 'channel'; });
-    return r ? '/p/' + enc(r.slug) : '/';
-  }
-
-  // Push is true to add a history entry, 'replace' to take the current one's
-  // place, false when Back or Forward already moved there.
-  async function route(path, push) {
-    if (path === '/') {
-      path = firstRoom();
-      if (path === '/') { location.href = SiteBase.url('/'); return; }
-    }
-    // Leaving with something on top: its entry goes first.
-    if (layerEntry && push) {
-      layerEntry = false;
-      return new Promise(function (done) {
-        afterMove = function () { route(path, push).then(done); };
-        history.back();
-      });
-    }
-    if (push === 'replace') history.replaceState({}, '', path);
-    else if (push) history.pushState({}, '', path);
-    here = path;
-    clearView();
-    const parts = path.split('/').map(decodeURIComponent);
-    try {
-      if (parts[1] === 'u') await openProfile(parts[2]);
-      else if (parts[1] === 'admin') await openAdmin();
-      else for (const p of Parts) if (p.open && await p.open(parts)) break;
-    } catch (err) {
-      stream.appendChild(el('p', 'notice', err.message));
-    }
-    renderSide();
-  }
-
-  // The parts on this page, each with what it answers for (chat.js).
-  const Parts = [];
-  function renderSide() { for (const p of Parts) if (p.sidebar) p.sidebar(); }
-  function syncNow(withRooms) { for (const p of Parts) if (p.sync) p.sync(withRooms); }
-
-  // ------------------------------------------------------------------ panel
-
-  function openPanel(title, cls) {
-    // On a phone the room list slides over the chat, and the panel fills the
-    // screen under it: a panel opened from the list closes the list.
-    body.classList.remove('menu');
-    panel.hidden = false;
-    panel.className = cls || '';
-    panel.replaceChildren();
-    const head = el('header');
-    head.appendChild(el('h2', '', title));
-    const close = iconButton('close', t('Close'));
-    close.addEventListener('click', function () {
-      closePanel();
-      if (SiteBase.path().startsWith('/m/') && S.room) history.replaceState({}, '', '/p/' + enc(S.room));
-      layerClosed();
-    });
-    head.appendChild(close);
-    panel.appendChild(head);
-    body.classList.add('withpanel');
-    layerOpened();
-    return panel;
-  }
-
-  // Report a problem: what they write, and what the page knows.
-  function openReport() {
-    const box = openPanel(t('Report a problem'), 'report');
-    const form = el('form', 'reportform');
-    const text = el('textarea');
-    text.rows = 8;
-    text.maxLength = 4000;
-    text.placeholder = t('What went wrong, or what looked wrong? What were you doing?');
-    const send = el('button', 'primary', t('Send the report'));
-    form.append(text, el('p', 'hint', t('Sent along: this page\'s address, your browser and screen size, and the last errors this page showed. Nothing else.')), send);
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      // The server mails the report before it answers, so say it is on its way.
-      send.disabled = true;
-      send.textContent = t('Sending…');
-      text.disabled = true;
-      const info = ['browser: ' + navigator.userAgent, 'screen: ' + innerWidth + 'x' + innerHeight + ' at ' + devicePixelRatio,
-        'theme: ' + (document.documentElement.dataset.theme || 'auto'), 'signed in: ' + (Me.name || 'no'),
-        'notifications: ' + notifyState() + (Installed ? ', installed app' : ', browser tab'),
-        'last errors:'].concat(Trail.length ? Trail : ['none']).join('\n');
-      try {
-        toast(await post('/api/bug', {text: text.value, page: SiteBase.path(), info: info}));
-        closePanel();
-        layerClosed();
-      } catch (err) { failed(err); }
-      send.disabled = false;
-      send.textContent = t('Send the report');
-      text.disabled = false;
-    });
-    box.appendChild(form);
-    text.focus();
-  }
-
-  function closePanel() {
-    panel.hidden = true;
-    panel.replaceChildren();
-    S.thread = 0;
-    S.threadMessages.clear();
-    body.classList.remove('withpanel');
-  }
-
-  // ---------------------------------------------------------------- profile
-
-  async function openProfile(name) {
-    const generation = S.generation;
-    const who = await get('/api/user?name=' + enc(name));
-    if (generation !== S.generation) return;
-    S.title = who.name;
-    const head = $('#roomhead');
-    const menu = iconButton('menu', t('Channels'), 'menubtn');
-    menu.addEventListener('click', toggleMenu);
-    head.append(menu, el('div', 'titles'));
-    $('.titles', head).appendChild(el('h1', '', who.name));
-
-    const card = el('section', 'profile');
-    const face = avatar(who.name, who.avatar, 'big');
-    card.appendChild(face);
-    const text = el('div', 'about');
-    const line = el('h2', '', who.name);
-    if (who.badge) line.appendChild(el('span', 'role', who.badge));
-    if (who.banned) line.appendChild(el('span', 'role', t('banned')));
-    text.appendChild(line);
-    if (who.away) text.appendChild(el('p', 'away', t('Away: %s', who.away)));
-    // a closed account: the name on what its member wrote, and nothing of when
-    if (who.closed) text.appendChild(el('p', 'seen', t('Former member')));
-    else text.appendChild(el('p', 'seen', who.seen ? t('Joined %s · last here %s', dateText(who.joined), ago(who.seen)) :
-      t('Joined %s', dateText(who.joined))));
-    const bio = el('div', 'bio');
-    bio.innerHTML = who.bio_html;   // safe html: rendered by the server, HTML escaped
-    text.appendChild(bio);
-    if (who.links) {
-      const links = el('p', 'links');
-      who.links.split(/\s+/).filter(function (l) { return /^https?:\/\//.test(l); }).forEach(function (l) {
-        const a = link(l, '', l.replace(/^https?:\/\//, ''));
-        a.rel = 'nofollow ugc me';
-        a.target = '_blank';
-        links.appendChild(a);
-      });
-      text.appendChild(links);
-    }
-    const tools = el('div', 'tools');
-    if (!who.closed) for (const p of Parts) if (p.profileTools) p.profileTools(who, tools);
-    if (Me.name === who.name) {
-      const edit = el('button', '', t('Edit profile'));
-      edit.type = 'button';
-      edit.addEventListener('click', function () { editProfile(who, text); });
-      tools.appendChild(edit);
-      const pic = el('button', '', t('Change picture'));
-      pic.type = 'button';
-      const input = el('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.hidden = true;
-      pic.addEventListener('click', function () { input.click(); });
-      input.addEventListener('change', async function () {
-        const form = new FormData();
-        form.append('avatar', '1');
-        form.append('file', input.files[0]);
-        try { await post('/api/upload', form); route(SiteBase.path(), false); } catch (err) { failed(err); }
-      });
-      tools.append(pic, input);
-    }
-    text.appendChild(tools);
-    card.appendChild(text);
-    $('#card').appendChild(card);
-    if (Me.name === who.name) $('#card').append(prefsBox(), accountBox(), signInsBox());
-    if (Me.name === who.name && may('api-tokens')) $('#card').appendChild(tokensBox());
-
-    for (const p of Parts) if (p.profile) await p.profile(who, generation);
-  }
-
-  // Until the address is confirmed: the way to another link, or to fix a
-  // mistyped address.
-  function confirmBox() {
-    const form = el('form', 'confirmbox');
-    const email = el('input');
-    email.type = 'email';
-    email.placeholder = t('A different address (or leave it)');
-    const again = el('button', 'primary', t('Send the link again'));
-    form.append(el('p', 'notice', t('Confirm your email to talk: open the link we mailed you. It can take a minute, and it may be in the spam folder.')), email, again);
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      try { toast(await post('/api/verify', {email: email.value.trim()})); } catch (err) { failed(err); }
-    });
-    return form;
-  }
-
-  // A box for a password, in the account's forms.
-  function passwordInput(words, fresh) {
-    const input = el('input');
-    input.type = 'password';
-    input.placeholder = words;
-    input.autocomplete = fresh ? 'new-password' : 'current-password';
-    input.required = true;
-    return input;
-  }
-
-  // The account's address and password, on the member's own profile.  A
-  // change of either asks for the password the account has; one made by
-  // signing in elsewhere has none, and can set its first here.
-  function accountBox() {
-    const box = el('details', 'tokens');
-    box.appendChild(el('summary', '', t('Email and password')));
-    const done = async function (words) {
-      await loadMe();
-      toast(words);
-      route(SiteBase.path(), false);
+      Lang = document.documentElement["lang"];
+      if (!Boolean(Lang)) Lang = "";
+      $mod.Locale = Intl.getCanonicalLocales(Lang)[0];
+    } catch ($e) {
     };
-    if (Me.verified === false) {
-      box.open = true;
-      box.appendChild(confirmBox());
-    } else {
-      const form = el('form', 'invite');
-      const email = el('input');
-      email.type = 'email';
-      email.value = Me.email || '';
-      email.placeholder = t('Email address');
-      const pass = Me.password ? passwordInput(t('Your password'), false) : null;
-      form.append(email);
-      if (pass) form.append(pass);
-      form.append(el('button', 'primary', t('Change the address')));
-      form.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        try {
-          const fields = {email: email.value.trim()};
-          if (pass) fields.current = await Keys.passwordProof(Me.name, pass.value);
-          await done(await post('/api/email', fields));
-        } catch (err) { failed(err); }
-      });
-      box.appendChild(form);
-    }
-    const form = el('form', 'invite');
-    const old = Me.password ? passwordInput(t('Your password'), false) : null;
-    const fresh = passwordInput(t('New password, 8 characters or more'), true);
-    if (old) form.append(old);
-    else box.appendChild(el('p', 'hint', t('This account has no password yet. With one you can also sign in here with your name.')));
-    form.append(fresh, el('button', 'primary', old ? t('Change the password') : t('Set a password')));
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      try {
-        if (old) await Keys.changePassword(Me.name, old.value, fresh.value, Me.wrapped);
-        else await Keys.setupKeys(Me.name, fresh.value);
-        await done(old ? t('Your password is changed. Your other devices and apps are signed out.') : t('Saved.'));
-      } catch (err) { failed(err); }
-    });
-    box.appendChild(form);
-    box.appendChild(leaveBox());
-    return box;
-  }
-
-  // Closing the account: what goes and what stays said first, then the
-  // password, or the name typed out by an account that has no password.
-  function leaveBox() {
-    const box = el('details', 'leave');
-    box.appendChild(el('summary', '', t('Close this account')));
-    const named = Me.closedNames !== 'anonymous';
-    box.appendChild(el('p', 'hint', t('Closing your account signs you out everywhere, for good. Your email address, password, picture and profile are wiped, and nobody else can take your name.') + ' ' +
-      (named ? t('What you wrote here stays, under your name unless you tick the box.') : t('What you wrote here stays, shown as written by "Former member".')) + ' ' +
-      t('Where others quoted or mentioned you, your name stays as they typed it. Only an admin can open a closed account again.')));
-    const form = el('form', 'invite');
-    const anonymous = el('input');
-    anonymous.type = 'checkbox';
-    if (named) {
-      const label = el('label');
-      label.append(anonymous, el('span', '', t('Show "Former member" in place of my name on what I wrote')));
-      form.appendChild(label);
-    }
-    const proof = Me.password ? passwordInput(t('Your password'), false) : el('input');
-    if (!Me.password) {
-      proof.placeholder = t('Type your name, %s, to confirm', Me.name);
-      proof.required = true;
-    }
-    form.append(proof, el('button', 'primary', t('Close my account')));
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      if (!confirm(t('Close your account for good?'))) return;
-      try {
-        const fields = {anonymous: anonymous.checked ? '1' : '0'};
-        if (Me.password) fields.current = await Keys.passwordProof(Me.name, proof.value);
-        else fields.name = proof.value.trim();
-        await post('/api/close', fields);
-        // the key this browser kept goes too
-        try { await Keys.signOut(); } catch (err) { }
-        location.href = SiteBase.url('/');
-      } catch (err) { failed(err); }
-    });
-    box.appendChild(form);
-    return box;
-  }
-
-  // Mail about missed messages, and when to show as away; saved as soon as
-  // they change.
-  function prefsBox() {
-    const box = el('section', 'prefs');
-    const mail = el('label');
-    const check = el('input');
-    check.type = 'checkbox';
-    check.checked = Me.mailNotes;
-    mail.append(check, el('span', '', t('Email me about private messages and mentions I miss')));
-    const hint = el('p', 'hint', Me.email ? tn(Me.mailHours, 'To %1:s, at most one every %0:d hours, and only when something new waits for you.',
-      'To %1:s, at most one every %0:d hours, and only when something new waits for you.', Me.email) : t('Your account has no email address.'));
-    check.disabled = !Me.email;
-    const away = el('label');
-    const after = el('select');
-    [[0, t('never')], [5, tn(5, 'after %d minutes', 'after %d minutes')], [10, tn(10, 'after %d minutes', 'after %d minutes')], [15, tn(15, 'after %d minutes', 'after %d minutes')], [30, tn(30, 'after %d minutes', 'after %d minutes')],
-      [60, t('after an hour')]].forEach(function (c) {
-      const o = el('option', '', c[1]);
-      o.value = c[0];
-      after.appendChild(o);
-    });
-    after.value = Me.autoAway;
-    away.append(el('span', '', t('Show me as away when I have not touched the chat')), after);
-    // A failed save puts the box back as it was.
-    check.addEventListener('change', async function () {
-      try {
-        await post('/api/prefs', {mail_notes: check.checked ? '1' : '0'});
-        Me.mailNotes = check.checked;
-        toast(t('Saved.'));
-      } catch (err) { check.checked = Me.mailNotes; failed(err); }
-    });
-    after.addEventListener('change', async function () {
-      try {
-        await post('/api/prefs', {auto_away: after.value});
-        Me.autoAway = Number(after.value);
-        toast(t('Saved.'));
-      } catch (err) { after.value = Me.autoAway; failed(err); }
-    });
-    box.append(mail, hint);
-    // What the modules add (RegisterMemberPref): a yes or no each.
-    (Me.prefs || []).forEach(function (pref) {
-      const line = el('label');
-      const on = el('input');
-      on.type = 'checkbox';
-      on.checked = pref.on;
-      line.append(on, el('span', '', pref.words));
-      on.addEventListener('change', async function () {
-        const sent = {};
-        sent[pref.name] = on.checked ? '1' : '0';
-        try {
-          await post('/api/prefs', sent);
-          pref.on = on.checked;
-          toast(t('Saved.'));
-        } catch (err) { on.checked = pref.on; failed(err); }
-      });
-      box.appendChild(line);
-    });
-    box.appendChild(away);
-    // Read receipts, on a site where each member chooses.
-    if (Me.readReceipts !== undefined) {
-      const receipts = el('label');
-      const shown = el('input');
-      shown.type = 'checkbox';
-      shown.checked = Me.readReceipts;
-      receipts.append(shown, el('span', '', t('Show others when I have read their private messages')));
-      shown.addEventListener('change', async function () {
-        try {
-          await post('/api/dm/receipts', {on: shown.checked ? '1' : '0'});
-          Me.readReceipts = shown.checked;
-          toast(t('Saved.'));
-        } catch (err) { shown.checked = Me.readReceipts; failed(err); }
-      });
-      box.append(receipts, el('p', 'hint', t('With this off, you do not see when others have read yours either. It shows only between two members who both have it on.')));
-    }
-    return box;
-  }
-
-  // Auto away: no key, click or tap for Me.autoAway minutes in any tab shows
-  // the member as away ("idle") until they are back.  The tabs share the
-  // time and the flag; the server leaves an away typed with /away alone.
-  function shared(key, value) {
-    try {
-      if (value === undefined) return localStorage.getItem(key) || '';
-      localStorage.setItem(key, value);
-    } catch (e) { }
-    return '';
-  }
-  let lastTouch = Date.now();
-  ['keydown', 'pointerdown', 'wheel'].forEach(function (kind) {
-    document.addEventListener(kind, function () {
-      if (Date.now() - lastTouch < 10000) return;
-      lastTouch = Date.now();
-      shared('touched', String(lastTouch));
-      if (Me.name && shared('idle') === '1') {
-        shared('idle', '0');
-        post('/api/prefs', {idle: '0'}).catch(function () { });
-      }
-    }, {capture: true, passive: true});
-  });
-  setInterval(function () {
-    const touched = Math.max(lastTouch, Number(shared('touched')) || 0);
-    if (Me.name && Me.autoAway > 0 && shared('idle') !== '1' && Date.now() - touched >= Me.autoAway * 60000) {
-      shared('idle', '1');
-      post('/api/prefs', {idle: '1'}).catch(function () { });
-    }
-  }, 30000);
-
-  // Sign-ins at GitHub, GitLab and the others linked to this account.
-  function signInsBox() {
-    const box = el('details', 'tokens');
-    box.hidden = true;
-    box.appendChild(el('summary', '', t('Sign in with GitHub, GitLab and others')));
-    const list = el('div', 'tokenlist');
-    box.appendChild(list);
-    const show = async function () {
-      const logins = await get('/api/logins');
-      box.hidden = !logins.providers.length;
-      list.replaceChildren();
-      for (const p of logins.providers) {
-        const row = el('div', 'person');
-        row.appendChild(el('b', '', p.title));
-        if (p.login) {
-          row.appendChild(el('span', 'dim', t('linked as %s', p.login)));
-          const x = el('button', 'small-link', t('Unlink'));
-          x.type = 'button';
-          x.addEventListener('click', async function () {
-            try { await post('/api/logins', {unlink: p.name}); show(); } catch (err) { failed(err); }
-          });
-          row.appendChild(x);
-        } else {
-          row.appendChild(link('/signin-with/' + p.name, 'small-link', t('Link')));
-        }
-        list.appendChild(row);
-      }
+    $mod.PinWatch = new ResizeObserver($impl.Watched);
+    $mod.KeepPinned($mod.Stream);
+    if (Boolean(window.visualViewport)) {
+      window.visualViewport.addEventListener("resize",$impl.FitShown);
+      window.visualViewport.addEventListener("scroll",$impl.FitShown);
+      $impl.FitShown(null);
     };
-    show().catch(failed);
-    return box;
-  }
-
-  // Tokens let a bot or a script act as this member (Authorization: Bearer).
-  function tokensBox() {
-    const box = el('details', 'tokens');
-    box.appendChild(el('summary', '', t('Tokens for bots and scripts')));
-    const list = el('div', 'tokenlist');
-    const show = async function () {
-      const tokens = await get('/api/tokens');
-      list.replaceChildren();
-      if (!tokens.length) list.appendChild(el('p', 'dim', t('None yet. Apps you signed in to show here too.')));
-      for (const t of tokens) {
-        const row = el('div', 'person');
-        row.append(el('b', '', t.name || t.kind), el('span', 'dim', window.t('%s, made %s', t.kind, ago(t.created))));
-        const x = el('button', 'small-link', window.t('Take back'));
-        x.type = 'button';
-        x.addEventListener('click', async function () {
-          try { await post('/api/tokens', {delete: t.id}); show(); } catch (err) { failed(err); }
-        });
-        row.appendChild(x);
-        list.appendChild(row);
-      }
-    };
-    box.addEventListener('toggle', function () { if (box.open) show().catch(failed); });
-    const form = el('form', 'invite');
-    const name = el('input');
-    name.placeholder = t('What will use it, such as my-bot');
-    const make = el('button', 'primary', t('Make a token'));
-    form.append(name, make);
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      try {
-        const made = JSON.parse(await post('/api/tokens', {name: name.value}));
-        const shown = el('pre', 'newtoken', made.token);
-        form.after(shown);
-        form.after(el('p', 'hint', t('Copy it now; it is not shown again. Send it as Authorization: Bearer followed by the token. Anyone holding it can talk as you, so keep it secret.')));
-        name.value = '';
-        show();
-      } catch (err) { failed(err); }
-    });
-    box.append(list, form);
-    return box;
-  }
-
-  function editProfile(who, box) {
-    const form = el('form', 'editprofile');
-    const bio = el('textarea');
-    bio.value = who.bio;
-    bio.placeholder = t('A few words about you. Markdown works.');
-    const links = el('input');
-    links.value = who.links;
-    links.placeholder = t('Links, separated by spaces');
-    const save = el('button', 'primary', t('Save'));
-    form.append(bio, links, save);
-    box.appendChild(form);
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      try { await post('/api/profile', {bio: bio.value, links: links.value}); route(SiteBase.path(), false); } catch (err) { failed(err); }
-    });
-  }
-
-  // ------------------------------------------------------------------ admin
-
-  const ScriptVersion = document.currentScript ? new URLSearchParams(document.currentScript.src.split('?')[1]).get('v') : null;
-  const Scripts = new Map();
-  function loadScript(src) {
-    if (!Scripts.has(src)) {
-      Scripts.set(src, new Promise(function (resolve, reject) {
-        const script = el('script');
-        script.src = src + (ScriptVersion === null ? '' : '?v=' + enc(ScriptVersion));
-        script.onload = resolve;
-        script.onerror = function () {
-          Scripts.delete(src);
-          script.remove();
-          reject(new Error(t('Could not load %s.', src)));
+  };
+  $mod.$implcode = function () {
+    $impl.Watched = function (Entries) {
+      var I = 0;
+      var Target = null;
+      var Box = null;
+      for (var $l = 0, $end = Entries.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Target = Entries[I]["target"];
+        if (Reflect.has(Target,"pinned")) {
+          Box = Target}
+         else Box = Target.parentNode;
+        if (!Target.isConnected) {
+          $mod.PinWatch.unobserve(Target)}
+         else if (Boolean(Box.pinned) && !Boolean(Box.noPin)) {
+          Box.scrollTop = Box.scrollHeight;
+          Box.pinTop = Box.scrollTop;
         };
-        document.head.appendChild(script);
-      }));
-    }
-    return Scripts.get(src);
-  }
-
-  async function openAdmin() {
-    const generation = S.generation;
-    if (document.readyState === 'loading')
-      await new Promise(function (resolve) { document.addEventListener('DOMContentLoaded', resolve, {once: true}); });
-    if (generation !== S.generation) return;
-    try { await loadScript('/static/admin.js'); } catch (err) { failed(err); return; }
-    if (generation !== S.generation) return;
-    await window.Chat.openAdmin();
-  }
-
-  // tabs inside a tab: a row of smaller ones, the one last chosen remembered
-  function subTabs(box, id, list) {
-    const nav = el('nav', 'subtabs');
-    nav.setAttribute('role', 'tablist');
-    box.appendChild(nav);
-    const parts = {};
-    let current = '';
-    try { current = localStorage.getItem('sub-' + id) || ''; } catch (e) { }
-    const select = function (key) {
-      if (!parts[key]) key = list[0].key;
-      for (const k in parts) {
-        parts[k].button.classList.toggle('on', k === key);
-        parts[k].button.setAttribute('aria-selected', k === key ? 'true' : 'false');
-        parts[k].holder.hidden = k !== key;
-      }
-      current = key;
-      try { localStorage.setItem('sub-' + id, key); } catch (e) { }
-      // on a phone the row scrolls: the chosen one in sight
-      const b = parts[key].button;
-      if (b.scrollIntoView && nav.scrollWidth > nav.clientWidth) b.scrollIntoView({block: 'nearest', inline: 'nearest'});
+      };
     };
-    for (const s of list) {
-      const b = el('button', '', s.title);
-      b.type = 'button';
-      b.setAttribute('role', 'tab');
-      const badge = el('span', 'sub-count');
-      badge.hidden = true;
-      b.appendChild(badge);
-      const holder = el('div', 'subpart');
-      holder.setAttribute('role', 'tabpanel');
-      holder.hidden = true;
-      b.addEventListener('click', function () { select(s.key); });
-      nav.appendChild(b);
-      box.appendChild(holder);
-      parts[s.key] = {button: b, holder: holder, badge: badge};
-    }
-    select(current);
-    return {
-      holder: function (key) { return parts[key].holder; },
-      select: select,
-      count: function (key, n) { const b = parts[key].badge; b.hidden = !(n > 0); b.textContent = n > 0 ? n.toLocaleString(locale) : ''; }
+    $impl.FitShown = function (E) {
+      var View = null;
+      var Root = null;
+      View = window.visualViewport;
+      Root = document.documentElement;
+      if ((Math.abs(View.scale - 1) < 0.01) && (View.height < (Root.clientHeight - 1))) {
+        Root.style.setProperty("--shown-height","" + View.height + "px");
+        Root.style.setProperty("--shown-top","" + View.offsetTop + "px");
+      } else {
+        Root.style.removeProperty("--shown-height");
+        Root.style.removeProperty("--shown-top");
+      };
     };
-  }
-
-  // a part of a page whose words are on their way: a turning mark and what it waits for
-  function waiting(holder, words) {
-    const p = el('p', 'lv-wait');
-    p.append(el('span', 'lv-spinner'), ' ' + (words || t('Loading…')));
-    holder.replaceChildren(p);
-    return p;
-  }
-
-  // facts about one thing, as label and value lines in a picked row's box
-  function facts(holder, pairs) {
-    const dl = el('dl', 'lv-facts');
-    for (const p of pairs) {
-      if (p[1] === '' || p[1] === null || p[1] === undefined) continue;
-      dl.appendChild(el('dt', '', p[0]));
-      const dd = el('dd');
-      if (typeof p[1] === 'object') dd.appendChild(p[1]); else dd.textContent = String(p[1]);
-      dl.appendChild(dd);
-    }
-    holder.appendChild(dl);
-    return dl;
-  }
-  function chip(text, cls) { return el('span', 'lv-chip' + (cls ? ' ' + cls : ''), text); }
-
-  // ------------------------------------------------------------------ start
-
-  function ready(then) {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { then(); }, {once: true});
-    else then();
-  }
-
-  // What the server knows of the member signed in.
-  async function loadMe() {
-    const me = await get('/api/me');
-    Me.avatar = me.avatar;
-    Me.can = me.can;
-    Me.away = me.away;
-    Me.ignores = me.ignores;
-    Me.wrapped = me.wrapped;
-    Me.verified = me.verified;
-    Me.email = me.email;
-    Me.mailNotes = me.mail_notes;
-    Me.autoAway = me.auto_away;
-    Me.mailHours = me.mail_hours;
-    Me.readReceipts = me.read_receipts;
-    Me.prefs = me.prefs;
-    Me.password = me.password;
-    Me.closedNames = me.closed_names;
-    if (me.reactions) Me.reactions = me.reactions;
-  }
-
-  async function start() {
-    if (Me.name) {
-      try { await loadMe(); } catch (err) { }
-    }
-    for (const p of Parts) if (p.prepare) await p.prepare();
-    renderAccount();
-    renderSide();
-    for (const p of Parts) if (p.start) p.start();
-    const thread = Number(body.dataset.thread);
-    const view = body.dataset.view;
-    const target = body.dataset.target;
+  };
+},[]);
+rtl.module("app_profile",["System","JS","Web","weborworker","app_helpers"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.OpenProfile = async function (Name) {
+    var Result = undefined;
+    var Generation = 0;
+    var I = 0;
+    var Who = null;
+    var P = null;
+    var Head = null;
+    var Menu = null;
+    var Card = null;
+    var Face = null;
+    var About = null;
+    var Line = null;
+    var Bio = null;
+    var Links = null;
+    var A = null;
+    var Tools = null;
+    var Edit = null;
+    var Pic = null;
+    var Input = null;
+    var List = null;
+    async function Chosen(E) {
+      var Form = null;
+      Form = new FormData();
+      Form.append("avatar","1");
+      Form.append("file",Input.files[0]);
+      try {
+        await pas.app_helpers.Post("/api/upload",Form);
+        pas.app_router.Route(window.SiteBase.path(),false);
+      } catch ($e) {
+        pas.app_helpers.Failed($e);
+      };
+    };
+    Generation = pas.app_helpers.S.generation;
+    Who = await pas.app_helpers.Get("/api/user?name=" + pas.app_helpers.Enc(Name));
+    if (Generation !== pas.app_helpers.S.generation) return Result;
+    pas.app_helpers.S.title = Who["name"];
+    Head = pas.app_helpers.Find("#roomhead",undefined);
+    Menu = pas.app_helpers.IconButton("menu",window.t("Channels"),"menubtn");
+    Menu.addEventListener("click",function (E) {
+      pas.app_router.ToggleMenu();
+    });
+    Head.append(Menu,pas.app_helpers.El("div","titles",undefined));
+    pas.app_helpers.Find(".titles",Head).appendChild(pas.app_helpers.El("h1","",Who["name"]));
+    Card = pas.app_helpers.El("section","profile",undefined);
+    Face = pas.app_helpers.Avatar(Who["name"],Who["avatar"],"big");
+    Card.appendChild(Face);
+    About = pas.app_helpers.El("div","about",undefined);
+    Line = pas.app_helpers.El("h2","",Who["name"]);
+    if (Boolean(Who["badge"])) Line.appendChild(pas.app_helpers.El("span","role",Who["badge"]));
+    if (Boolean(Who["banned"])) Line.appendChild(pas.app_helpers.El("span","role",window.t("banned")));
+    About.appendChild(Line);
+    if (Boolean(Who["away"])) About.appendChild(pas.app_helpers.El("p","away",window.t("Away: %s",Who["away"])));
+    if (Boolean(Who["closed"])) {
+      About.appendChild(pas.app_helpers.El("p","seen",window.t("Former member")))}
+     else if (Boolean(Who["seen"])) {
+      About.appendChild(pas.app_helpers.El("p","seen",window.t("Joined %s · last here %s",window.dateText(Who["joined"]),pas.app_helpers.Ago(Who["seen"]))))}
+     else About.appendChild(pas.app_helpers.El("p","seen",window.t("Joined %s",window.dateText(Who["joined"]))));
+    Bio = pas.app_helpers.El("div","bio",undefined);
+    Bio.innerHTML = Who.bio_html;   // safe html: rendered by the server, HTML escaped;
+    About.appendChild(Bio);
+    if (Boolean(Who["links"])) {
+      Links = pas.app_helpers.El("p","links",undefined);
+      List = Who["links"].split(new RegExp("\\s+"));
+      for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+        I = $l;
+        if ((new RegExp("^https?:\\/\\/")).test("" + List[I])) {
+          A = pas.app_helpers.Link(List[I],"",List[I].replace(new RegExp("^https?:\\/\\/"),""));
+          A.rel = "nofollow ugc me";
+          A.target = "_blank";
+          Links.appendChild(A);
+        };
+      };
+      About.appendChild(Links);
+    };
+    Tools = pas.app_helpers.El("div","tools",undefined);
+    if (!Boolean(Who["closed"])) {
+      I = 0;
+      while (I < pas.app_router.Parts.length) {
+        P = pas.app_router.Parts[I];
+        if (Boolean(P["profileTools"])) P["profileTools"].call(P,Who,Tools);
+        I += 1;
+      };
+    };
+    if (Object.is(pas.app_helpers.Me.name,Who["name"])) {
+      Edit = pas.app_helpers.El("button","",window.t("Edit profile"));
+      Edit.type = "button";
+      Edit.addEventListener("click",function (E) {
+        $impl.EditProfile(Who,About);
+      });
+      Tools.appendChild(Edit);
+      Pic = pas.app_helpers.El("button","",window.t("Change picture"));
+      Pic.type = "button";
+      Input = pas.app_helpers.El("input",undefined,undefined);
+      Input.type = "file";
+      Input.accept = "image/*";
+      Input.hidden = true;
+      Pic.addEventListener("click",function (E) {
+        Input.click();
+      });
+      Input.addEventListener("change",Chosen);
+      Tools.append(Pic,Input);
+    };
+    About.appendChild(Tools);
+    Card.appendChild(About);
+    pas.app_helpers.Find("#card",undefined).appendChild(Card);
+    if (Object.is(pas.app_helpers.Me.name,Who["name"])) pas.app_helpers.Find("#card",undefined).append($impl.PrefsBox(),$impl.AccountBox(),$impl.SignInsBox());
+    if (Object.is(pas.app_helpers.Me.name,Who["name"]) && pas.app_helpers.May("api-tokens")) pas.app_helpers.Find("#card",undefined).appendChild($impl.TokensBox());
+    I = 0;
+    while (I < pas.app_router.Parts.length) {
+      P = pas.app_router.Parts[I];
+      if (Boolean(P["profile"])) await P["profile"].call(P,Who,Generation);
+      I += 1;
+    };
+    return Result;
+  };
+  this.ConfirmBox = function () {
+    var Result = null;
+    var Form = null;
+    var Email = null;
+    var Again = null;
+    async function Submit(E) {
+      E.preventDefault();
+      try {
+        pas.app_helpers.Toast(await pas.app_helpers.Post("/api/verify",pas.JS.New(["email",Email.value.trim()])),undefined);
+      } catch ($e) {
+        pas.app_helpers.Failed($e);
+      };
+    };
+    Form = pas.app_helpers.El("form","confirmbox",undefined);
+    Email = pas.app_helpers.El("input",undefined,undefined);
+    Email.type = "email";
+    Email.placeholder = window.t("A different address (or leave it)");
+    Again = pas.app_helpers.El("button","primary",window.t("Send the link again"));
+    Form.append(pas.app_helpers.El("p","notice",window.t("Confirm your email to talk: open the link we mailed you. It can take a minute, and it may be in the spam folder.")),Email,Again);
+    Form.addEventListener("submit",Submit);
+    Result = Form;
+    return Result;
+  };
+  this.Shared = function (Key, Value) {
+    var Result = "";
+    var Kept = undefined;
     try {
-      if (view === 'profile') await openProfile(target);
-      else if (view === 'admin') await openAdmin();
-      else for (const p of Parts) if (p.view && await p.view(view, target, thread)) break;
-    } catch (err) {
-      stream.appendChild(el('p', 'notice', err.message));
-    }
-    syncNow(true);
-  }
+      if (typeof(Value) === "undefined") {
+        Kept = localStorage.getItem(Key);
+        if (Boolean(Kept)) {
+          Result = "" + Kept}
+         else Result = "";
+        return Result;
+      };
+      localStorage.setItem(Key,Value);
+    } catch ($e) {
+    };
+    Result = "";
+    return Result;
+  };
+  this.StartAway = function () {
+    var Kinds = null;
+    var I = 0;
+    $impl.LastTouch = Date.now();
+    Kinds = new Array("keydown","pointerdown","wheel");
+    for (var $l = 0, $end = Kinds.length - 1; $l <= $end; $l++) {
+      I = $l;
+      document.addEventListener("" + Kinds[I],$impl.Touched,pas.JS.New(["capture",true,"passive",true]));
+    };
+    window.setInterval(function () {
+      var Last = 0.0;
+      Last = Number($mod.Shared("touched",undefined));
+      if (!Boolean(Last)) Last = 0;
+      Last = Math.max($impl.LastTouch,Last);
+      if (Boolean(pas.app_helpers.Me.name) && (pas.app_helpers.Me.autoAway > 0) && ($mod.Shared("idle",undefined) !== "1") && ((Date.now() - Last) >= (pas.app_helpers.Me.autoAway * 60000))) {
+        $mod.Shared("idle","1");
+        pas.app_helpers.Post("/api/prefs",pas.JS.New(["idle","1"])).catch($impl.Nothing);
+      };
+    },30000);
+  };
+  $mod.$implcode = function () {
+    $impl.LastTouch = 0.0;
+    $impl.OneOrZero = function (Value) {
+      var Result = "";
+      if (Boolean(Value)) {
+        Result = "1"}
+       else Result = "0";
+      return Result;
+    };
+    $impl.PasswordInput = function (Words, Fresh) {
+      var Result = null;
+      Result = pas.app_helpers.El("input",undefined,undefined);
+      Result.type = "password";
+      Result.placeholder = Words;
+      if (Fresh) {
+        Result.autocomplete = "new-password"}
+       else Result.autocomplete = "current-password";
+      Result.required = true;
+      return Result;
+    };
+    $impl.LeaveBox = function () {
+      var Result = null;
+      var Box = null;
+      var Form = null;
+      var Anonymous = null;
+      var Mark = null;
+      var Proof = null;
+      var Named = false;
+      var Words = "";
+      async function Submit(E) {
+        var Fields = null;
+        E.preventDefault();
+        if (!window.confirm(window.t("Close your account for good?"))) return;
+        try {
+          Fields = pas.JS.New(["anonymous",$impl.OneOrZero(Anonymous.checked)]);
+          if (Boolean(pas.app_helpers.Me.password)) {
+            Fields["current"] = await window.Keys.passwordProof(pas.app_helpers.Me.name,Proof.value)}
+           else Fields["name"] = Proof.value.trim();
+          await pas.app_helpers.Post("/api/close",Fields);
+          try {
+            await window.Keys.signOut();
+          } catch ($e) {
+          };
+          window.location.href = window.SiteBase.url("/");
+        } catch ($e) {
+          pas.app_helpers.Failed($e);
+        };
+      };
+      Box = pas.app_helpers.El("details","leave",undefined);
+      Box.appendChild(pas.app_helpers.El("summary","",window.t("Close this account")));
+      Named = !Object.is(pas.app_helpers.Me.closedNames,"anonymous");
+      Words = window.t("Closing your account signs you out everywhere, for good. Your email address, password, picture and profile are wiped, and nobody else can take your name.") + " ";
+      if (Named) {
+        Words = Words + window.t("What you wrote here stays, under your name unless you tick the box.")}
+       else Words = Words + window.t('What you wrote here stays, shown as written by "Former member".');
+      Words = Words + " " + window.t("Where others quoted or mentioned you, your name stays as they typed it. Only an admin can open a closed account again.");
+      Box.appendChild(pas.app_helpers.El("p","hint",Words));
+      Form = pas.app_helpers.El("form","invite",undefined);
+      Anonymous = pas.app_helpers.El("input",undefined,undefined);
+      Anonymous.type = "checkbox";
+      if (Named) {
+        Mark = pas.app_helpers.El("label",undefined,undefined);
+        Mark.append(Anonymous,pas.app_helpers.El("span","",window.t('Show "Former member" in place of my name on what I wrote')));
+        Form.appendChild(Mark);
+      };
+      if (Boolean(pas.app_helpers.Me.password)) {
+        Proof = $impl.PasswordInput(window.t("Your password"),false)}
+       else Proof = pas.app_helpers.El("input",undefined,undefined);
+      if (!Boolean(pas.app_helpers.Me.password)) {
+        Proof.placeholder = window.t("Type your name, %s, to confirm",pas.app_helpers.Me.name);
+        Proof.required = true;
+      };
+      Form.append(Proof,pas.app_helpers.El("button","primary",window.t("Close my account")));
+      Form.addEventListener("submit",Submit);
+      Box.appendChild(Form);
+      Result = Box;
+      return Result;
+    };
+    $impl.AccountBox = function () {
+      var Result = null;
+      var Box = null;
+      var Address = null;
+      var Email = null;
+      var Pass = null;
+      var Form = null;
+      var Old = null;
+      var Fresh = null;
+      async function Done(Words) {
+        var Result = undefined;
+        await pas.app_helpers.LoadMe();
+        pas.app_helpers.Toast(Words,undefined);
+        pas.app_router.Route(window.SiteBase.path(),false);
+        return Result;
+      };
+      async function ChangeAddress(E) {
+        var Fields = null;
+        E.preventDefault();
+        try {
+          Fields = pas.JS.New(["email",Email.value.trim()]);
+          if (Boolean(Pass)) Fields["current"] = await window.Keys.passwordProof(pas.app_helpers.Me.name,Pass.value);
+          await Done(await pas.app_helpers.Post("/api/email",Fields));
+        } catch ($e) {
+          pas.app_helpers.Failed($e);
+        };
+      };
+      async function ChangePassword(E) {
+        E.preventDefault();
+        try {
+          if (Boolean(Old)) {
+            await window.Keys.changePassword(pas.app_helpers.Me.name,Old.value,Fresh.value,pas.app_helpers.Me.wrapped)}
+           else await window.Keys.setupKeys(pas.app_helpers.Me.name,Fresh.value);
+          if (Boolean(Old)) {
+            await Done(window.t("Your password is changed. Your other devices and apps are signed out."))}
+           else await Done(window.t("Saved."));
+        } catch ($e) {
+          pas.app_helpers.Failed($e);
+        };
+      };
+      Box = pas.app_helpers.El("details","tokens",undefined);
+      Box.appendChild(pas.app_helpers.El("summary","",window.t("Email and password")));
+      if (Object.is(pas.app_helpers.Me.verified,false)) {
+        Box.open = true;
+        Box.appendChild($mod.ConfirmBox());
+      } else {
+        Address = pas.app_helpers.El("form","invite",undefined);
+        Email = pas.app_helpers.El("input",undefined,undefined);
+        Email.type = "email";
+        if (Boolean(pas.app_helpers.Me.email)) {
+          Email.value = pas.app_helpers.Me.email}
+         else Email.value = "";
+        Email.placeholder = window.t("Email address");
+        if (Boolean(pas.app_helpers.Me.password)) {
+          Pass = $impl.PasswordInput(window.t("Your password"),false)}
+         else Pass = null;
+        Address.append(Email);
+        if (Boolean(Pass)) Address.append(Pass);
+        Address.append(pas.app_helpers.El("button","primary",window.t("Change the address")));
+        Address.addEventListener("submit",ChangeAddress);
+        Box.appendChild(Address);
+      };
+      Form = pas.app_helpers.El("form","invite",undefined);
+      if (Boolean(pas.app_helpers.Me.password)) {
+        Old = $impl.PasswordInput(window.t("Your password"),false)}
+       else Old = null;
+      Fresh = $impl.PasswordInput(window.t("New password, 8 characters or more"),true);
+      if (Boolean(Old)) {
+        Form.append(Old)}
+       else Box.appendChild(pas.app_helpers.El("p","hint",window.t("This account has no password yet. With one you can also sign in here with your name.")));
+      if (Boolean(Old)) {
+        Form.append(Fresh,pas.app_helpers.El("button","primary",window.t("Change the password")))}
+       else Form.append(Fresh,pas.app_helpers.El("button","primary",window.t("Set a password")));
+      Form.addEventListener("submit",ChangePassword);
+      Box.appendChild(Form);
+      Box.appendChild($impl.LeaveBox());
+      Result = Box;
+      return Result;
+    };
+    $impl.PrefsBox = function () {
+      var Result = null;
+      var Box = null;
+      var Mail = null;
+      var Check = null;
+      var Hint = null;
+      var Away = null;
+      var After = null;
+      var Receipts = null;
+      var Shown = null;
+      var List = null;
+      var I = 0;
+      function Option(Minutes, Words) {
+        var O = null;
+        O = pas.app_helpers.El("option","",Words);
+        O.value = Minutes;
+        After.appendChild(O);
+      };
+      async function MailChanged(E) {
+        try {
+          await pas.app_helpers.Post("/api/prefs",pas.JS.New(["mail_notes",$impl.OneOrZero(Check.checked)]));
+          pas.app_helpers.Me.mailNotes = Check.checked;
+          pas.app_helpers.Toast(window.t("Saved."),undefined);
+        } catch ($e) {
+          Check.checked = pas.app_helpers.Me.mailNotes;
+          pas.app_helpers.Failed($e);
+        };
+      };
+      async function AwayChanged(E) {
+        try {
+          await pas.app_helpers.Post("/api/prefs",pas.JS.New(["auto_away",After.value]));
+          pas.app_helpers.Me.autoAway = Number(After.value);
+          pas.app_helpers.Toast(window.t("Saved."),undefined);
+        } catch ($e) {
+          After.value = pas.app_helpers.Me.autoAway;
+          pas.app_helpers.Failed($e);
+        };
+      };
+      function ModulePref(Pref) {
+        var Line = null;
+        var Mark = null;
+        async function Changed(E) {
+          var Sent = null;
+          Sent = new Object();
+          Sent["" + Pref["name"]] = $impl.OneOrZero(Mark.checked);
+          try {
+            await pas.app_helpers.Post("/api/prefs",Sent);
+            Pref["on"] = Mark.checked;
+            pas.app_helpers.Toast(window.t("Saved."),undefined);
+          } catch ($e) {
+            Mark.checked = Pref["on"];
+            pas.app_helpers.Failed($e);
+          };
+        };
+        Line = pas.app_helpers.El("label",undefined,undefined);
+        Mark = pas.app_helpers.El("input",undefined,undefined);
+        Mark.type = "checkbox";
+        Mark.checked = Pref["on"];
+        Line.append(Mark,pas.app_helpers.El("span","",Pref["words"]));
+        Mark.addEventListener("change",Changed);
+        Box.appendChild(Line);
+      };
+      async function ReceiptsChanged(E) {
+        try {
+          await pas.app_helpers.Post("/api/dm/receipts",pas.JS.New(["on",$impl.OneOrZero(Shown.checked)]));
+          pas.app_helpers.Me.readReceipts = Shown.checked;
+          pas.app_helpers.Toast(window.t("Saved."),undefined);
+        } catch ($e) {
+          Shown.checked = pas.app_helpers.Me.readReceipts;
+          pas.app_helpers.Failed($e);
+        };
+      };
+      Box = pas.app_helpers.El("section","prefs",undefined);
+      Mail = pas.app_helpers.El("label",undefined,undefined);
+      Check = pas.app_helpers.El("input",undefined,undefined);
+      Check.type = "checkbox";
+      Check.checked = pas.app_helpers.Me.mailNotes;
+      Mail.append(Check,pas.app_helpers.El("span","",window.t("Email me about private messages and mentions I miss")));
+      if (Boolean(pas.app_helpers.Me.email)) {
+        Hint = pas.app_helpers.El("p","hint",window.tn(pas.app_helpers.Me.mailHours,"To %1:s, at most one every %0:d hours, and only when something new waits for you.","To %1:s, at most one every %0:d hours, and only when something new waits for you.",pas.app_helpers.Me.email))}
+       else Hint = pas.app_helpers.El("p","hint",window.t("Your account has no email address."));
+      Check.disabled = !Boolean(pas.app_helpers.Me.email);
+      Away = pas.app_helpers.El("label",undefined,undefined);
+      After = pas.app_helpers.El("select",undefined,undefined);
+      Option(0,window.t("never"));
+      Option(5,window.tn(5,"after %d minutes","after %d minutes"));
+      Option(10,window.tn(10,"after %d minutes","after %d minutes"));
+      Option(15,window.tn(15,"after %d minutes","after %d minutes"));
+      Option(30,window.tn(30,"after %d minutes","after %d minutes"));
+      Option(60,window.t("after an hour"));
+      After.value = pas.app_helpers.Me.autoAway;
+      Away.append(pas.app_helpers.El("span","",window.t("Show me as away when I have not touched the chat")),After);
+      Check.addEventListener("change",MailChanged);
+      After.addEventListener("change",AwayChanged);
+      Box.append(Mail,Hint);
+      if (Boolean(pas.app_helpers.Me.prefs)) {
+        List = pas.app_helpers.Me.prefs}
+       else List = new Array();
+      for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+        I = $l;
+        ModulePref(List[I]);
+      };
+      Box.appendChild(Away);
+      if (typeof(pas.app_helpers.Me.readReceipts) !== "undefined") {
+        Receipts = pas.app_helpers.El("label",undefined,undefined);
+        Shown = pas.app_helpers.El("input",undefined,undefined);
+        Shown.type = "checkbox";
+        Shown.checked = pas.app_helpers.Me.readReceipts;
+        Receipts.append(Shown,pas.app_helpers.El("span","",window.t("Show others when I have read their private messages")));
+        Shown.addEventListener("change",ReceiptsChanged);
+        Box.append(Receipts,pas.app_helpers.El("p","hint",window.t("With this off, you do not see when others have read yours either. It shows only between two members who both have it on.")));
+      };
+      Result = Box;
+      return Result;
+    };
+    $impl.Nothing = function (Err) {
+      var Result = undefined;
+      return Result;
+    };
+    $impl.Touched = function (E) {
+      if ((Date.now() - $impl.LastTouch) < 10000) return;
+      $impl.LastTouch = Date.now();
+      $mod.Shared("touched",String($impl.LastTouch));
+      if (Boolean(pas.app_helpers.Me.name) && ($mod.Shared("idle",undefined) === "1")) {
+        $mod.Shared("idle","0");
+        pas.app_helpers.Post("/api/prefs",pas.JS.New(["idle","0"])).catch($impl.Nothing);
+      };
+    };
+    $impl.SignInsBox = function () {
+      var Result = null;
+      var Box = null;
+      var List = null;
+      async function Show() {
+        var Result = undefined;
+        var Logins = null;
+        var Providers = null;
+        var I = 0;
+        function Provider(P) {
+          var Row = null;
+          var X = null;
+          async function Unlink(E) {
+            try {
+              await pas.app_helpers.Post("/api/logins",pas.JS.New(["unlink",P["name"]]));
+              Show();
+            } catch ($e) {
+              pas.app_helpers.Failed($e);
+            };
+          };
+          Row = pas.app_helpers.El("div","person",undefined);
+          Row.appendChild(pas.app_helpers.El("b","",P["title"]));
+          if (Boolean(P["login"])) {
+            Row.appendChild(pas.app_helpers.El("span","dim",window.t("linked as %s",P["login"])));
+            X = pas.app_helpers.El("button","small-link",window.t("Unlink"));
+            X.type = "button";
+            X.addEventListener("click",Unlink);
+            Row.appendChild(X);
+          } else Row.appendChild(pas.app_helpers.Link("/signin-with/" + ("" + P["name"]),"small-link",window.t("Link")));
+          List.appendChild(Row);
+        };
+        Logins = await pas.app_helpers.Get("/api/logins");
+        Providers = Logins["providers"];
+        Box.hidden = Providers.length === 0;
+        List.replaceChildren();
+        for (var $l = 0, $end = Providers.length - 1; $l <= $end; $l++) {
+          I = $l;
+          Provider(Providers[I]);
+        };
+        return Result;
+      };
+      Box = pas.app_helpers.El("details","tokens",undefined);
+      Box.hidden = true;
+      Box.appendChild(pas.app_helpers.El("summary","",window.t("Sign in with GitHub, GitLab and others")));
+      List = pas.app_helpers.El("div","tokenlist",undefined);
+      Box.appendChild(List);
+      Show().catch(function (Err) {
+        var Result = undefined;
+        pas.app_helpers.Failed(Err);
+        return Result;
+      });
+      Result = Box;
+      return Result;
+    };
+    $impl.TokensBox = function () {
+      var Result = null;
+      var Box = null;
+      var List = null;
+      var Form = null;
+      var Name = null;
+      var Make = null;
+      async function Show() {
+        var Result = undefined;
+        var Tokens = null;
+        var I = 0;
+        function Token(Tok) {
+          var Row = null;
+          var X = null;
+          var Title = undefined;
+          async function TakeBack(E) {
+            try {
+              await pas.app_helpers.Post("/api/tokens",pas.JS.New(["delete",Tok["id"]]));
+              Show();
+            } catch ($e) {
+              pas.app_helpers.Failed($e);
+            };
+          };
+          Row = pas.app_helpers.El("div","person",undefined);
+          Title = Tok["name"];
+          if (!Boolean(Title)) Title = Tok["kind"];
+          Row.append(pas.app_helpers.El("b","",Title),pas.app_helpers.El("span","dim",window.t("%s, made %s",Tok["kind"],pas.app_helpers.Ago(Tok["created"]))));
+          X = pas.app_helpers.El("button","small-link",window.t("Take back"));
+          X.type = "button";
+          X.addEventListener("click",TakeBack);
+          Row.appendChild(X);
+          List.appendChild(Row);
+        };
+        Tokens = await pas.app_helpers.Get("/api/tokens");
+        List.replaceChildren();
+        if (Tokens.length === 0) List.appendChild(pas.app_helpers.El("p","dim",window.t("None yet. Apps you signed in to show here too.")));
+        for (var $l = 0, $end = Tokens.length - 1; $l <= $end; $l++) {
+          I = $l;
+          Token(Tokens[I]);
+        };
+        return Result;
+      };
+      async function Submit(E) {
+        var Made = null;
+        var Fresh = null;
+        E.preventDefault();
+        try {
+          Made = JSON.parse(await pas.app_helpers.Post("/api/tokens",pas.JS.New(["name",Name.value])));
+          Fresh = pas.app_helpers.El("pre","newtoken",Made["token"]);
+          Form.after(Fresh);
+          Form.after(pas.app_helpers.El("p","hint",window.t("Copy it now; it is not shown again. Send it as Authorization: Bearer followed by the token. Anyone holding it can talk as you, so keep it secret.")));
+          Name.value = "";
+          Show();
+        } catch ($e) {
+          pas.app_helpers.Failed($e);
+        };
+      };
+      Box = pas.app_helpers.El("details","tokens",undefined);
+      Box.appendChild(pas.app_helpers.El("summary","",window.t("Tokens for bots and scripts")));
+      List = pas.app_helpers.El("div","tokenlist",undefined);
+      Box.addEventListener("toggle",function (E) {
+        if (Boolean(Box.open)) Show().catch(function (Err) {
+          var Result = undefined;
+          pas.app_helpers.Failed(Err);
+          return Result;
+        });
+      });
+      Form = pas.app_helpers.El("form","invite",undefined);
+      Name = pas.app_helpers.El("input",undefined,undefined);
+      Name.placeholder = window.t("What will use it, such as my-bot");
+      Make = pas.app_helpers.El("button","primary",window.t("Make a token"));
+      Form.append(Name,Make);
+      Form.addEventListener("submit",Submit);
+      Box.append(List,Form);
+      Result = Box;
+      return Result;
+    };
+    $impl.EditProfile = function (Who, Box) {
+      var Form = null;
+      var Bio = null;
+      var Links = null;
+      var Save = null;
+      async function Submit(E) {
+        E.preventDefault();
+        try {
+          await pas.app_helpers.Post("/api/profile",pas.JS.New(["bio",Bio.value,"links",Links.value]));
+          pas.app_router.Route(window.SiteBase.path(),false);
+        } catch ($e) {
+          pas.app_helpers.Failed($e);
+        };
+      };
+      Form = pas.app_helpers.El("form","editprofile",undefined);
+      Bio = pas.app_helpers.El("textarea",undefined,undefined);
+      Bio.value = Who["bio"];
+      Bio.placeholder = window.t("A few words about you. Markdown works.");
+      Links = pas.app_helpers.El("input",undefined,undefined);
+      Links.value = Who["links"];
+      Links.placeholder = window.t("Links, separated by spaces");
+      Save = pas.app_helpers.El("button","primary",window.t("Save"));
+      Form.append(Bio,Links,Save);
+      Box.appendChild(Form);
+      Form.addEventListener("submit",Submit);
+    };
+  };
+},["app_router"]);
+rtl.module("app_admin",["System","JS","Web","weborworker","app_helpers"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.LoadScript = function (Src) {
+    var Result = undefined;
+    if (!$impl.Scripts.has(Src)) $impl.Scripts.set(Src,new Promise(function (Resolve, Reject) {
+      var Script = null;
+      Script = pas.app_helpers.El("script",undefined,undefined);
+      if (Object.is($impl.ScriptVersion,null)) {
+        Script.src = "" + Src}
+       else Script.src = "" + Src + "?v=" + pas.app_helpers.Enc($impl.ScriptVersion);
+      Script.onload = Resolve;
+      Script.onerror = function () {
+        $impl.Scripts.delete(Src);
+        Script.remove();
+        Reject(new Error(window.t("Could not load %s.",Src)));
+      };
+      document.head.appendChild(Script);
+    }));
+    Result = $impl.Scripts.get(Src);
+    return Result;
+  };
+  this.OpenAdmin = async function () {
+    var Result = undefined;
+    var Generation = 0;
+    Generation = pas.app_helpers.S.generation;
+    if (document.readyState === "loading") await new Promise(function (Resolve, Reject) {
+      document.addEventListener("DOMContentLoaded",function (E) {
+        Resolve(E);
+      },pas.JS.New(["once",true]));
+    });
+    if (Generation !== pas.app_helpers.S.generation) return Result;
+    try {
+      await $mod.LoadScript("/static/admin.js");
+    } catch ($e) {
+      pas.app_helpers.Failed($e);
+      return Result;
+    };
+    if (Generation !== pas.app_helpers.S.generation) return Result;
+    await window.Chat.openAdmin();
+    return Result;
+  };
+  this.SubTabs = function (Box, Id, List) {
+    var Result = null;
+    var Nav = null;
+    var Tabs = null;
+    var Current = undefined;
+    var I = 0;
+    var Holder = null;
+    var Count = null;
+    function Select(Key) {
+      var K = "";
+      var B = null;
+      if (!Boolean(Tabs["" + Key])) Key = List[0]["key"];
+      for (K in Tabs) {
+        Tabs[K].button.classList.toggle("on",Object.is(K,Key));
+        if (Object.is(K,Key)) {
+          Tabs[K].button.setAttribute("aria-selected","true")}
+         else Tabs[K].button.setAttribute("aria-selected","false");
+        Tabs[K].holder.hidden = !Object.is(K,Key);
+      };
+      Current = Key;
+      try {
+        localStorage.setItem("sub-" + ("" + Id),Key);
+      } catch ($e) {
+      };
+      B = Tabs["" + Key].button;
+      if (Boolean(B["scrollIntoView"]) && (Nav.scrollWidth > Nav.clientWidth)) B.scrollIntoView(pas.JS.New(["block","nearest","inline","nearest"]));
+    };
+    function Add(Tab) {
+      var B = null;
+      var Badge = null;
+      var Part = null;
+      B = pas.app_helpers.El("button","",Tab["title"]);
+      B.type = "button";
+      B.setAttribute("role","tab");
+      Badge = pas.app_helpers.El("span","sub-count",undefined);
+      Badge.hidden = true;
+      B.appendChild(Badge);
+      Part = pas.app_helpers.El("div","subpart",undefined);
+      Part.setAttribute("role","tabpanel");
+      Part.hidden = true;
+      B.addEventListener("click",function (E) {
+        Select(Tab["key"]);
+      });
+      Nav.appendChild(B);
+      Box.appendChild(Part);
+      Tabs["" + Tab["key"]] = pas.JS.New(["button",B,"holder",Part,"badge",Badge]);
+    };
+    Nav = pas.app_helpers.El("nav","subtabs",undefined);
+    Nav.setAttribute("role","tablist");
+    Box.appendChild(Nav);
+    Tabs = new Object();
+    Current = "";
+    try {
+      Current = localStorage.getItem("sub-" + ("" + Id));
+      if (!Boolean(Current)) Current = "";
+    } catch ($e) {
+    };
+    for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Add(List[I]);
+    };
+    Select(Current);
+    Holder = function (Key) {
+      var Result = null;
+      Result = Tabs["" + Key].holder;
+      return Result;
+    };
+    Count = function (Key, N) {
+      var B = null;
+      B = Tabs["" + Key].badge;
+      B.hidden = !(N > 0);
+      if (N > 0) {
+        B.textContent = N.toLocaleString(pas.app_helpers.Locale)}
+       else B.textContent = "";
+    };
+    Result = pas.JS.New(["holder",Holder,"select",Select,"count",Count]);
+    return Result;
+  };
+  this.Waiting = function (Holder, Words) {
+    var Result = null;
+    Result = pas.app_helpers.El("p","lv-wait",undefined);
+    if (!Boolean(Words)) Words = window.t("Loading…");
+    Result.append(pas.app_helpers.El("span","lv-spinner",undefined)," " + ("" + Words));
+    Holder.replaceChildren(Result);
+    return Result;
+  };
+  this.Facts = function (Holder, Pairs) {
+    var Result = null;
+    var I = 0;
+    var P = null;
+    var Value = null;
+    Result = pas.app_helpers.El("dl","lv-facts",undefined);
+    for (var $l = 0, $end = Pairs.length - 1; $l <= $end; $l++) {
+      I = $l;
+      P = Pairs[I];
+      if (Object.is(P[1],"") || Object.is(P[1],null) || (typeof(P[1]) === "undefined")) continue;
+      Result.appendChild(pas.app_helpers.El("dt","",P[0]));
+      Value = pas.app_helpers.El("dd",undefined,undefined);
+      if (typeof(P[1]) === "object") {
+        Value.appendChild(P[1])}
+       else Value.textContent = String(P[1]);
+      Result.appendChild(Value);
+    };
+    Holder.appendChild(Result);
+    return Result;
+  };
+  this.Chip = function (Words, Cls) {
+    var Result = null;
+    if (Boolean(Cls)) {
+      Result = pas.app_helpers.El("span","lv-chip " + ("" + Cls),Words)}
+     else Result = pas.app_helpers.El("span","lv-chip",Words);
+    return Result;
+  };
+  this.StartAdmin = function () {
+    if (Boolean(document.currentScript)) {
+      $impl.ScriptVersion = (new URLSearchParams(document.currentScript["src"].split("?")[1])).get("v")}
+     else $impl.ScriptVersion = null;
+    $impl.Scripts = new Map();
+  };
+  $mod.$implcode = function () {
+    $impl.ScriptVersion = undefined;
+    $impl.Scripts = null;
+  };
+},[]);
+rtl.module("app_router",["System","JS","Web","app_helpers"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.Parts = null;
+  this.Installed = false;
+  this.LayerOpened = function () {
+    if ($impl.LayerEntry) return;
+    $impl.LayerEntry = true;
+    window.history.pushState(new Object(),"",window.SiteBase.path());
+  };
+  this.LayerClosed = function (After) {
+    if (!$impl.LayerEntry || $impl.OnTop()) {
+      if (Boolean(After)) After.call(undefined);
+      return;
+    };
+    $impl.LayerEntry = false;
+    if (Boolean(After)) {
+      $impl.AfterMove = After}
+     else $impl.AfterMove = function () {
+    };
+    window.history.back();
+  };
+  this.ToggleMenu = function () {
+    pas.app_helpers.Body.classList.toggle("menu");
+    if (pas.app_helpers.Body.classList.contains("menu")) {
+      $mod.LayerOpened()}
+     else $mod.LayerClosed(undefined);
+  };
+  this.Route = async function (Path, Push) {
+    var Result = undefined;
+    var Pieces = null;
+    var I = 0;
+    var P = null;
+    if (Path === "/") {
+      Path = $impl.FirstRoom();
+      if (Path === "/") {
+        window.location.href = window.SiteBase.url("/");
+        return Result;
+      };
+    };
+    if ($impl.LayerEntry && Boolean(Push)) {
+      $impl.LayerEntry = false;
+      Result = new Promise(function (Done, Refuse) {
+        $impl.AfterMove = function () {
+          $mod.Route(Path,Push).then(Done);
+        };
+        window.history.back();
+      });
+      return Result;
+    };
+    if (Object.is(Push,"replace")) {
+      window.history.replaceState(new Object(),"",Path)}
+     else if (Boolean(Push)) window.history.pushState(new Object(),"",Path);
+    $impl.Here = Path;
+    $impl.ClearView();
+    Pieces = Path.split("/").map(decodeURIComponent);
+    try {
+      if (Object.is(Pieces[1],"u")) {
+        await pas.app_profile.OpenProfile(Pieces[2])}
+       else if (Object.is(Pieces[1],"admin")) {
+        await pas.app_admin.OpenAdmin()}
+       else {
+        I = 0;
+        while (I < $mod.Parts.length) {
+          P = $mod.Parts[I];
+          if (Boolean(P["open"]) && Boolean(await P["open"].call(P,Pieces))) break;
+          I += 1;
+        };
+      };
+    } catch ($e) {
+      pas.app_helpers.Stream.appendChild(pas.app_helpers.El("p","notice",$e["message"]));
+    };
+    $mod.RenderSide();
+    return Result;
+  };
+  this.RenderSide = function () {
+    var I = 0;
+    var P = null;
+    I = 0;
+    while (I < $mod.Parts.length) {
+      P = $mod.Parts[I];
+      if (Boolean(P["sidebar"])) P["sidebar"].call(P);
+      I += 1;
+    };
+  };
+  this.SyncNow = function (WithRooms) {
+    var I = 0;
+    var P = null;
+    I = 0;
+    while (I < $mod.Parts.length) {
+      P = $mod.Parts[I];
+      if (Boolean(P["sync"])) P["sync"].call(P,WithRooms);
+      I += 1;
+    };
+  };
+  this.StartRouter = function () {
+    document.addEventListener("click",function (E) {
+      var A = null;
+      var FromList = false;
+      A = E.target.closest("a[href]");
+      if (!Boolean(A) || Boolean(A["target"]) || E.ctrlKey || E.metaKey || E.shiftKey || (A.origin !== window.location.origin)) return;
+      if (!$impl.IsAppPath(window.SiteBase.strip(A["pathname"]))) return;
+      E.preventDefault();
+      FromList = pas.app_helpers.Body.classList.contains("menu") && Boolean(A.closest("#side"));
+      pas.app_helpers.Body.classList.remove("menu");
+      if (FromList) {
+        $mod.Route(window.SiteBase.strip(A["pathname"]),"replace")}
+       else $mod.Route(window.SiteBase.strip(A["pathname"]),true);
+    });
+    window.Side.newTabLinks(".msg",true,function (A) {
+      var Result = false;
+      Result = A.classList.contains("shot") || $impl.IsAppPath(window.SiteBase.strip(A["pathname"]));
+      return Result;
+    });
+    $impl.Narrow = window.matchMedia("(max-width: 860px)");
+    document.addEventListener("click",function (E) {
+      if (!pas.app_helpers.Body.classList.contains("menu") || Boolean(E.target.closest("#side, .menubtn"))) return;
+      E.preventDefault();
+      E.stopPropagation();
+      pas.app_helpers.Body.classList.remove("menu");
+      $mod.LayerClosed(undefined);
+    },true);
+    $mod.Installed = window.matchMedia("(display-mode: standalone)").matches;
+    $impl.Here = window.SiteBase.path();
+    document.addEventListener("pointerdown",function (E) {
+      if (!$mod.Installed) return;
+      if (!$impl.Guarded) {
+        $impl.Guarded = true;
+        window.history.replaceState(pas.JS.New(["guard",true]),"",window.SiteBase.path());
+        window.history.pushState(new Object(),"",window.SiteBase.path());
+      } else if (Boolean(history.state) && Boolean(history.state["guard"])) window.history.pushState(new Object(),"",$impl.Here);
+    },true);
+    window.addEventListener("popstate",function (E) {
+      var After = undefined;
+      if (Boolean($impl.AfterMove)) {
+        After = $impl.AfterMove;
+        $impl.AfterMove = null;
+        After.call(undefined);
+      } else if (Boolean(history.state) && Boolean(history.state["guard"])) {
+        window.history.replaceState(pas.JS.New(["guard",true]),"",$impl.Here);
+        pas.app_helpers.Toast(window.t("Press back again to leave"),undefined);
+      } else if ($impl.LayerEntry) {
+        $impl.LayerEntry = false;
+        $impl.CloseTop();
+        if ($impl.OnTop()) $mod.LayerOpened();
+      } else $mod.Route(window.SiteBase.path(),false);
+    });
+    document.addEventListener("keydown",function (E) {
+      var K = null;
+      var Rooms = null;
+      var I = 0;
+      K = E;
+      if (K.ctrlKey && (K.key === "k")) {
+        E.preventDefault();
+        if ($impl.Narrow.matches) {
+          pas.app_helpers.Body.classList.add("menu");
+          $mod.LayerOpened();
+        };
+        pas.app_helpers.Find("#jump",undefined).focus();
+        return;
+      };
+      if (!K.altKey || ((K.key !== "ArrowUp") && (K.key !== "ArrowDown"))) return;
+      Rooms = Array.from(document.querySelectorAll("#roomlist a.room"));
+      if (Rooms.length === 0) return;
+      E.preventDefault();
+      I = Rooms.findIndex(function (A, Index, List) {
+        var Result = false;
+        Result = A.classList.contains("active");
+        return Result;
+      });
+      if (K.key === "ArrowDown") {
+        I = (I + 1) % Rooms.length}
+       else I = ((I + Rooms.length) - 1) % Rooms.length;
+      $mod.Route(window.SiteBase.strip(Rooms[I].getAttribute("href")),true);
+    });
+    $mod.Parts = new Array();
+  };
+  $mod.$implcode = function () {
+    $impl.LayerEntry = false;
+    $impl.AfterMove = null;
+    $impl.Narrow = null;
+    $impl.Guarded = false;
+    $impl.Here = "";
+    $impl.IsAppPath = function (Path) {
+      var Result = false;
+      Result = (new RegExp("^\\/(p|m|u|dm)\\/|^\\/(admin|chat-search)$")).test(Path);
+      return Result;
+    };
+    $impl.OnTop = function () {
+      var Result = false;
+      Result = pas.app_helpers.Body.classList.contains("menu") || !pas.app_helpers.Panel.hidden || !pas.app_helpers.Find("#lightbox",undefined).hidden;
+      return Result;
+    };
+    $impl.CloseTop = function () {
+      if (!pas.app_helpers.Find("#lightbox",undefined).hidden) {
+        pas.app_helpers.Find("#lightbox",undefined).hidden = true}
+       else if (pas.app_helpers.Body.classList.contains("menu")) {
+        pas.app_helpers.Body.classList.remove("menu")}
+       else if (!pas.app_helpers.Panel.hidden) {
+        pas.app_panel.ClosePanel();
+        if (window.SiteBase.path().startsWith("/m/") && Boolean(pas.app_helpers.S.room)) window.history.replaceState(new Object(),"","/p/" + pas.app_helpers.Enc(pas.app_helpers.S.room));
+      };
+    };
+    $impl.ClearView = function () {
+      var AdminNav = null;
+      pas.app_helpers.S.generation += 1;
+      pas.app_helpers.S.view = "";
+      pas.app_helpers.S.room = "";
+      pas.app_helpers.S.info = null;
+      pas.app_helpers.S.messages.clear();
+      pas.app_helpers.S.thread = 0;
+      pas.app_helpers.S.threadMessages.clear();
+      pas.app_helpers.S.dm = "";
+      pas.app_helpers.S.typers = new Object();
+      window.clearTimeout(pas.app_helpers.S.dmTimer);
+      pas.app_helpers.Stream.replaceChildren();
+      pas.app_helpers.Stream.className = "";
+      pas.app_helpers.Stream.noPin = false;
+      pas.app_helpers.Find("#roomhead",undefined).replaceChildren();
+      pas.app_helpers.Find("#card",undefined).replaceChildren();
+      pas.app_helpers.Find("#typing",undefined).replaceChildren();
+      pas.app_helpers.Find("#composer-area",undefined).replaceChildren();
+      pas.app_helpers.Body.classList.remove("admin-view");
+      AdminNav = pas.app_helpers.Find("#adminnav",undefined);
+      if (Boolean(AdminNav)) AdminNav.hidden = true;
+      pas.app_panel.ClosePanel();
+    };
+    $impl.FirstRoom = function () {
+      var Result = "";
+      var R = undefined;
+      R = pas.app_helpers.S.rooms.find(function (X, Index, List) {
+        var Result = false;
+        Result = Object.is(X["kind"],"channel");
+        return Result;
+      });
+      if (Boolean(R)) {
+        Result = "/p/" + pas.app_helpers.Enc(R["slug"])}
+       else Result = "/";
+      return Result;
+    };
+  };
+},["app_panel","app_profile","app_admin"]);
+rtl.module("app_panel",["System","JS","Web","app_helpers"],function () {
+  "use strict";
+  var $mod = this;
+  this.OpenPanel = function (Title, Cls) {
+    var Result = null;
+    var Head = null;
+    var Close = null;
+    pas.app_helpers.Body.classList.remove("menu");
+    pas.app_helpers.Panel.hidden = false;
+    if (Boolean(Cls)) {
+      pas.app_helpers.Panel["className"] = Cls}
+     else pas.app_helpers.Panel.className = "";
+    pas.app_helpers.Panel.replaceChildren();
+    Head = pas.app_helpers.El("header",undefined,undefined);
+    Head.appendChild(pas.app_helpers.El("h2","",Title));
+    Close = pas.app_helpers.IconButton("close",window.t("Close"),undefined);
+    Close.addEventListener("click",function (E) {
+      $mod.ClosePanel();
+      if (window.SiteBase.path().startsWith("/m/") && Boolean(pas.app_helpers.S.room)) window.history.replaceState(new Object(),"","/p/" + pas.app_helpers.Enc(pas.app_helpers.S.room));
+      pas.app_router.LayerClosed(undefined);
+    });
+    Head.appendChild(Close);
+    pas.app_helpers.Panel.appendChild(Head);
+    pas.app_helpers.Body.classList.add("withpanel");
+    pas.app_router.LayerOpened();
+    Result = pas.app_helpers.Panel;
+    return Result;
+  };
+  this.OpenReport = function () {
+    var Box = null;
+    var Form = null;
+    var Words = null;
+    var Send = null;
+    async function Submit(E) {
+      var Lines = null;
+      var Theme = undefined;
+      var Name = undefined;
+      var Where = "";
+      E.preventDefault();
+      Send.disabled = true;
+      Send.textContent = window.t("Sending…");
+      Words.disabled = true;
+      Theme = document.documentElement.dataset["theme"];
+      if (!Boolean(Theme)) Theme = "auto";
+      Name = pas.app_helpers.Me.name;
+      if (!Boolean(Name)) Name = "no";
+      if (pas.app_router.Installed) {
+        Where = ", installed app"}
+       else Where = ", browser tab";
+      Lines = new Array();
+      Lines.push("browser: " + window.navigator.userAgent);
+      Lines.push("screen: " + ("" + window.innerWidth) + "x" + ("" + window.innerHeight) + " at " + ("" + window.devicePixelRatio));
+      Lines.push("theme: " + ("" + Theme));
+      Lines.push("signed in: " + ("" + Name));
+      Lines.push("notifications: " + pas.app_notify.NotifyState() + Where);
+      Lines.push("last errors:");
+      if (pas.app_helpers.Trail.length > 0) {
+        Lines = Lines.concat(pas.app_helpers.Trail)}
+       else Lines = Lines.concat(new Array("none"));
+      try {
+        pas.app_helpers.Toast(await pas.app_helpers.Post("/api/bug",pas.JS.New(["text",Words.value,"page",window.SiteBase.path(),"info",Lines.join("\n")])),undefined);
+        $mod.ClosePanel();
+        pas.app_router.LayerClosed(undefined);
+      } catch ($e) {
+        pas.app_helpers.Failed($e);
+      };
+      Send.disabled = false;
+      Send.textContent = window.t("Send the report");
+      Words.disabled = false;
+    };
+    Box = $mod.OpenPanel(window.t("Report a problem"),"report");
+    Form = pas.app_helpers.El("form","reportform",undefined);
+    Words = pas.app_helpers.El("textarea",undefined,undefined);
+    Words.rows = 8;
+    Words.maxLength = 4000;
+    Words.placeholder = window.t("What went wrong, or what looked wrong? What were you doing?");
+    Send = pas.app_helpers.El("button","primary",window.t("Send the report"));
+    Form.append(Words,pas.app_helpers.El("p","hint",window.t("Sent along: this page's address, your browser and screen size, and the last errors this page showed. Nothing else.")),Send);
+    Form.addEventListener("submit",Submit);
+    Box.appendChild(Form);
+    Words.focus();
+  };
+  this.ClosePanel = function () {
+    pas.app_helpers.Panel.hidden = true;
+    pas.app_helpers.Panel.replaceChildren();
+    pas.app_helpers.S.thread = 0;
+    pas.app_helpers.S.threadMessages.clear();
+    pas.app_helpers.Body.classList.remove("withpanel");
+  };
+},["app_router","app_notify"]);
+rtl.module("app_account",["System","JS","Web","app_helpers"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.RenderAccount = function () {
+    var Tools = null;
+    var Report = null;
+    var Install = null;
+    async function Accept(E) {
+      pas.app_notify.InstallOffer.prompt();
+      await pas.app_notify.InstallOffer.userChoice;
+      pas.app_notify.InstallOffer = null;
+      $mod.RenderAccount();
+    };
+    Tools = new Array();
+    Report = pas.app_helpers.IconButton("bug",window.t("Report a problem"),undefined);
+    Report.addEventListener("click",function (E) {
+      pas.app_panel.OpenReport();
+    });
+    Tools.push(Report);
+    if (Boolean(pas.app_notify.InstallOffer)) {
+      Install = pas.app_helpers.IconButton("install",window.t("Install the app"),undefined);
+      Install.addEventListener("click",Accept);
+      Tools.push(Install);
+    };
+    if (Boolean(pas.app_helpers.Me.name)) Tools.push(pas.app_notify.BellButton());
+    window.Side.account(pas.JS.New(["name",pas.app_helpers.Me.name,"avatar",pas.app_helpers.Me.avatar,"admin",$impl.MayAdmin(),"tools",Tools,"links",pas.app_helpers.Extras.accountLinks,"unconfirmed",Object.is(pas.app_helpers.Me.verified,false)]));
+  };
+  this.JoinForm = function (Caption) {
+    var Result = null;
+    var Form = null;
+    var Name = null;
+    var Pass = null;
+    var Go = null;
+    var Row = null;
+    var A = null;
+    var Others = null;
+    var Titles = null;
+    var I = 0;
+    async function Submit(E) {
+      E.preventDefault();
+      Go.disabled = true;
+      Go.textContent = window.t("One moment");
+      if (Boolean(await window.Keys.joinFrom(Form,pas.app_helpers.Failed))) location.reload();
+      Go.disabled = false;
+      Go.textContent = window.t("Join");
+    };
+    Form = pas.app_helpers.El("form","quickjoin",undefined);
+    Form.appendChild(pas.app_helpers.El("span","caption",Caption));
+    Name = pas.app_helpers.El("input",undefined,undefined);
+    Name.name = "name";
+    Name.placeholder = window.t("Name");
+    Name.maxLength = 24;
+    Name.autocomplete = "username";
+    Name.required = true;
+    Pass = pas.app_helpers.El("input",undefined,undefined);
+    Pass.name = "password";
+    Pass.type = "password";
+    Pass.placeholder = window.t("Password");
+    Pass.autocomplete = "current-password";
+    Pass.required = true;
+    Go = pas.app_helpers.El("button","",window.t("Join"));
+    Form.append(Name,Pass,Go);
+    if (Boolean(pas.app_helpers.Body.dataset["sso"])) {
+      Row = pas.app_helpers.El("div","ssolink",undefined);
+      Row.appendChild(pas.app_helpers.El("span","",window.t("or sign in with")));
+      Others = pas.app_helpers.Body.dataset["sso"].split(",");
+      for (var $l = 0, $end = Others.length - 1; $l <= $end; $l++) {
+        I = $l;
+        A = pas.app_helpers.Link("/signin-with/" + ("" + Others[I]),"ssoicon",undefined);
+        Titles = pas.JS.New(["github","GitHub","gitlab","GitLab","codeberg","Codeberg","google","Google","microsoft","Microsoft"]);
+        A.title = window.t("Sign in with %s",Titles["" + Others[I]]);
+        A.appendChild(pas.app_helpers.El("span","ssologo " + ("" + Others[I]),undefined));
+        Row.appendChild(A);
+      };
+      Form.appendChild(Row);
+    };
+    Form.addEventListener("submit",Submit);
+    Result = Form;
+    return Result;
+  };
+  this.PopMenu = function (Anchor, Items) {
+    var Menu = null;
+    var Old = null;
+    var R = null;
+    var Shown = 0.0;
+    var I = 0;
+    var Close = null;
+    function Add(Item) {
+      var B = null;
+      B = pas.app_helpers.El("button","",Item[0]);
+      B.type = "button";
+      B.addEventListener("click",function (E) {
+        Menu.remove();
+        Item[1].call(Item);
+      });
+      Menu.appendChild(B);
+    };
+    Old = document.querySelectorAll(".popmenu");
+    for (var $l = 0, $end = Old.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Old.item(I).remove();
+    };
+    Menu = pas.app_helpers.El("nav","popmenu",undefined);
+    for (var $l1 = 0, $end1 = Items.length - 1; $l1 <= $end1; $l1++) {
+      I = $l1;
+      Add(Items[I]);
+    };
+    R = Anchor.getBoundingClientRect();
+    Menu.style.setProperty("left","" + Math.min(R.left,window.innerWidth - 220) + "px");
+    Menu.style.setProperty("top","" + (R.bottom + 4) + "px");
+    document.body.appendChild(Menu);
+    if (Boolean(window.visualViewport)) {
+      Shown = window.visualViewport.height}
+     else Shown = window.innerHeight;
+    if ((R.bottom + 4 + Menu.offsetHeight) > Shown) Menu.style.setProperty("top","" + Math.max(4,R.top - 4 - Menu.offsetHeight) + "px");
+    Close = function (E) {
+      if (Menu.contains(E.target)) return;
+      Menu.remove();
+      document.removeEventListener("click",Close);
+    };
+    window.setTimeout(function () {
+      document.addEventListener("click",Close);
+    });
+  };
+  $mod.$implcode = function () {
+    var Rights = ["view-admin","manage-permissions","manage-settings","manage-channels","manage-private","read-reports","manage-blocks","view-visitors","view-storage"];
+    $impl.MayAdmin = function () {
+      var Result = false;
+      var I = 0;
+      Result = true;
+      for (I = 0; I <= 8; I++) if (pas.app_helpers.May(Rights[I])) return Result;
+      Result = pas.app_helpers.Extras.adminTabs.some(function (Extra, Index, List) {
+        var Result = false;
+        Result = Boolean(Extra["permission"]) && pas.app_helpers.May(Extra["permission"]);
+        return Result;
+      }) || pas.app_helpers.Extras.adminScripts.some(function (Extra, Index, List) {
+        var Result = false;
+        Result = Extra["permissions"].some(function (P, At, All) {
+          var Result = false;
+          Result = pas.app_helpers.May(P);
+          return Result;
+        });
+        return Result;
+      });
+      return Result;
+    };
+  };
+},["app_notify","app_panel"]);
+rtl.module("app_notify",["System","JS","Web","app_helpers"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.InstallOffer = null;
+  this.Notify = async function (Title, Words) {
+    var Result = undefined;
+    var Reg = null;
+    try {
+      Reg = await navigator.serviceWorker.ready;
+      await Reg.showNotification(Title,pas.JS.New(["body",Words,"tag","page","icon",window.SiteBase.url("/icon-192.png")]));
+    } catch ($e) {
+      new Notification(Title,pas.JS.New(["body",Words]));
+    };
+    return Result;
+  };
+  this.SubscribePush = async function () {
+    var Result = false;
+    var Reg = null;
+    var Key = undefined;
+    var Bytes = undefined;
+    var Words = undefined;
+    var Raw = "";
+    var Sub = null;
+    try {
+      Reg = await navigator.serviceWorker.ready;
+      Key = (await pas.app_helpers.Get("/api/push/key"))["key"];
+      Raw = atob(Key.replace(new RegExp("-","g"),"+").replace(new RegExp("_","g"),"/"));
+      Bytes = Uint8Array.from(Raw,function (C) {
+        var Result = 0;
+        Result = C.charCodeAt(0);
+        return Result;
+      });
+      Sub = await Reg.pushManager.getSubscription();
+      if (!Boolean(Sub)) Sub = await Reg.pushManager.subscribe(pas.JS.New(["userVisibleOnly",true,"applicationServerKey",Bytes]));
+      await pas.app_helpers.Post("/api/push",pas.JS.New(["endpoint",Sub["endpoint"]]));
+      Result = true;
+    } catch ($e) {
+      Words = $e["message"];
+      if (!Boolean(Words)) Words = $e;
+      pas.app_helpers.Remember("push: " + ("" + Words));
+      Result = false;
+    };
+    return Result;
+  };
+  this.NotifyState = function () {
+    var Result = "";
+    var State = undefined;
+    if (!Reflect.has(window,"Notification") || !Reflect.has(window.navigator,"serviceWorker") || !Reflect.has(window,"PushManager")) {
+      Result = "none";
+      return Result;
+    };
+    State = pas.JS.New(["granted","on","denied","blocked"])["" + Notification.permission];
+    if (Boolean(State)) {
+      Result = "" + State}
+     else Result = "off";
+    return Result;
+  };
+  this.BellButton = function () {
+    var Result = null;
+    var State = "";
+    State = $mod.NotifyState();
+    Result = pas.app_helpers.IconButton("bell",pas.JS.New(["on",window.t("Notifications are on"),"off",window.t("Turn on notifications for mentions and private messages"),"blocked",window.t("Notifications are blocked: click to see how to allow them"),"none",window.t("This browser cannot show notifications")])[State],"bell-" + State);
+    Result.addEventListener("click",function (E) {
+      $impl.TurnOnNotifications();
+    });
+    return Result;
+  };
+  this.OfferNotifications = function () {
+    var Asked = undefined;
+    var State = "";
+    var Bar = null;
+    var No = null;
+    var Yes = null;
+    Asked = "";
+    try {
+      Asked = localStorage.getItem("notify-asked-2");
+      if (!Boolean(Asked)) Asked = "";
+    } catch ($e) {
+    };
+    State = $mod.NotifyState();
+    if (!Boolean(pas.app_helpers.Me.name) || Boolean(Asked) || (State === "on") || Boolean(pas.app_helpers.Find("#notifybar",undefined))) return;
+    Bar = pas.app_helpers.El("div","notifybar",undefined);
+    Bar.id = "notifybar";
+    if (State === "off") {
+      No = pas.app_helpers.El("button","small-link",window.t("Not now"))}
+     else No = pas.app_helpers.El("button","small-link",window.t("OK"));
+    No.type = "button";
+    No.addEventListener("click",function (E) {
+      try {
+        localStorage.setItem("notify-asked-2","1");
+      } catch ($e) {
+      };
+      Bar.remove();
+    });
+    Bar.appendChild(pas.app_helpers.Icon("bell"));
+    if (State === "off") {
+      Yes = pas.app_helpers.El("button","primary",window.t("Turn on"));
+      Yes.type = "button";
+      Yes.addEventListener("click",function (E) {
+        $impl.TurnOnNotifications();
+      });
+      Bar.append(pas.app_helpers.El("span","",window.t("Get a notification when someone mentions you or sends you a private message?")),Yes);
+    } else if (State === "blocked") {
+      Bar.appendChild(pas.app_helpers.El("span","",$impl.BlockedHelp))}
+     else Bar.appendChild(pas.app_helpers.El("span","",window.t("This browser cannot show notifications from sites, so mentions and private messages only show here.")));
+    Bar.appendChild(No);
+    pas.app_helpers.Find("#main",undefined).prepend(Bar);
+  };
+  this.StartNotify = function () {
+    if (Reflect.has(window.navigator,"serviceWorker")) navigator.serviceWorker.register(window.SiteBase.url("/sw.js")).catch(function (Err) {
+      var Result = undefined;
+      pas.app_helpers.Remember("service worker: " + ("" + Err["message"]));
+      return Result;
+    });
+    window.addEventListener("beforeinstallprompt",function (E) {
+      E.preventDefault();
+      $mod.InstallOffer = E;
+      pas.app_account.RenderAccount();
+    });
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      $impl.BlockedHelp = window.t('Notifications are blocked for this site, and the app cannot ask again. Open %s in the browser itself, tap the icon left of the address, Permissions, and allow Notifications (or reset them); the app uses the same setting. In Brave, also turn on "Use Google services for push messaging" under Settings, Privacy and security.',window.location.host)}
+     else $impl.BlockedHelp = window.t('Notifications are blocked for this site. Allow them in the browser\'s site settings (the icon left of the address, or Settings, Site settings, Notifications). In Brave, also turn on "Use Google services for push messaging" under Settings, Privacy and security.');
+  };
+  $mod.$implcode = function () {
+    $impl.BlockedHelp = "";
+    $impl.TurnOnNotifications = async function () {
+      var State = "";
+      var Bar = null;
+      State = $mod.NotifyState();
+      if (State === "none") {
+        pas.app_helpers.Toast(window.t("This browser cannot show notifications from sites."),"bad");
+        return;
+      };
+      if (State === "blocked") {
+        pas.app_helpers.Toast($impl.BlockedHelp,"bad");
+        return;
+      };
+      if (!Object.is(await Notification.requestPermission(),"granted")) {
+        pas.app_helpers.Toast($impl.BlockedHelp,"bad")}
+       else if (await $mod.SubscribePush()) {
+        pas.app_helpers.Toast(window.t("Notifications are on: mentions and private messages, when the chat is not in front of you."),undefined)}
+       else pas.app_helpers.Toast(window.t('Notifications are allowed, but the browser would not sign up for push messages. In Brave, turn on "Use Google services for push messaging" under Settings, Privacy and security, then tap the bell again.'),"bad");
+      pas.app_account.RenderAccount();
+      Bar = pas.app_helpers.Find("#notifybar",undefined);
+      if (Boolean(Bar)) Bar.remove();
+    };
+  };
+},["app_account"]);
+rtl.module("AppPage",["System","JS","Web","weborworker","app_helpers","app_notify","app_account","app_router","app_panel","app_profile","app_admin"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  $mod.$implcode = function () {
+    $impl.Start = async function () {
+      var Result = undefined;
+      var I = 0;
+      var P = null;
+      var Thread = 0.0;
+      var View = undefined;
+      var Target = undefined;
+      if (Boolean(pas.app_helpers.Me.name)) try {
+        await pas.app_helpers.LoadMe();
+      } catch ($e) {
+      };
+      I = 0;
+      while (I < pas.app_router.Parts.length) {
+        P = pas.app_router.Parts[I];
+        if (Boolean(P["prepare"])) await P["prepare"].call(P);
+        I += 1;
+      };
+      pas.app_account.RenderAccount();
+      pas.app_router.RenderSide();
+      I = 0;
+      while (I < pas.app_router.Parts.length) {
+        P = pas.app_router.Parts[I];
+        if (Boolean(P["start"])) P["start"].call(P);
+        I += 1;
+      };
+      Thread = Number(pas.app_helpers.Body.dataset["thread"]);
+      View = pas.app_helpers.Body.dataset["view"];
+      Target = pas.app_helpers.Body.dataset["target"];
+      try {
+        if (Object.is(View,"profile")) {
+          await pas.app_profile.OpenProfile(Target)}
+         else if (Object.is(View,"admin")) {
+          await pas.app_admin.OpenAdmin()}
+         else {
+          I = 0;
+          while (I < pas.app_router.Parts.length) {
+            P = pas.app_router.Parts[I];
+            if (Boolean(P["view"]) && Boolean(await P["view"].call(P,View,Target,Thread))) break;
+            I += 1;
+          };
+        };
+      } catch ($e) {
+        pas.app_helpers.Stream.appendChild(pas.app_helpers.El("p","notice",$e["message"]));
+      };
+      pas.app_router.SyncNow(true);
+      return Result;
+    };
+    $impl.Load = function () {
+      pas.app_helpers.StartHelpers();
+      pas.app_notify.StartNotify();
+      pas.app_router.StartRouter();
+      pas.app_profile.StartAway();
+      pas.app_admin.StartAdmin();
+      pas.app_helpers.Extras = pas.JS.New(["groups",new Array(),"cards",new Array(),"badges",new Array(),"rooms",new Array(),"commands",new Object(),"adminTabs",new Array(),"adminScripts",new Array(),"adminOverview",new Array(),"settingGroups",new Object(),"accountLinks",new Array(),"places",new Object()]);
+      window["Chat"] = pas.JS.New(["extras",pas.app_helpers.Extras,"me",pas.app_helpers.Me,"state",pas.app_helpers.S,"icons",pas.app_helpers.Icons,"el",pas.app_helpers.SideEl,"link",pas.app_helpers.SideLink,"icon",pas.app_helpers.SideIcon,"get",pas.app_helpers.Get,"post",pas.app_helpers.KeysPost,"enc",pas.app_helpers.Enc,"toast",pas.app_helpers.Toast,"failed",pas.app_helpers.Failed,"route",pas.app_router.Route,"openPanel",pas.app_panel.OpenPanel,"ago",pas.app_helpers.Ago,"subTabs",pas.app_admin.SubTabs,"facts",pas.app_admin.Facts,"chip",pas.app_admin.Chip,"waiting",pas.app_admin.Waiting,"$",pas.app_helpers.Find,"stream",pas.app_helpers.Stream,"Site",pas.app_helpers.SiteName,"iconButton",pas.app_helpers.SideIconButton,"sizeText",pas.app_helpers.SizeText,"syncNow",pas.app_router.SyncNow,"toggleMenu",pas.app_router.ToggleMenu,"locale",pas.app_helpers.Locale,"clock",pas.app_helpers.Clock,"shared",pas.app_profile.Shared,"loadScript",pas.app_admin.LoadScript,"parts",pas.app_router.Parts,"body",pas.app_helpers.Body,"panel",pas.app_helpers.Panel,"avatar",pas.app_helpers.SideAvatar,"dayLabel",pas.app_helpers.DayLabel,"keepPinned",pas.app_helpers.KeepPinned,"pinWatch",pas.app_helpers.PinWatch,"nearBottom",pas.app_helpers.NearBottom,"may",pas.app_helpers.May,"mayHere",pas.app_helpers.MayHere,"notify",pas.app_notify.Notify,"popMenu",pas.app_account.PopMenu,"joinForm",pas.app_account.JoinForm,"confirmBox",pas.app_profile.ConfirmBox,"layerOpened",pas.app_router.LayerOpened,"layerClosed",pas.app_router.LayerClosed,"offerNotifications",pas.app_notify.OfferNotifications,"subscribePush",pas.app_notify.SubscribePush]);
+      window["Site"] = window["Chat"];
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded",function (E) {
+          $impl.Start();
+        },pas.JS.New(["once",true]))}
+       else $impl.Start();
+    };
+  };
+  $mod.$init = function () {
+    $impl.Load();
+  };
+},[]);
 
-  // What another script, loaded after this one, can
-  // add: sidebar groups ({title, test, sigil, button, always}), things over
-  // a room's messages, badges by a name, rooms for # completion and
-  // /commands the page runs itself.
-  const Extras = {groups: [], cards: [], badges: [], rooms: [], commands: {}, adminTabs: [], adminScripts: [], adminOverview: [], settingGroups: {}, accountLinks: [], places: {}};
-  window.Chat = {extras: Extras, me: Me, state: S, icons: Icons, el: el, link: link, icon: icon, get: get,
-    post: post, enc: enc, toast: toast, failed: failed, route: route, openPanel: openPanel, ago: ago,
-    subTabs: subTabs, facts: facts, chip: chip, waiting: waiting, $: $, stream: stream, Site: Site,
-    iconButton: iconButton, sizeText: sizeText, syncNow: syncNow, toggleMenu: toggleMenu,
-    locale: locale, clock: clock, shared: shared, loadScript: loadScript, parts: Parts, body: body,
-    panel: panel, avatar: avatar, dayLabel: dayLabel, keepPinned: keepPinned, pinWatch: pinWatch,
-    nearBottom: nearBottom, may: may, mayHere: mayHere, notify: notify, popMenu: popMenu,
-    joinForm: joinForm, confirmBox: confirmBox, layerOpened: layerOpened, layerClosed: layerClosed,
-    offerNotifications: offerNotifications, subscribePush: subscribePush};
-
-  // the same under the name a module's script should use: this is the site's
-  // shell, whatever modules are on; Chat is its name from when the chat was all there was
-  window.Site = window.Chat;
-
-  // after the page's other scripts (chat.js, extensions) have added themselves
-  ready(start);
-})();
+rtl.run('AppPage');
+}

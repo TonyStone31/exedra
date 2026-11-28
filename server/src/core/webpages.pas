@@ -353,8 +353,9 @@ begin
       TagStart := Pos('{{t:', Source, TagEnd + 2);
     end;
     Result := T.ParseString(Source);
-    // every page's first script: what lets a site sit under a path of its domain
-    Result := StringReplace(Result, '<head>', '<head>'#10'<script src="/static/base.js?v=' + T.Values['v'] + '"></script>', []);
+    // every page's first scripts: the runtime the built scripts need, then what lets a site sit under a path of its domain
+    Result := StringReplace(Result, '<head>', '<head>'#10'<script src="/static/pas-runtime.js?v=' + T.Values['v'] +
+      '"></script>'#10'<script src="/static/base.js?v=' + T.Values['v'] + '"></script>', []);
   finally
     T.Free;
   end;

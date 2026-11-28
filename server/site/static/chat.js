@@ -1,2519 +1,4289 @@
-// The chat: rooms, threads, private conversations and beams, on the
-// site's page (app.js), which it adds itself to.  A live connection
-// (/api/live) rings when something changes, and the page then asks for it
-// (/api/sync); without one, the page asks every few seconds.
-(function () {
-  'use strict';
-
-  const C = window.Chat;
-  // in the account menu while the chat is on
-  C.extras.accountLinks.push({href: '/irc', title: t('Use your IRC client')});
-  const $ = C.$, body = C.body, stream = C.stream, panel = C.panel, Site = C.Site, Me = C.me, S = C.state,
-    Extras = C.extras, el = C.el, link = C.link, icon = C.icon,
-    iconButton = C.iconButton, get = C.get, post = C.post, enc = C.enc, toast = C.toast,
-    failed = C.failed, route = C.route, openPanel = C.openPanel, ago = C.ago, clock = C.clock,
-    dayLabel = C.dayLabel, avatar = C.avatar, sizeText = C.sizeText,
-    keepPinned = C.keepPinned, nearBottom = C.nearBottom, may = C.may, mayHere = C.mayHere,
-    notify = C.notify, popMenu = C.popMenu, joinForm = C.joinForm, layerOpened = C.layerOpened,
-    layerClosed = C.layerClosed, toggleMenu = C.toggleMenu, confirmBox = C.confirmBox;
-
-  // ---------------------------------------------------------------- sidebar
-
-  // The left column's button that searches every channel, in the main area.
-  const findAll = document.getElementById('findall');
-  if (findAll) {
-    findAll.hidden = false;
-    findAll.prepend(Side.icon('search'));
-    findAll.addEventListener('click', function () { document.body.classList.remove('menu'); route('/chat-search', true); });
-  }
-
-  // The member's unseen notices from the site (SiteNotices), the newest few.
-  let Notices = {unseen: 0, items: []};
-
-  const Groups = [
-    {title: 'Channels', test: function (r) { return r.kind === 'channel'; }, sigil: '#'},
-    // a bench is the channel of a page (ChatBenches): listed apart, and only the ones followed
-    {title: 'Benches', test: function (r) { return r.kind === 'bench'; }, sigil: ''},
-    {title: 'Shelves', test: function (r) { return r.kind === 'shelf'; }, sigil: '~'}
-  ];
-
-  function renderSidebar() {
-    const nav = $('#roomlist');
-    const words = $('#jump').value.toLowerCase().trim();
-    nav.replaceChildren();
-    let unread = 0;
-    for (const g of [Groups[0]].concat(Extras.groups, Groups.slice(1))) {
-      const rooms = S.rooms.filter(g.test).filter(function (r) {
-        return !words || r.title.toLowerCase().includes(words) || r.slug.includes(words);
-      });
-      const head = el('div', 'group');
-      head.appendChild(el('span', '', g.title === 'Channels' ? t('Channels') : g.title === 'Shelves' ? t('Shelves') : g.title === 'Benches' ? t('Benches') : g.title));
-      if (g.title === 'Channels' && (may('create-private') || may('create-channel'))) {
-        const add = iconButton('plus', t('Open a channel'));
-        add.classList.add('small');
-        add.addEventListener('click', newRoom);
-        head.appendChild(add);
-      }
-      if (g.button) {
-        const extra = el('button', 'small-link', g.button.label);
-        extra.type = 'button';
-        extra.addEventListener('click', g.button.click);
-        head.appendChild(extra);
-      }
-      if (!rooms.length && !g.always) continue;
-      nav.appendChild(head);
-      for (const r of rooms) {
-        const href = r.kind === 'shelf' ? '/u/' + enc(r.title) : '/p/' + enc(r.slug);
-        const a = link(href, 'room');
-        a.dataset.slug = r.slug;
-        if (r.slug === S.room) a.classList.add('active');
-        // a silenced channel keeps quiet: no unread mark and no badge; one on
-        // mentions only shows the mention badge alone
-        const quiet = r.notify === 'none';
-        if (quiet) a.classList.add('quiet');
-        if (r.unread && !quiet && r.notify !== 'mentions') a.classList.add('unread');
-        if (r.private) {
-          const lock = el('span', 'sigil');
-          lock.appendChild(icon('lock'));
-          a.appendChild(lock);
-        } else if (r.avatar) a.appendChild(avatar(r.title, r.avatar, 'tiny roomicon'));
-        else a.appendChild(el('span', 'sigil', g.sigil));
-        a.appendChild(el('span', 'name', r.title));
-        if (r.mentions && !quiet) a.appendChild(el('span', 'badge mention', '@' + r.mentions));
-        else if (r.unread && !quiet && r.notify !== 'mentions') a.appendChild(el('span', 'badge', r.unread > 99 ? '99+' : String(r.unread)));
-        // The row's own menu: how much it may bother you, leave, and for a
-        // private channel of one's own, delete.
-        const items = roomMenuItems(r);
-        if (items.length) {
-          const more = iconButton('down', t('More'), 'rowmenu');
-          more.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            popMenu(more, items);
-          });
-          a.appendChild(more);
-        }
-        nav.appendChild(a);
-        if (!quiet) unread += r.mentions;
-      }
-    }
-    if (S.dms.length) {
-      const head = el('div', 'group');
-      head.appendChild(el('span', '', t('Private')));
-      nav.appendChild(head);
-      for (const d of S.dms) {
-        if (words && !d.name.toLowerCase().includes(words)) continue;
-        const a = link('/dm/' + enc(d.name), 'room person');
-        if (S.view === 'dm' && S.dm === d.name) a.classList.add('active');
-        if (d.unread) a.classList.add('unread');
-        a.append(avatar(d.name, d.avatar, 'tiny'), el('span', 'name', d.name));
-        if (d.unread) a.appendChild(el('span', 'badge mention', String(d.unread)));
-        const more = iconButton('down', t('More'), 'rowmenu');
-        more.addEventListener('click', function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          popMenu(more, [[t('Delete conversation'), function () { deleteDm(d.name); }]]);
-        });
-        a.appendChild(more);
-        nav.appendChild(a);
-        unread += d.unread;
-      }
-    }
-    // what the site itself has to tell the member: a release that failed, a claim
-    if (Notices.unseen) {
-      const head = el('div', 'group');
-      head.appendChild(el('span', '', t('Notices')));
-      nav.appendChild(head);
-      for (const n of Notices.items) {
-        const a = link(noticePath(n.link), 'room notice unread');
-        a.append(el('span', 'sigil', '!'), el('span', 'name', n.text));
-        a.title = n.text;
-        a.addEventListener('click', function (e) {
-          e.preventDefault();
-          const to = a.getAttribute('href');
-          post('/api/notices', {id: String(n.id)}).catch(function () { }).then(function () { location.assign(to); });
-        });
-        nav.appendChild(a);
-      }
-      if (Notices.unseen > Notices.items.length)
-        nav.appendChild(el('div', 'hint', tn(Notices.unseen - Notices.items.length, '%d more notice', '%d more notices')));
-      unread += Notices.unseen;
-    }
-    document.title = (unread ? '(' + unread + ') ' : '') + (S.title || Site) + ' - ' + Site;
-  }
-
-  // A notice links to a page of this site, never elsewhere.
-  function noticePath(path) {
-    return typeof path === 'string' && path.charAt(0) === '/' && path.charAt(1) !== '/' && path.charAt(1) !== '\\' ? path : '/';
-  }
-
-  function roomMenuItems(r) {
-    const items = [];
-    if (!Me.name || r.kind === 'shelf') return items;
-    if (r.notify !== 'none') items.push([t('Silence channel'), function () { setNotify(r, 'none'); }]);
-    if (r.notify !== 'mentions') items.push([t('Mentions only'), function () { setNotify(r, 'mentions'); }]);
-    if (r.notify && r.notify !== 'all') items.push([t('Notify about everything'), function () { setNotify(r, 'all'); }]);
-    items.push([t('Leave channel'), function () { leaveRoom(r); }]);
-    if (r.private && r.owner) items.push([t('Delete channel'), function () { deleteRoom(r); }]);
-    return items;
-  }
-
-  // How much the channel may bother this member: all, mentions or none.  The
-  // server stops pushing and mailing about a silenced one; the page stops
-  // badging and announcing it.
-  async function setNotify(r, mode) {
-    try {
-      await post('/api/follow/notify', {room: r.slug, mode: mode});
-      r.notify = mode;
-      renderSidebar();
-      toast(mode === 'none' ? t('%s is silenced.', r.title) : mode === 'mentions' ? t('Only mentions in %s from now on.', r.title) :
-        t('%s notifies about everything again.', r.title));
-    } catch (err) { failed(err); }
-  }
-
-  // Leaving takes the channel out of the sidebar; a private one asks first,
-  // since only an invite gets the member back in.
-  async function leaveRoom(r) {
-    if (r.private && !confirm(t('Leave %s? Only an invite gets you back in.', r.title))) return;
-    try {
-      await post('/api/follow', {room: r.slug, on: '0'});
-      S.rooms = S.rooms.filter(function (x) { return x.slug !== r.slug; });
-      renderSidebar();
-      if (S.view === 'room' && S.room === r.slug) route('/', true);
-      else syncNow(true);
-    } catch (err) { failed(err); }
-  }
-
-  // The owner's private channel, gone for good with everything in it; the
-  // other members' pages leave it on the server's ring.
-  async function deleteRoom(r) {
-    if (!confirm(t('Delete %s?\n\nEverything said in it and every file goes, for everyone in it. This cannot be undone.', r.title))) return;
-    try {
-      const said = await post('/api/room/delete', {slug: r.slug});
-      S.rooms = S.rooms.filter(function (x) { return x.slug !== r.slug; });
-      renderSidebar();
-      if (S.view === 'room' && S.room === r.slug) route('/', true);
-      toast(typeof said === 'string' ? said : t('Channel deleted.'));
-    } catch (err) { failed(err); }
-  }
-
-  // This member's copy only; the other keeps theirs (/api/dm/delete).
-  async function deleteDm(name) {
-    if (!confirm(t('Delete your conversation with %s?\n\nYour copy is gone for good. %s keeps theirs. If they write again, a new conversation starts.', name, name))) return;
-    try {
-      await post('/api/dm/delete', {with: name});
-      S.dms = S.dms.filter(function (d) { return d.name !== name; });
-      renderSidebar();
-      if (S.view === 'dm' && S.dm === name) route('/', true);
-      toast(t('Conversation deleted.'));
-    } catch (err) { failed(err); }
-  }
-
-  $('#jump').addEventListener('input', renderSidebar);
-  $('#jump').addEventListener('keydown', function (e) {
-    if (e.key !== 'Enter') return;
-    const first = $('#roomlist a.room');
-    if (first) { route(SiteBase.strip(first.getAttribute('href')), true); this.value = ''; renderSidebar(); }
-  });
-
-  // Mentions and private messages that arrive while the member looks
-  // elsewhere become a notification.
-  function notifyNews(rooms, dms) {
-    const seen = S.alerts;
-    const news = [];
-    for (const r of rooms) {
-      const key = 'r:' + r.slug;
-      if (seen[key] !== undefined && r.mentions > seen[key] && r.notify !== 'none' && (document.hidden || r.slug !== S.room))
-        news.push(t('You were mentioned in %s', (r.kind === 'channel' ? '#' : '') + r.title));
-      seen[key] = r.mentions;
-    }
-    for (const d of dms) {
-      const key = 'd:' + d.name;
-      if (seen[key] !== undefined && d.unread > seen[key] && (document.hidden || S.dm !== d.name))
-        news.push(t('%s sent you a private message', d.name));
-      seen[key] = d.unread;
-    }
-    if (!news.length) return;
-    if ('Notification' in window && Notification.permission === 'granted' && document.hidden)
-      notify(Site, news.join('\n'));
-    else
-      news.forEach(function (n) { toast(n); });
-  }
-
-  // Right click, touch hold and the Menu key open the message menu. Links,
-  // pictures, code, controls, selected text and Shift keep the browser
-  // menu. Touch selection is disabled in site.css so holding opens this
-  // menu; Copy is available here.
-  function menuHere(node, target) {
-    const marked = getSelection();
-    return !target.closest('a, img, pre, code, button, textarea, input') && (marked.isCollapsed || !marked.containsNode(node, true));
-  }
-  document.addEventListener('contextmenu', function (e) {
-    const node = e.target.closest('.msg');
-    if (!node || !node.menu) return;
-    const onArrow = e.target.closest('.more');
-    if (!onArrow && (e.shiftKey || !menuHere(node, e.target))) return;
-    e.preventDefault();
-    // a phone sends this for a held finger too: the hold timed below has
-    // opened the menu already, or is not waited for
-    if (Hold && Hold.opened === node) return;
-    dropHold();
-    openMenu(node, onArrow ? null : {x: e.clientX, y: e.clientY});
-  });
-
-  // An iPhone sends no contextmenu for a held finger, so the hold is timed
-  // here: one finger that stays where it came down opens the menu there.
-  // Moving it (scrolling) or lifting it sooner (a tap) does not.
-  const HOLD_MS = 500, HOLD_SLIP = 10;
-  let Hold = null;   // {x, y, timer}, and opened: the message whose menu it opened
-  function dropHold() {
-    if (Hold) clearTimeout(Hold.timer);
-    Hold = null;
-  }
-  document.addEventListener('touchstart', function (e) {
-    dropHold();
-    const node = e.touches.length === 1 && e.target.closest('.msg');
-    if (!node || !node.menu || !menuHere(node, e.target)) return;
-    const hold = {x: e.touches[0].clientX, y: e.touches[0].clientY};
-    hold.timer = setTimeout(function () {
-      hold.opened = node;
-      openMenu(node, hold);
-    }, HOLD_MS);
-    Hold = hold;
-  }, {passive: true});
-  document.addEventListener('touchmove', function (e) {
-    if (Hold && !Hold.opened && Math.hypot(e.touches[0].clientX - Hold.x, e.touches[0].clientY - Hold.y) > HOLD_SLIP) dropHold();
-  }, {passive: true});
-  // the finger that opened the menu comes up over it: that is no tap on what lies there
-  document.addEventListener('touchend', function (e) {
-    if (Hold && Hold.opened && e.cancelable) e.preventDefault();
-    dropHold();
-  });
-  document.addEventListener('touchcancel', dropHold);
-
-  // ------------------------------------------------------------------ rooms
-
-  function roomTitle(info) {
-    if (info.kind === 'channel') return '#' + info.title;
-    return info.title;
-  }
-
-  function renderHead(info, extra) {
-    const head = $('#roomhead');
-    head.replaceChildren();
-    const menu = iconButton('menu', t('Channels'), 'menubtn');
-    menu.addEventListener('click', toggleMenu);
-    head.appendChild(menu);
-    const titles = el('div', 'titles');
-    const h = el('h1');
-    h.appendChild(el('span', 'roomname', roomTitle(info)));
-    if (info.avatar) h.prepend(avatar(info.title, info.avatar, 'small roomicon'));
-    if (info.private) {
-      h.prepend(icon('lock'));
-      h.appendChild(el('span', 'kindtag', t('private')));
-    } else if (info.kind !== 'channel') h.appendChild(el('span', 'kindtag', info.kind));
-    titles.appendChild(h);
-    const topic = el('p', 'topic', info.topic || '');
-    if (info.can && info.can['set-topic']) {
-      topic.title = t('Click to change the topic');
-      topic.classList.add('editable');
-      if (!info.topic) topic.textContent = t('Add a topic');
-      topic.addEventListener('click', async function () {
-        const next = prompt(t('Topic for %s', roomTitle(info)), info.topic || '');
-        if (next === null) return;
-        try {
-          await post('/api/topic', {room: info.slug, topic: next});
-          info.topic = next;
-          topic.textContent = next || t('Add a topic');
-        } catch (err) { failed(err); }
-      });
-    }
-    titles.appendChild(topic);
-    head.appendChild(titles);
-    const here = el('button', 'here');
-    here.type = 'button';
-    here.title = t('Who is here');
-    here.addEventListener('click', openMembers);
-    head.appendChild(here);
-    const tools = el('div', 'headtools');
-    if (extra) tools.appendChild(extra);
-    if (Me.name && info.kind !== 'shelf') {
-      const follow = el('button', 'pill ' + (info.following ? 'on' : ''), info.following ? t('Following') : t('Follow'));
-      follow.type = 'button';
-      follow.title = info.private ? t('If you leave a private channel, someone must invite you back') :
-        t('Followed channels sit in your sidebar with their unread counts');
-      follow.addEventListener('click', async function () {
-        if (info.private && info.following && !confirm(t('Leave %s? Only an invite gets you back in.', info.title))) return;
-        try {
-          await post('/api/follow', {room: info.slug, on: info.following ? '0' : '1'});
-          info.following = !info.following;
-          follow.textContent = info.following ? t('Following') : t('Follow');
-          follow.classList.toggle('on', info.following);
-          syncNow(true);
-        } catch (err) { failed(err); }
-      });
-      // Beside the name: it is about this room.
-      h.appendChild(follow);
-    }
-    const people = iconButton('people', t('People: who is here, and who is in this channel or runs it'));
-    people.addEventListener('click', openMembers);
-    tools.appendChild(people);
-    const pins = iconButton('pin', t('Pinned messages'));
-    pins.addEventListener('click', openPins);
-    const search = iconButton('search', t('Search'));
-    search.addEventListener('click', openSearch);
-    tools.append(pins, search);
-    head.appendChild(tools);
-  }
-
-  function renderHere(list) {
-    const box = $('#roomhead .here');
-    if (!box) return;
-    box.replaceChildren();
-    S.here = list;
-    for (const p of list.slice(0, 6)) {
-      const a = avatar(p.name, p.avatar, 'tiny' + (p.away ? ' away' : ''));
-      a.title = p.away ? t('%s is away: %s', p.name, p.away) : t('%s is here', p.name);
-      box.appendChild(a);
-    }
-    if (list.length) box.appendChild(el('span', 'count', tn(list.length, '%d here', '%d here')));
-  }
-
-  // Who is typing: from the live connection's rings and from each sync,
-  // each name shown for five seconds after it was last heard.
-  function noteTyping(names) {
-    for (const n of names) if (n !== Me.name) S.typers[n] = Date.now() + 5000;
-    renderTyping();
-  }
-
-  setInterval(function () { if (Object.keys(S.typers).length) renderTyping(); }, 1000);
-
-  function renderTyping() {
-    const box = $('#typing');
-    const now = Date.now();
-    for (const n of Object.keys(S.typers)) if (S.typers[n] < now) delete S.typers[n];
-    const names = Object.keys(S.typers);
-    if (!names.length) { box.replaceChildren(); return; }
-    let text = names.length === 1 ? t('%s is typing', names[0]) :
-      names.length === 2 ? t('%s and %s are typing', names[0], names[1]) : t('Several people are typing');
-    box.replaceChildren(el('span', 'dots'), el('span', '', text));
-  }
-
-  async function openRoom(slug, thread) {
-    const generation = S.generation;
-    const info = await get('/api/room?slug=' + enc(slug));
-    if (generation !== S.generation) return;
-    S.view = 'room';
-    S.room = info.slug;
-    S.info = info;
-    S.title = roomTitle(info);
-    // the room last used, for the pages around the chat to open their bubble on
-    if (!info.private) try { localStorage.setItem('last-room', info.slug); } catch (e) { }
-    renderHead(info);
-    renderCard(info);
-    await loadMessages(generation);
-    renderComposer($('#composer-area'), 0);
-    if (thread) openThread(thread);
-    syncNow(true);
-  }
-
-  async function loadMessages(generation) {
-    const data = await get('/api/messages?room=' + enc(S.room));
-    if (generation !== S.generation) return;
-    S.lastRead = data.last_read;
-    S.divider = 0;
-    S.since = data.rev - 3000000;
-    S.oldest = Infinity;
-    S.older = data.messages.length === 50;
-    for (const m of data.messages) {
-      if (!S.divider && Me.name && m.id > S.lastRead && m.name !== Me.name && S.lastRead > 0) S.divider = m.id;
-    }
-    addMessages(data.messages, true);
-    if (!data.messages.length) stream.appendChild(emptyNote());
-  }
-
-  function emptyNote() {
-    const p = el('div', 'empty');
-    p.appendChild(el('b', '', t('Nothing said here yet.')));
-    p.appendChild(el('span', '', Me.name ? t(' Say hello.') : t(' Join to say hello.')));
-    return p;
-  }
-
-  stream.addEventListener('scroll', async function () {
-    if (stream.scrollTop <= 80 && S.view === 'dm') { olderDms(); return; }
-    if (stream.scrollTop > 80 || !S.older || S.view !== 'room' || S.loadingOlder) return;
-    S.loadingOlder = true;
-    const generation = S.generation;
-    try {
-      const data = await get('/api/messages?room=' + enc(S.room) + '&before=' + S.oldest);
-      if (generation !== S.generation) return;
-      const height = stream.scrollHeight;
-      S.older = data.messages.length === 50;
-      for (const m of data.messages) upsert(m, stream, S.messages, false);
-      regroup(stream);
-      stream.scrollTop = stream.scrollHeight - height;
-    } catch (err) { failed(err); }
-    // finally: a room changed meanwhile must not leave the older pages shut
-    finally { S.loadingOlder = false; }
-  });
-
-  function addMessages(list, initial) {
-    const stick = initial || stream.pinned || nearBottom();
-    const empty = $('.empty', stream);
-    if (empty && list.length) empty.remove();
-    for (const m of list) upsert(m, stream, S.messages, false);
-    regroup(stream);
-    if (stick) { stream.scrollTop = stream.scrollHeight; stream.pinned = true; }
-  }
-
-  function upsert(m, box, map, inThread) {
-    const old = map.get(m.id);
-    if (old && old.data.rev === m.rev) return;
-    const node = renderMessage(m, inThread);
-    if (old) old.node.replaceWith(node);
-    else {
-      let after = null;
-      const nodes = box.querySelectorAll(':scope > .msg');
-      for (let i = nodes.length - 1; i >= 0; i--) {
-        if (Number(nodes[i].dataset.id) < m.id) { after = nodes[i]; break; }
-      }
-      if (after) after.after(node);
-      else box.prepend(node);
-    }
-    map.set(m.id, {data: m, node: node});
-    if (box === stream && m.id < S.oldest) S.oldest = m.id;
-  }
-
-  // Runs of messages by one person close together share one header; days
-  // and the first unread message get a line.
-  function regroup(box) {
-    box.querySelectorAll(':scope > .day, :scope > .divider').forEach(function (d) { d.remove(); });
-    let prev = null;
-    for (const node of box.querySelectorAll(':scope > .msg')) {
-      const when = new Date(node.dataset.at);
-      const day = when.toDateString();
-      if (!prev || new Date(prev.dataset.at).toDateString() !== day) {
-        const line = el('div', 'day');
-        line.appendChild(el('span', '', dayLabel(when)));
-        node.before(line);
-        prev = null;
-      }
-      if (box === stream && S.divider && Number(node.dataset.id) === S.divider) {
-        const line = el('div', 'divider');
-        line.appendChild(el('span', '', t('New')));
-        node.before(line);
-        prev = null;
-      }
-      const together = prev && prev.dataset.name === node.dataset.name && !prev.classList.contains('system')
-        && when - new Date(prev.dataset.at) < 6 * 60000 && !node.classList.contains('hasthread')
-        && !prev.classList.contains('hasthread');
-      node.classList.toggle('cont', !!together);
-      prev = node;
-    }
-    if (box === stream && S.view === 'dm') markSeen();
-  }
-
-  // --------------------------------------------------------------- messages
-
-  function renderMessage(m, inThread) {
-    const node = el('article', 'msg');
-    node.dataset.id = m.id;
-    node.dataset.at = m.at;
-    node.dataset.name = m.name;
-    if (!m.uid) node.classList.add('system');
-    if (m.name === Me.name) node.classList.add('mine');
-    if (m.mentions_me) node.classList.add('mention');
-    if (m.deleted) node.classList.add('deleted');
-    if (m.replies && !inThread) node.classList.add('hasthread');
-
-    const gutter = el('div', 'gutter');
-    if (m.uid) {
-      const a = link('/u/' + enc(m.name), 'face');
-      a.appendChild(avatar(m.name, m.avatar));
-      gutter.appendChild(a);
-    } else gutter.appendChild(avatar(m.name, '', 'bot'));
-    const at = new Date(m.at);
-    if (!m.deleted) {
-      const more = iconButton('down', t('More'), 'more');
-      more.setAttribute('aria-haspopup', 'menu');
-      more.setAttribute('aria-expanded', 'false');
-      more.addEventListener('click', function () {
-        if (Menu && Menu.node === node) closeMenu(true);
-        else openMenu(node);
-      });
-      gutter.appendChild(more);
-      node.menu = function () { return messageMenu(m, inThread); };
-    }
-    node.appendChild(gutter);
-
-    const content = el('div', 'content');
-    const head = el('header');
-    if (m.uid) head.appendChild(link('/u/' + enc(m.name), 'who', m.name));
-    else head.appendChild(el('b', 'who', m.name));
-    if (m.badge) head.appendChild(el('span', 'role', m.badge));
-    for (const badge of Extras.badges) {
-      const b = badge(m);
-      if (b) head.appendChild(b);
-    }
-    if (m.room !== S.room && !inThread) head.appendChild(link('/p/' + enc(m.room), 'where', '#' + m.room));
-    const time = el('time', '', clock(at));
-    time.title = dateTimeText(at);
-    head.appendChild(time);
-    if (m.edited && !m.deleted) head.appendChild(el('span', 'edited', t('(edited)')));
-    if (m.pinned) head.appendChild(el('span', 'pinned', t('pinned')));
-    content.appendChild(head);
-
-    const text = el('div', 'body');
-    if (m.deleted) text.textContent = t('This message was deleted.');
-    else { text.innerHTML = m.html; dressCode(text); }   // safe html: rendered by the server, members' HTML escaped
-    if (m.re && !m.deleted) content.appendChild(quoteOf(m.re, function () { route('/m/' + m.re.id, true); }));
-    content.appendChild(text);
-    if (m.preview && !m.deleted) content.appendChild(previewOf(m.preview));
-    // Someone the member ignores: folded, one click to read anyway.
-    if (m.ignored && !m.deleted) {
-      node.classList.add('ignored');
-      const show = el('button', 'unfold', t('A message from %s, whom you ignore. Show it', m.name));
-      show.type = 'button';
-      show.addEventListener('click', function () { node.classList.remove('ignored'); show.remove(); });
-      content.insertBefore(show, text);
-    }
-    if (m.files && m.files.length) content.appendChild(renderFiles(m.files));
-    if (m.reactions && m.reactions.length) content.appendChild(renderReactions(m));
-    if (m.replies && !inThread) {
-      const t = el('button', 'threadline');
-      t.type = 'button';
-      t.appendChild(icon('reply'));
-      t.appendChild(el('b', '', tn(m.replies, '%d reply', '%d replies')));
-      t.appendChild(el('span', '', window.t('last %s', ago(m.last_reply))));
-      t.addEventListener('click', function () { openThread(m.id); });
-      content.appendChild(t);
-    }
-    node.appendChild(content);
-    C.pinWatch.observe(node);   // its list keeps the bottom when this gets taller
-    return node;
-  }
-
-  function renderFiles(files) {
-    const box = el('div', 'files');
-    for (const f of files) {
-      if (f.image) {
-        const a = link(f.url, 'shot');
-        const img = el('img');
-        img.src = f.url;
-        img.alt = f.name;
-        img.loading = 'lazy';
-        a.appendChild(img);
-        box.appendChild(a);
-      } else {
-        const a = link(f.url, 'file');
-        a.appendChild(icon('attach'));
-        a.appendChild(el('span', 'fname', f.name));
-        a.appendChild(el('span', 'fsize', sizeText(f.size)));
-        if (f.once) a.appendChild(el('span', 'fexp', t('deletes after one download')));
-        else if (f.expires) a.appendChild(el('span', 'fexp', t('until %s', dateTimeText(f.expires))));
-        box.appendChild(a);
-      }
-    }
-    return box;
-  }
-
-  // The chips under a message (reactions.js), and who gave each
-  function renderReactions(m) {
-    return Reactions.chips(m.reactions, {
-      toggle: function (r) { react(m.id, r.r, m.dm); },
-      who: function (r) { return get((m.dm ? '/api/dm/reacted' : '/api/reacted') + '?id=' + m.id + '&r=' + enc(r.r)); }
-    });
-  }
-
-  // dm: the message is a private one, which has its own numbers and its own place
-  async function react(id, r, dm) {
-    if (!Me.name) return toast(t('Join to react.'));
-    try {
-      if (dm) { await post('/api/dm/react', {id: id, r: r}); refreshDm(id); return; }
-      await post('/api/react', {id: id, r: r});
-      syncNow();
-    } catch (err) { failed(err); }
-  }
-
-  // What the first link in a message leads to, folded to one line: the
-  // site and the title.  A click opens the description and the picture;
-  // the picture is asked for only then, so reading the room tells the
-  // other site nothing.
-  function previewOf(p) {
-    const box = el('div', 'preview');
-    const line = el('button', 'line');
-    line.type = 'button';
-    let host = p.site;
-    if (!host) { try { host = new URL(p.url).host; } catch (e) { host = ''; } }
-    line.append(el('span', 'site', host), el('span', 'title', p.title || p.url));
-    line.title = p.url;
-    const more = el('div', 'more');
-    more.hidden = true;
-    if (p.description) more.appendChild(el('p', '', p.description));
-    const go = el('a', 'small-link', t('Open the page'));
-    go.href = p.url;
-    go.target = '_blank';
-    go.rel = 'noopener nofollow ugc';
-    more.appendChild(go);
-    line.addEventListener('click', function () {
-      const open = box.classList.toggle('open');
-      more.hidden = !open;
-      if (open && p.image && !more.querySelector('img')) {
-        const img = el('img');
-        img.alt = '';
-        img.referrerPolicy = 'no-referrer';
-        img.src = p.image;
-        more.prepend(img);
-      }
-    });
-    box.append(line, more);
-    return box;
-  }
-
-  // ---------------------------------------------------- answering a message
-
-  // A message's first words on one line: code blocks and markup signs out.
-  function firstWords(text) {
-    return text.replace(/```[\s\S]*?(```|$)/g, ' ').replace(/[*_~`]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 140);
-  }
-
-  // Shows a message in its list, lit for a moment.
-  function flash(there) {
-    there.scrollIntoView({block: 'center'});
-    there.classList.add('flash');
-    setTimeout(function () { there.classList.remove('flash'); }, 1600);
-  }
-
-  // The words of an answered message (re) beside its author's name.  An
-  // action's own words begin with that name (Ann waves), which is not said
-  // twice: Ann, then waves.
-  function saidIn(re) {
-    return re.text.startsWith(re.from + ' ') ? re.text.slice(re.from.length + 1) : re.text;
-  }
-
-  // The message another one answers (re), on a line above its words: who
-  // wrote it and how it starts, as text and never as HTML.  A click goes to
-  // it in the thread the quote is in, else among the room's messages; far
-  // is what to do when it is not loaded there.
-  function quoteOf(re, far) {
-    const quote = el('button', 'quote');
-    quote.type = 'button';
-    if (re.gone) {
-      quote.textContent = t('a deleted message');
-      quote.disabled = true;
-      return quote;
-    }
-    quote.append(el('b', '', re.from.slice(0, 60)), document.createTextNode(' ' + saidIn(re).slice(0, 140)));
-    quote.addEventListener('click', function () {
-      const there = (quote.closest('.threadlist') || stream).querySelector('.msg[data-id="' + parseInt(re.id, 10) + '"]');
-      if (there) flash(there);
-      else far();
-    });
-    return quote;
-  }
-
-  // The strip over the message box whose draft has this key.
-  function answerStrip(key) {
-    return Array.from(document.querySelectorAll('.composer .answering')).find(function (strip) { return strip.dataset.key === key; });
-  }
-
-  // S.answer is the message being answered (re: id, from, text) and the
-  // box it is answered from (key).  Its strip says so until the answer is
-  // sent or dropped.
-  function showAnswer() {
-    for (const strip of document.querySelectorAll('.composer .answering')) {
-      const re = S.answer && S.answer.key === strip.dataset.key ? S.answer.re : null;
-      strip.replaceChildren();
-      strip.hidden = !re;
-      if (!re) continue;
-      const area = strip.parentNode.querySelector('textarea');
-      const stop = iconButton('close', t('Do not answer it after all'));
-      stop.addEventListener('click', function () { answer(); area.focus(); });
-      strip.append(el('span', '', t('Answering %s:', re.from) + ' ' + saidIn(re)), stop);
-      area.focus();
-    }
-  }
-
-  function answer(key, re) {
-    S.answer = re ? {key: key, re: re} : null;
-    showAnswer();
-  }
-
-  // The message this box's next one answers, if any.
-  function answered(key) {
-    return S.answer && S.answer.key === key ? S.answer.re : null;
-  }
-
-  // ------------------------------------------------------------ message menu
-
-  // What a message's menu holds for this member: react (given an emoji)
-  // when they may, and the actions as {icon, title, run}, the ones that
-  // destroy marked bad and put last.
-  function messageMenu(m, inThread) {
-    const items = [], mayReact = Me.name && mayHere('react');
-    // answered from the box of its own place: the open thread's for a
-    // message of that thread, its channel's for one in the channel's list.
-    // Where that box is not on the page (a channel one may not post in)
-    // there is nothing to offer.
-    const from = S.thread && (m.parent === S.thread || (inThread && m.id === S.thread)) ? 'thread ' + S.thread : inThread ? '' : 'room ' + m.room;
-    if (from && answerStrip(from)) items.push({icon: 'reply', title: t('Answer this message'), run: function () {
-      answer(from, {id: m.id, from: m.name, text: firstWords(m.body) || (m.files.length ? m.files[0].name : t('code'))});
-    }});
-    if (mayReact && !inThread && !m.parent)
-      items.push({icon: 'reply', title: t('Reply in a thread'), run: function () { openThread(m.id); }});
-    if (m.body) items.push({icon: 'copy', title: t('Copy the text'), run: function () {
-      navigator.clipboard.writeText(m.body).then(function () { toast(t('Text copied.')); });
-    }});
-    items.push({icon: 'link', title: t('Copy a link to this'), run: function () {
-      navigator.clipboard.writeText(location.origin + SiteBase.url('/m/' + m.id)).then(function () { toast(t('Link copied.')); });
-    }});
-    // where messages stay as sent there is nothing to change or delete
-    const asSent = S.info && S.info.as_sent;
-    if (m.name === Me.name && m.uid && may('edit-own') && !asSent)
-      items.push({icon: 'edit', title: t('Edit'), run: function () { startEdit(m); }});
-    if (mayHere('pin') && !m.parent) items.push({icon: 'pin', title: m.pinned ? t('Unpin') : t('Pin to the channel'), run: async function () {
-      try { await post('/api/pin', {id: m.id}); syncNow(); } catch (err) { failed(err); }
-    }});
-    if (!asSent && ((m.name === Me.name && m.uid && may('delete-own')) || mayHere('delete-any'))) items.push({icon: 'trash', title: t('Delete'), bad: true, run: async function () {
-      if (!confirm(t('Delete this message?'))) return;
-      try { await post('/api/delete', {id: m.id}); syncNow(); } catch (err) { failed(err); }
-    }});
-    return {react: mayReact ? function (r) { react(m.id, r); } : null, items: items};
-  }
-
-  // One menu at a time, for the message whose arrow was clicked, that was
-  // right-clicked or that is held on a touch screen.  It lies over the page
-  // and not in the list, whose edge would cut it, and its message stays
-  // shaded (.held) while it is open.
-  let Menu = null;
-
-  function closeMenu(refocus) {
-    if (!Menu) return;
-    Menu.box.remove();
-    Menu.node.classList.remove('held');
-    Menu.arrow.setAttribute('aria-expanded', 'false');
-    if (refocus) Menu.arrow.focus({preventScroll: true});
-    Menu = null;
-  }
-  document.addEventListener('pointerdown', function (e) {
-    if (Menu && !Menu.box.contains(e.target) && !Menu.arrow.contains(e.target)) closeMenu();
-  }, true);
-  document.addEventListener('scroll', function (e) {
-    if (Menu && !Menu.box.contains(e.target)) closeMenu(true);
-  }, true);
-  addEventListener('resize', function () { closeMenu(true); });
-
-  // The button an arrow key leads to: the next or the one before for right
-  // and left, the nearest in the row below or above for down and up (the
-  // reactions are a grid, the actions a column), around the ends.
-  function menuStep(buttons, here, key) {
-    const i = buttons.indexOf(here), n = buttons.length;
-    if (key === 'Home') return buttons[0];
-    if (key === 'End') return buttons[n - 1];
-    if (key === 'ArrowRight') return buttons[(i + 1) % n];
-    if (key === 'ArrowLeft') return buttons[(i + n - 1) % n];
-    if (key !== 'ArrowDown' && key !== 'ArrowUp') return null;
-    const down = key === 'ArrowDown', from = here.getBoundingClientRect();
-    let best = null, row = 0, off = 0;
-    for (const b of buttons) {
-      const r = b.getBoundingClientRect();
-      if (down ? r.top < from.bottom - 1 : r.bottom > from.top + 1) continue;
-      const far = Math.abs(r.top - from.top), aside = Math.abs(r.left - from.left);
-      if (!best || far < row - 1 || (far < row + 1 && aside < off)) { best = b; row = far; off = aside; }
-    }
-    return best || buttons[down ? 0 : n - 1];
-  }
-
-  // at: where the pointer is; without it the menu drops from the arrow
-  function openMenu(node, at) {
-    closeMenu();
-    const offer = node.menu(), arrow = node.querySelector(':scope > .gutter > .more');
-    if (!offer.react && !offer.items.length) return;
-    const box = el('div', 'msgmenu');
-    box.setAttribute('role', 'menu');
-    box.tabIndex = -1;
-    const entry = function (b) {
-      b.type = 'button';
-      b.tabIndex = -1;
-      b.setAttribute('role', 'menuitem');
-      return b;
+if (!pas.ChatPage) {
+rtl.module("chat_shared",["System","JS","Web"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.Same = function (A, B) {
+    return A === B;
+  };
+  this.Toggle = function (Node, Name, Force) {
+    var Result = false;
+    Result = Node.classList.toggle(Name,Force);
+    return Result;
+  };
+  this.C = null;
+  this.Body = null;
+  this.Stream = null;
+  this.Panel = null;
+  this.Site = undefined;
+  this.Me = null;
+  this.S = null;
+  this.Extras = null;
+  this.ToggleMenu = null;
+  this.FailedFn = undefined;
+  this.Notices = null;
+  this.Menu = null;
+  this.Live = null;
+  this.RoomsWanted = false;
+  this.FromRing = false;
+  this.Setup = function () {
+    var Shell = null;
+    Shell = window["Chat"];
+    $mod.C = Shell;
+    $impl.FindFn = Shell["$"];
+    $mod.Body = Shell["body"];
+    $mod.Stream = Shell["stream"];
+    $mod.Panel = Shell["panel"];
+    $mod.Site = Shell["Site"];
+    $mod.Me = Shell["me"];
+    $mod.S = Shell["state"];
+    $mod.Extras = Shell["extras"];
+    $impl.ElFn = Shell["el"];
+    $impl.LinkFn = Shell["link"];
+    $impl.IconFn = Shell["icon"];
+    $impl.IconButtonFn = Shell["iconButton"];
+    $impl.GetFn = Shell["get"];
+    $impl.PostFn = Shell["post"];
+    $impl.EncFn = Shell["enc"];
+    $impl.ToastFn = Shell["toast"];
+    $impl.FailFn = Shell["failed"];
+    $mod.FailedFn = Shell["failed"];
+    $impl.RouteFn = Shell["route"];
+    $impl.OpenPanelFn = Shell["openPanel"];
+    $impl.AgoFn = Shell["ago"];
+    $impl.ClockFn = Shell["clock"];
+    $impl.DayLabelFn = Shell["dayLabel"];
+    $impl.AvatarFn = Shell["avatar"];
+    $impl.SizeTextFn = Shell["sizeText"];
+    $impl.KeepPinnedFn = Shell["keepPinned"];
+    $impl.NearBottomFn = Shell["nearBottom"];
+    $impl.MayFn = Shell["may"];
+    $impl.MayHereFn = Shell["mayHere"];
+    $impl.NotifyFn = Shell["notify"];
+    $impl.PopMenuFn = Shell["popMenu"];
+    $impl.JoinFormFn = Shell["joinForm"];
+    $impl.LayerOpenedFn = Shell["layerOpened"];
+    $impl.LayerClosedFn = Shell["layerClosed"];
+    $mod.ToggleMenu = Shell["toggleMenu"];
+    $impl.ConfirmBoxFn = Shell["confirmBox"];
+    $mod.Notices = pas.JS.New(["unseen",0,"items",new Array()]);
+    $mod.Menu = null;
+    $mod.Live = pas.JS.New(["ws",null,"id","","wait",1000,"failures",0]);
+    $mod.RoomsWanted = false;
+    $mod.FromRing = false;
+  };
+  this.Find = function (Selector, Root) {
+    var Result = null;
+    Result = $impl.FindFn(Selector,Root);
+    return Result;
+  };
+  this.El = function (Tag, Cls, Text) {
+    var Result = null;
+    Result = $impl.ElFn(Tag,Cls,Text);
+    return Result;
+  };
+  this.Link = function (Href, Cls, Text) {
+    var Result = null;
+    Result = $impl.LinkFn(Href,Cls,Text);
+    return Result;
+  };
+  this.Icon = function (Name) {
+    var Result = null;
+    Result = $impl.IconFn(Name);
+    return Result;
+  };
+  this.IconButton = function (Name, Title, Cls) {
+    var Result = null;
+    Result = $impl.IconButtonFn(Name,Title,Cls);
+    return Result;
+  };
+  this.Avatar = function (Name, Url, Cls) {
+    var Result = null;
+    Result = $impl.AvatarFn(Name,Url,Cls);
+    return Result;
+  };
+  this.Get = function (Url) {
+    var Result = null;
+    Result = $impl.GetFn(Url);
+    return Result;
+  };
+  this.Post = function (Url, Data) {
+    var Result = null;
+    Result = $impl.PostFn(Url,Data);
+    return Result;
+  };
+  this.Enc = function (Text) {
+    var Result = "";
+    Result = $impl.EncFn(Text);
+    return Result;
+  };
+  this.Toast = function (Text, Kind) {
+    $impl.ToastFn(Text,Kind);
+  };
+  this.Failed = function (Err) {
+    $impl.FailFn(Err);
+  };
+  this.Route = function (Path, Push) {
+    var Result = null;
+    Result = $impl.RouteFn(Path,Push);
+    return Result;
+  };
+  this.OpenPanel = function (Title, Cls) {
+    var Result = null;
+    Result = $impl.OpenPanelFn(Title,Cls);
+    return Result;
+  };
+  this.Ago = function (Iso) {
+    var Result = "";
+    Result = $impl.AgoFn(Iso);
+    return Result;
+  };
+  this.Clock = function (At) {
+    var Result = "";
+    Result = $impl.ClockFn(At);
+    return Result;
+  };
+  this.DayLabel = function (Day) {
+    var Result = "";
+    Result = $impl.DayLabelFn(Day);
+    return Result;
+  };
+  this.SizeText = function (N) {
+    var Result = "";
+    Result = $impl.SizeTextFn(N);
+    return Result;
+  };
+  this.KeepPinned = function (Box) {
+    $impl.KeepPinnedFn(Box);
+  };
+  this.NearBottom = function (Box) {
+    var Result = false;
+    Result = $impl.NearBottomFn(Box);
+    return Result;
+  };
+  this.May = function (Permission) {
+    var Result = false;
+    Result = $impl.MayFn(Permission);
+    return Result;
+  };
+  this.MayHere = function (Permission) {
+    var Result = false;
+    Result = $impl.MayHereFn(Permission);
+    return Result;
+  };
+  this.Notify = function (Title, Text) {
+    $impl.NotifyFn(Title,Text);
+  };
+  this.PopMenu = function (Anchor, Items) {
+    $impl.PopMenuFn(Anchor,Items);
+  };
+  this.JoinForm = function (Caption) {
+    var Result = null;
+    Result = $impl.JoinFormFn(Caption);
+    return Result;
+  };
+  this.ConfirmBox = function () {
+    var Result = null;
+    Result = $impl.ConfirmBoxFn();
+    return Result;
+  };
+  this.LayerOpened = function () {
+    $impl.LayerOpenedFn();
+  };
+  this.LayerClosed = function () {
+    $impl.LayerClosedFn();
+  };
+  $mod.$implcode = function () {
+    $impl.FindFn = null;
+    $impl.PostFn = null;
+    $impl.ToastFn = null;
+    $impl.RouteFn = null;
+    $impl.OpenPanelFn = null;
+    $impl.NotifyFn = null;
+    $impl.PopMenuFn = null;
+    $impl.ElFn = null;
+    $impl.LinkFn = null;
+    $impl.IconButtonFn = null;
+    $impl.AvatarFn = null;
+    $impl.IconFn = null;
+    $impl.GetFn = null;
+    $impl.FailFn = null;
+    $impl.KeepPinnedFn = null;
+    $impl.JoinFormFn = null;
+    $impl.EncFn = null;
+    $impl.AgoFn = null;
+    $impl.ClockFn = null;
+    $impl.DayLabelFn = null;
+    $impl.SizeTextFn = null;
+    $impl.NearBottomFn = null;
+    $impl.MayFn = null;
+    $impl.MayHereFn = null;
+    $impl.ConfirmBoxFn = null;
+    $impl.LayerOpenedFn = null;
+    $impl.LayerClosedFn = null;
+  };
+},[]);
+rtl.module("chat_answer",["System","JS","Web","chat_shared"],function () {
+  "use strict";
+  var $mod = this;
+  this.FirstWords = function (Text) {
+    var Result = "";
+    var Words = "";
+    Words = Text.replace(new RegExp("```[\\s\\S]*?(```|$)","g")," ");
+    Words = Words.replace(new RegExp("[*_~`]+","g"),"");
+    Words = Words.replace(new RegExp("\\s+","g")," ");
+    Result = Words.trim().slice(0,140);
+    return Result;
+  };
+  this.Flash = function (There) {
+    There.scrollIntoView(pas.JS.New(["block","center"]));
+    There.classList.add("flash");
+    window.setTimeout(function () {
+      There.classList.remove("flash");
+    },1600);
+  };
+  this.SaidIn = function (Re) {
+    var Result = "";
+    var R = null;
+    R = Re;
+    if (R.text.startsWith(R.from + " ")) {
+      Result = R.text.slice(R.from.length + 1)}
+     else Result = R.text;
+    return Result;
+  };
+  this.QuoteOf = function (Re, Far) {
+    var Result = null;
+    var R = null;
+    var Quote = null;
+    R = Re;
+    Quote = pas.chat_shared.El("button","quote",undefined);
+    Quote.type = "button";
+    if (R.gone) {
+      Quote.textContent = window.t("a deleted message");
+      Quote.disabled = true;
+      return Quote;
     };
-    const choice = function (b, run) {
-      entry(b).addEventListener('click', function () { closeMenu(true); run(); });
-      return b;
-    };
-    const place = function () { Reactions.under(box, at ? {left: at.x, top: at.y, bottom: at.y} : arrow.getBoundingClientRect()); };
-    // a message that follows another shows no time of its own
-    if (node.classList.contains('cont')) box.appendChild(el('div', 'when', dateTimeText(new Date(node.dataset.at))));
-    if (offer.react) {
-      // the site's reactions (/api/me), as reactions.js offers them
-      Reactions.offer(box, Me.reactions, function (r) { closeMenu(true); offer.react(r); }, place);
-      box.querySelectorAll('button').forEach(entry);
-    }
-    const list = el('div', 'items');
-    for (const item of offer.items) {
-      if (item.bad && list.lastChild && !list.lastChild.classList.contains('bad')) list.appendChild(el('hr'));
-      const b = choice(el('button', item.bad ? 'bad' : ''), item.run);
-      b.append(icon(item.icon), el('span', '', item.title));
-      list.appendChild(b);
-    }
-    box.appendChild(list);
-    box.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' || e.key === 'Tab') {
-        if (e.key === 'Escape') e.preventDefault();
-        closeMenu(true);
-        return;
-      }
-      const shown = Array.from(box.querySelectorAll('button')).filter(function (b) { return b.offsetParent; });
-      // opened by the pointer, nothing in it is picked yet: a key starts at the top
-      const to = shown.includes(document.activeElement) ? menuStep(shown, document.activeElement, e.key) :
-        /^(Arrow|Home|End)/.test(e.key) ? shown[0] : null;
-      if (!to) return;
-      e.preventDefault();
-      to.focus();
+    Quote.append(pas.chat_shared.El("b","",R.from.slice(0,60)),document.createTextNode(" " + $mod.SaidIn(R).slice(0,140)));
+    Quote.addEventListener("click",function (E) {
+      var List = null;
+      var There = null;
+      List = Quote.closest(".threadlist");
+      if (List === null) List = pas.chat_shared.Stream;
+      There = List.querySelector('.msg[data-id="' + ("" + parseInt(R.id,10)) + '"]');
+      if (There !== null) {
+        $mod.Flash(There)}
+       else Far();
     });
-    document.body.appendChild(box);
-    place();
-    node.classList.add('held');
-    arrow.setAttribute('aria-expanded', 'true');
-    Menu = {box: box, node: node, arrow: arrow};
-    (at ? box : box.querySelector('button')).focus({preventScroll: true});
-  }
-
-  function startEdit(m) {
-    const entry = S.messages.get(m.id) || S.threadMessages.get(m.id);
-    if (!entry) return;
-    const text = entry.node.querySelector('.body');
-    const box = el('div', 'editbox');
-    const area = el('textarea');
-    area.value = m.body;
-    const save = el('button', 'primary', t('Save'));
-    const cancel = el('button', '', t('Cancel'));
-    save.type = cancel.type = 'button';
-    box.append(area, save, cancel);
-    text.replaceWith(box);
-    area.focus();
-    fit(area);
-    const complete = completer(area);
-    const done = function () { box.replaceWith(text); };
-    const store = async function () {
-      try { await post('/api/edit', {id: m.id, body: area.value}); done(); syncNow(); } catch (err) { failed(err); }
+    Result = Quote;
+    return Result;
+  };
+  this.AnswerStrip = function (Key) {
+    var Result = undefined;
+    var Strips = null;
+    var I = 0;
+    Result = undefined;
+    Strips = document.querySelectorAll(".composer .answering");
+    for (var $l = 0, $end = Strips.length - 1; $l <= $end; $l++) {
+      I = $l;
+      if (Strips.item(I).dataset["key"] === Key) return Strips.item(I);
     };
-    save.addEventListener('click', store);
-    cancel.addEventListener('click', done);
-    area.addEventListener('input', function () { fit(area); complete.update(); });
-    area.addEventListener('keydown', function (e) {
-      if (complete.handle(e)) return;
-      if (e.key === 'Escape') done();
-      if (e.key === 'Enter' && !e.shiftKey && !inFence(area)) { e.preventDefault(); store(); }
-    });
-  }
-
-  // A code block as it is shown: its language by its proper name, how many
-  // lines it has, a number beside each line, and a long one folded to its
-  // first lines until asked for.  Copy always takes all of it, numbers left out.
-  const CODE_NAMES = {pascal: 'Pascal', lfm: 'LFM', bash: 'Bash', javascript: 'JavaScript', js: 'JavaScript', typescript: 'TypeScript', ts: 'TypeScript',
-    css: 'CSS', html: 'HTML', xml: 'XML', sql: 'SQL', json: 'JSON', ini: 'INI', yaml: 'YAML', toml: 'TOML', go: 'Go', c: 'C', cpp: 'C++',
-    csharp: 'C#', java: 'Java', kotlin: 'Kotlin', swift: 'Swift', rust: 'Rust', zig: 'Zig', d: 'D', python: 'Python', ruby: 'Ruby', lua: 'Lua',
-    php: 'PHP', perl: 'Perl', basic: 'BASIC', diff: 'Diff', makefile: 'Makefile', asm: 'Assembly', batch: 'Batch', powershell: 'PowerShell',
-    dockerfile: 'Dockerfile', fortran: 'Fortran', ada: 'Ada', barye: 'Barye', markdown: 'Markdown', md: 'Markdown', rst: 'reStructuredText', restructuredtext: 'reStructuredText'};
-  const FOLD_LINES = 20;
-  function dressCode(root) {
-    for (const box of root.querySelectorAll('.code')) {
-      const pre = box.querySelector(':scope > pre'), code = pre && pre.querySelector(':scope > code');
-      if (!code || pre.querySelector('.nums')) continue;
-      const lines = code.textContent.replace(/\n+$/, '').split('\n').length;
-      const label = box.querySelector(':scope > .codebar span');
-      if (label) {
-        const id = label.textContent.trim().toLowerCase();
-        label.textContent = CODE_NAMES[id] || label.textContent.trim();
-        if (lines > 1) label.after(el('span', 'codelines', tn(lines, '%d line', '%d lines')));
-      }
-      // a markdown block shows as its document; the button flips to its source
-      const flip = box.querySelector(':scope > .codebar .flip');
-      if (flip) { flip.textContent = t('Source'); flip.setAttribute('aria-pressed', 'false'); }
-      if (lines < 2) continue;
-      const nums = el('span', 'nums');
-      nums.setAttribute('aria-hidden', 'true');
-      let list = '';
-      for (let i = 1; i <= lines; i++) list += i + '\n';
-      nums.textContent = list;
-      pre.prepend(nums);
-      box.classList.add('numbered');
-      // a few lines past the fold are not worth a button
-      if (lines <= FOLD_LINES + 5) continue;
-      box.classList.add('folded');
-      const fold = el('button', 'codefold');
-      fold.type = 'button';
-      const say = function () {
-        const shut = box.classList.contains('folded');
-        fold.textContent = shut ? tn(lines, 'Show all %d line', 'Show all %d lines') : t('Show less');
-        fold.setAttribute('aria-expanded', shut ? 'false' : 'true');
+    return Result;
+  };
+  this.ShowAnswer = function () {
+    var Strips = null;
+    var I = 0;
+    function Show(Strip) {
+      var Re = null;
+      var Area = null;
+      var Stop = null;
+      if (Boolean(pas.chat_shared.S.answer) && (pas.chat_shared.S.answer.key === Strip.dataset["key"])) {
+        Re = pas.chat_shared.S.answer.re}
+       else Re = null;
+      Strip.replaceChildren();
+      Strip.hidden = !Boolean(Re);
+      if (!Boolean(Re)) return;
+      Area = Strip.parentNode.querySelector("textarea");
+      Stop = pas.chat_shared.IconButton("close",window.t("Do not answer it after all"),undefined);
+      Stop.addEventListener("click",function (E) {
+        $mod.Answer("",null);
+        Area.focus();
+      });
+      Strip.append(pas.chat_shared.El("span","",window.t("Answering %s:",Re.from) + " " + $mod.SaidIn(Re)),Stop);
+      Area.focus();
+    };
+    Strips = document.querySelectorAll(".composer .answering");
+    for (var $l = 0, $end = Strips.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Show(Strips.item(I));
+    };
+  };
+  this.Answer = function (Key, Re) {
+    if (Boolean(Re)) {
+      pas.chat_shared.S.answer = pas.JS.New(["key",Key,"re",Re])}
+     else pas.chat_shared.S.answer = null;
+    $mod.ShowAnswer();
+  };
+  this.Answered = function (Key) {
+    var Result = null;
+    if (Boolean(pas.chat_shared.S.answer) && (pas.chat_shared.S.answer.key === Key)) {
+      Result = pas.chat_shared.S.answer.re}
+     else Result = null;
+    return Result;
+  };
+});
+rtl.module("chat_complete",["System","JS","Web","chat_shared"],function () {
+  "use strict";
+  var $mod = this;
+  this.EmojiSet = async function () {
+    var Result = null;
+    var List = null;
+    var Mine = null;
+    List = await window.EmojiNames.list();
+    if (Boolean(pas.chat_shared.Me.reactions)) {
+      Mine = pas.chat_shared.Me.reactions["shown"].concat(pas.chat_shared.Me.reactions["more"])}
+     else Mine = new Array();
+    Result = List.concat(Mine.filter(function (R, I, A) {
+      var Result = false;
+      Result = !List.some(function (E, J, B) {
+        var Result = false;
+        Result = pas.chat_shared.Same(E["emoji"],R);
+        return Result;
+      });
+      return Result;
+    }).map(function (R, I, A) {
+      var Result = undefined;
+      Result = pas.JS.New(["emoji",R,"name","reaction","keywords",Array.of("reaction")]);
+      return Result;
+    }));
+    return Result;
+  };
+  this.Completer = function (Area, Commands) {
+    var Result = null;
+    var Box = null;
+    var Holder = null;
+    var Items = null;
+    var Index = 0;
+    var Start = 0;
+    var Ahead = 0;
+    var Timer = 0;
+    var Eager = false;
+    var TypedAt = 0;
+    var Waiting = false;
+    var Taking = false;
+    var Asked = 0;
+    function WordAt() {
+      var Result = null;
+      var Before = "";
+      var Found = undefined;
+      var Parts = null;
+      var E = null;
+      Before = Area.value.slice(0,Area.selectionStart);
+      Found = Before.match(new RegExp("(^|\\s)([@#])([\\w.-]*)$"));
+      if (!Found) {
+        if (Commands !== null) {
+          Found = Before.match(new RegExp("^(\\/)([\\w]*)$"))}
+         else Found = null;
       };
-      fold.addEventListener('click', function () {
-        box.classList.toggle('folded');
-        say();
-        if (box.classList.contains('folded') && box.getBoundingClientRect().top < 0) box.scrollIntoView({block: 'nearest'});
-      });
-      say();
-      box.appendChild(fold);
-    }
-  }
-
-  document.addEventListener('click', function (e) {
-    const flip = e.target.closest('.code .flip');
-    if (flip) {
-      const box = flip.closest('.code'), source = box.classList.toggle('source');
-      flip.textContent = source ? t('Rendered') : t('Source');
-      flip.setAttribute('aria-pressed', source ? 'true' : 'false');
-      return;
-    }
-    const copy = e.target.closest('.code .copy');
-    if (copy) {
-      navigator.clipboard.writeText(copy.closest('.code').querySelector(':scope > pre > code').textContent).then(function () {
-        copy.textContent = t('Copied');
-        setTimeout(function () { copy.textContent = t('Copy'); }, 1500);
-      });
-      return;
-    }
-    const shot = e.target.closest('a.shot');
-    if (shot && !e.ctrlKey && !e.metaKey) {
-      e.preventDefault();
-      const box = $('#lightbox');
-      const img = el('img');
-      img.src = shot.href;
-      box.replaceChildren(img);
-      box.hidden = false;
-      layerOpened();
-    }
-  });
-  $('#lightbox').addEventListener('click', function () { this.hidden = true; layerClosed(); });
-
-  // ------------------------------------------------------------------- sync
-
-  let syncTimer = 0;
-  let syncing = false;
-  let again = false;
-  let roomsWanted = false;
-  let sidebarTimer = 0;
-
-  function syncNow(withRooms) {
-    if (withRooms) roomsWanted = true;
-    clearTimeout(syncTimer);
-    sync();
-  }
-
-  // The sidebar's counts, asked for a little later, so a busy channel's
-  // messages do not each send every follower's page to ask at once.
-  function sidebarSoon(ms) {
-    if (sidebarTimer) return;
-    sidebarTimer = setTimeout(function () { sidebarTimer = 0; syncNow(true); }, ms);
-  }
-
-  let fromRing = false;
-
-  async function sync() {
-    // One at a time; a ring during a sync makes another right after.
-    if (syncing) { again = true; return; }
-    syncing = true;
-    again = false;
-    const generation = S.generation;
-    const params = new URLSearchParams({since: S.since});
-    // Asked because of a ring: only what changed.  Otherwise also say we
-    // are here and hear who else is.
-    if (!fromRing) params.set('here', '1');
-    fromRing = false;
-    if (S.view === 'room') params.set('room', S.room);
-    if (S.thread) params.set('thread', S.thread);
-    if (Live.id) params.set('live', Live.id);
-    if (Me.name && (roomsWanted || (!Live.id && S.tick % 5 === 0))) params.set('rooms', '1');
-    roomsWanted = false;
-    if (S.view === 'room' && !document.hidden && nearBottom() && S.messages.size)
-      params.set('read', Math.max.apply(null, Array.from(S.messages.keys())));
-    S.tick++;
-    try {
-      const a = await get('/api/sync?' + params);
-      if (generation === S.generation) {
-        if (a.messages) addMessages(a.messages, false);
-        if (a.thread) addThread(a.thread);
-        if (a.typing) noteTyping(a.typing);
-        if (a.here) renderHere(a.here);
-        // More than one answer holds: carry on from the last one given.
-        if (a.more) {
-          S.since = a.messages[a.messages.length - 1].rev;
-          again = true;
-        } else S.since = Math.max(S.since, a.rev - 3000000);
-      }
-      if (a.rooms) {
-        notifyNews(a.rooms, a.dms || []);
-        S.rooms = a.rooms;
-        S.dms = a.dms || [];
-        renderSidebar();
-        // the list says how far the open conversation was read, while it is among its newest
-        const shown = S.view === 'dm' && S.dms.find(function (x) { return x.name === S.dm; });
-        if (shown) { S.dmSeen = shown.seen || 0; markSeen(); }
-      }
-    } catch (err) {
-      // The next one tries again.
-    }
-    syncing = false;
-    clearTimeout(syncTimer);
-    if (again) { sync(); return; }
-    // With a live connection the rings say when; the timer only keeps
-    // presence fresh.  Without one, ask often.
-    syncTimer = setTimeout(sync, Live.id ? 50000 : document.hidden ? 15000 : 3000);
-  }
-
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden) return;
-    syncNow(true);
-    if (S.dm) pollDm(S.generation);
-  });
-
-  // ------------------------------------------------------------------- live
-
-  const Live = {ws: null, id: '', wait: 1000, failures: 0};
-
-  // Asked when the live connection starts and when it rings with a notice;
-  // Fresh shows the new ones as a toast too.
-  async function loadNotices(fresh) {
-    if (!Me.name) return;
-    let a;
-    try { a = await get('/api/notices?unseen=1'); } catch (err) { return; }
-    const known = new Set(Notices.items.map(function (n) { return n.id; }));
-    const unseen = (a.items || []).filter(function (n) { return !n.seen; });
-    Notices = {unseen: a.unseen || 0, items: unseen.slice(0, 3)};
-    if (fresh) unseen.filter(function (n) { return !known.has(n.id); }).slice(0, 3).forEach(function (n) { toast(n.text); });
-    renderSidebar();
-  }
-
-  function connectLive() {
-    if (!('WebSocket' in window) || Live.failures > 4) return;
-    let ws;
-    try {
-      ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + SiteBase.url('/api/live'));
-    } catch (err) { return; }
-    Live.ws = ws;
-    ws.onmessage = function (e) {
-      let note;
-      try { note = JSON.parse(e.data); } catch (err) { return; }
-      heard(note);
+      Parts = Found;
+      if (Boolean(Found) && pas.chat_shared.Same(Parts[1],"/")) return pas.JS.New(["kind","/","text",Parts[2],"at",0]);
+      if (Found) return pas.JS.New(["kind",Parts[2],"text",Parts[3],"at",Before.length - Parts[3].length - 1]);
+      E = window.EmojiNames.typed(Area.value,Area.selectionStart,Eager);
+      if (!Boolean(E)) return E;
+      Result = pas.JS.New(["kind",":","text",E["word"],"at",E["from"],"whole",E["whole"]]);
+      return Result;
     };
-    ws.onclose = function () {
-      // A server without live connections (a CGI site) fails every time;
-      // after a few the page settles for asking on a timer.
-      if (!Live.id) Live.failures++;
-      Live.id = '';
-      Live.ws = null;
-      setTimeout(connectLive, Live.wait);
-      Live.wait = Math.min(Live.wait * 2, 30000);
+    function Select(I) {
+      var N = 0;
+      var Rows = null;
+      var Row = null;
+      Index = I;
+      Rows = Array.from(Box.children);
+      for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+        N = $l;
+        pas.chat_shared.Toggle(Rows[N],"on",N === I);
+      };
+      Row = Box.children["" + I];
+      Box["scrollTop"] = Math.min(Row.offsetTop,Math.max(Box.scrollTop,(Row.offsetTop + Row.offsetHeight) - Box.clientHeight));
     };
-  }
-
-  setInterval(function () { if (Live.ws && Live.ws.readyState === 1) Live.ws.send('ping'); }, 25000);
-  // A page nobody looks at should not keep pushes from coming.
-  document.addEventListener('visibilitychange', function () {
-    if (Live.ws && Live.ws.readyState === 1) Live.ws.send(document.hidden ? 'hidden' : 'shown');
-  });
-
-  // A new message that came with its ring: shown without asking.  The
-  // server sends it as anyone sees it, so this page works out the parts
-  // that are about this member.
-  let readTimer = 0;
-  function arrived(m) {
-    const lower = Me.name.toLowerCase();
-    m.mentions_me = !!Me.name && (m.names || []).some(function (n) { return n.toLowerCase() === lower; });
-    m.ignored = Me.ignores.indexOf(m.uid) >= 0;
-    if (m.parent) {
-      if (S.thread === m.parent) addThread([m]);
-      const p = S.messages.get(m.parent);
-      if (p) upsert(Object.assign({}, p.data, {replies: p.data.replies + 1, last_reply: m.at, rev: p.data.rev + 1}),
-        stream, S.messages, false);
-    } else addMessages([m], false);
-    // Tell the server what was read, a little later, once for a burst.
-    if (!readTimer && Me.name) readTimer = setTimeout(function () { readTimer = 0; fromRing = true; sync(); }, 4000 + Math.random() * 6000);
-  }
-
-  function heard(note) {
-    if (note.t === 'names') {
-      location.reload();
-      return;
-    } else if (note.t === 'hello') {
-      Live.id = note.id;
-      Live.wait = 1000;
-      Live.failures = 0;
-      syncNow(true);
-      loadNotices(false);
-      leaveIfGone().catch(function () { });
-    } else if (note.t === 'notice') {
-      loadNotices(true);
-    } else if (note.t === 'room') {
-      if (note.room === S.room && note.m) arrived(note.m);
-      else if (note.room === S.room) setTimeout(function () { fromRing = true; sync(); }, Math.random() * 300);
-      else {
-        const r = S.rooms.find(function (x) { return x.slug === note.room; });
-        if (r) {
-          if (!r.unread) { r.unread = 1; renderSidebar(); }
-          sidebarSoon(2000 + Math.random() * 6000);
-        }
-      }
-    } else if (note.t === 'typing') {
-      if (note.room === S.room) noteTyping([note.name]);
-    } else if (note.t === 'dmtyping') {
-      if (S.view === 'dm' && note.from === S.dm) noteTyping([note.from]);
-    } else if (note.t === 'dmseen') {
-      if (S.view === 'dm' && note.from === S.dm) { S.dmSeen = note.seen; markSeen(); }
-    } else if (note.t === 'me') {
-      sidebarSoon(300);
-    } else if (note.t === 'gone') {
-      if (note.room === S.room) leaveChannel(t('This channel was deleted.'));
-      sidebarSoon(300);
-    } else if (note.t === 'dm') {
-      if (note.gone && S.view === 'dm' && note.from === S.dm) route(SiteBase.path(), false);
-      else if (note.deleted && S.view === 'dm' && note.from === S.dm) dropDm(note.deleted);
-      else if (note.edited && S.view === 'dm' && note.from === S.dm) refreshDm(note.edited);
-      else if (S.view === 'dm' && (note.from === S.dm || note.from === Me.name)) {
-          if (S.typers[note.from]) { delete S.typers[note.from]; renderTyping(); }
-        pollNow();
-      }
-      sidebarSoon(300);
-    }
-  }
-
-  // A private channel can close under an open page: a kick, or the people
-  // running the site deleting it.  Either way the server drops the live
-  // connection, so this asks again when it comes back.
-  async function leaveIfGone() {
-    if (S.view !== 'room' || !S.info || !S.info.private) return;
-    const slug = S.room;
-    const answer = await fetch('/api/room?slug=' + enc(slug));
-    if (answer.status !== 404 || S.view !== 'room' || S.room !== slug) return;
-    leaveChannel(t('You are no longer in #%s.', slug));
-  }
-
-  let leaving = false;
-  function leaveChannel(why) {
-    if (leaving) return;
-    leaving = true;
-    toast(why);
-    setTimeout(function () { location.assign(SiteBase.url('/')); }, 2500);
-  }
-
-  async function openThread(id) {
-    const box = openPanel(t('Thread'), 'thread');
-    S.thread = id;
-    S.threadMessages.clear();
-    const list = el('div', 'threadlist');
-    box.appendChild(list);
-    keepPinned(list);
-    if (SiteBase.path() !== '/m/' + id) history.replaceState({}, '', '/m/' + id);
-    try {
-      const messages = await get('/api/thread?id=' + id);
-      if (S.thread !== id) return;
-      addThread(messages);
-    } catch (err) { failed(err); }
-    const area = el('div', 'panelcomposer');
-    box.appendChild(area);
-    renderComposer(area, id);
-  }
-
-  function addThread(messages) {
-    const list = $('.threadlist', panel);
-    if (!list) return;
-    const stick = list.pinned || nearBottom(list);
-    for (const m of messages) upsert(m, list, S.threadMessages, true);
-    const root = list.querySelector('.msg');
-    if (root && !$('.threadcount', list)) root.after(el('div', 'threadcount'));
-    const count = $('.threadcount', list);
-    if (count) count.textContent = tn(S.threadMessages.size - 1, '%d replies', '%d replies');
-    regroup(list);
-    if (stick) list.scrollTop = list.scrollHeight;
-  }
-
-  async function openPins() {
-    const box = openPanel(t('Pinned'), 'pins');
-    try {
-      const list = await get('/api/pins?room=' + enc(S.room));
-      if (!list.length) box.appendChild(el('p', 'notice', t('Nothing is pinned here. The channel\'s owner and moderators pin messages that should stay in view.')));
-      const holder = el('div', 'threadlist');
-      for (const m of list) holder.appendChild(renderMessage(m, true));
-      box.appendChild(holder);
-    } catch (err) { failed(err); }
-  }
-
-  // Who is here now, then who is in a private room (with invite and
-  // take-out) or holds a role in a public one.
-  // A member's standing at a glance: green here, yellow here but away,
-  // gray not here.  The title says it in words for a screen reader.
-  function statusDot(online, away) {
-    const state = online ? (away ? 'away' : 'online') : 'off';
-    const dot = el('span', 'dot ' + state);
-    dot.title = state === 'online' ? t('Online') : state === 'away' ? t('Away') : t('Not here');
-    return dot;
-  }
-
-  async function openMembers() {
-    const info = S.info;
-    const box = openPanel(t('People'), 'members');
-    box.appendChild(el('h4', '', S.here.length ? t('Here now') : t('Nobody else is here right now')));
-    const here = el('div', 'memberlist');
-    for (const p of S.here) {
-      const who = link('/u/' + enc(p.name), 'who');
-      who.append(avatar(p.name, p.avatar, 'small' + (p.away ? ' away' : '')), statusDot(true, p.away), el('span', '', p.name));
-      const row = el('div', 'person');
-      row.appendChild(who);
-      if (p.away) row.appendChild(el('span', 'role', t('away')));
-      here.appendChild(row);
-    }
-    box.appendChild(here);
-    box.appendChild(el('h4', '', info.private ? t('In this channel') : t('Channel moderators')));
-    const list = el('div', 'memberlist');
-    box.appendChild(list);
-    const show = async function () {
-      try {
-        const people = await get('/api/room/members?room=' + enc(info.slug));
-        list.replaceChildren();
-        if (!people.length) list.appendChild(el('p', 'notice', info.owner ?
-          t('%s owns this channel. Nobody else holds a role in it.', info.owner) :
-          t('Nobody holds a role in this channel. Site moderators look after it.')));
-        for (const p of people) {
-          const row = el('div', 'person');
-          const who = link('/u/' + enc(p.name), 'who');
-          who.append(avatar(p.name, p.avatar, 'small' + (p.away ? ' away' : '')), statusDot(p.online, p.away), el('span', '', p.name));
-          row.appendChild(who);
-          if (p.owner) row.appendChild(el('span', 'role', t('owner')));
-          if (p.roles) row.appendChild(el('span', 'role', p.roles.replace('room-moderator', t('moderator'))));
-          if (info.private && mayHere('kick') && !p.owner && p.name !== Me.name) {
-            const out = el('button', 'small-link', t('Take out'));
-            out.type = 'button';
-            out.addEventListener('click', async function () {
-              await command('/kick ' + p.name);
-              show();
-            });
-            row.appendChild(out);
-          }
-          list.appendChild(row);
-        }
-      } catch (err) { failed(err); }
-    };
-    await show();
-    if (info.private && mayHere('invite')) {
-      const form = el('form', 'invite');
-      const name = el('input');
-      name.placeholder = t('Invite someone by name');
-      const go = el('button', 'primary', t('Invite'));
-      form.append(name, go);
-      form.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        if (!name.value.trim()) return;
-        await command('/invite ' + name.value.trim());
-        name.value = '';
-        show();
-      });
-      box.appendChild(form);
-    }
-    box.appendChild(el('p', 'hint', info.private ?
-      t('Commands work too: /invite name, /kick name, /op name makes a channel moderator.') :
-      t('The owner names channel moderators with /op name. /mute name [minutes] quiets someone here.')));
-  }
-
-  // Runs a slash command in the open room, showing its answer as a toast.
-  async function command(text) {
-    try {
-      const answer = JSON.parse(await post('/api/post', {room: S.room, body: text}));
-      if (answer.info) toast(answer.info);
-      syncNow();
-    } catch (err) { failed(err); }
-  }
-
-  // Opening a room: public channels for those allowed, private rooms for
-  // members.
-  function newRoom() {
-    const box = openPanel(t('Open a channel'), 'newroom');
-    body.classList.remove('menu');
-    const form = el('form', 'settings');
-    const nameLabel = el('label');
-    nameLabel.appendChild(el('span', '', t('Name')));
-    const name = el('input');
-    name.placeholder = t('lowercase-with-hyphens');
-    name.maxLength = 40;
-    nameLabel.appendChild(name);
-    const topicLabel = el('label');
-    topicLabel.appendChild(el('span', '', t('What it is for')));
-    const topic = el('input');
-    topicLabel.appendChild(topic);
-    const kind = el('label', 'check');
-    const priv = el('input');
-    priv.type = 'checkbox';
-    priv.checked = !may('create-channel');
-    priv.disabled = !may('create-channel') || !may('create-private');
-    kind.append(priv, document.createTextNode(t(' Private: only people invited see it')));
-    const go = el('button', 'primary', t('Open it'));
-    form.append(nameLabel, topicLabel, kind, go);
-    box.appendChild(form);
-    name.focus();
-    name.addEventListener('input', function () {
-      name.value = name.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
-    });
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      try {
-        const made = JSON.parse(await post('/api/room/create', {slug: name.value.replace(/^-+|-+$/g, ''),
-          topic: topic.value, private: priv.checked ? '1' : '0'}));
-        roomsWanted = true;
-        route('/p/' + enc(made.slug), true);
-      } catch (err) { failed(err); }
-    });
-  }
-
-  // Every channel the reader may read, searched in the main area.  The
-  // words stay while the reader looks at a hit and comes back.
-  let allWords = '';
-  function openSearchAll() {
-    S.view = 'search';
-    S.title = t('Search all chats');
-    const head = $('#roomhead');
-    const menu = iconButton('menu', t('Channels'), 'menubtn');
-    menu.addEventListener('click', toggleMenu);
-    head.append(menu, el('div', 'titles'));
-    $('.titles', head).appendChild(el('h1', '', S.title));
-    stream.className = 'findall-view';
-    stream.noPin = true;
-    const input = el('input');
-    input.type = 'search';
-    input.placeholder = t('Words to find');
-    input.value = allWords;
-    const results = el('div', 'findall-hits');
-    stream.append(input, el('p', 'notice', t('Looks in every channel you can read. A private conversation is searched from inside it.')), results);
-    let timer = 0, asked = 0;
-    const run = async function () {
-      const q = allWords = input.value.trim(), turn = ++asked;
-      if (q.length < 2) { results.replaceChildren(); return; }
-      try {
-        const list = await get('/api/search?q=' + enc(q));
-        if (turn !== asked || !results.isConnected) return;
-        results.replaceChildren();
-        if (!list.length) results.appendChild(el('p', 'notice', t('Nothing found.')));
-        for (const m of list) {
-          const node = renderMessage(m, true);
-          node.classList.add('result');
-          // which channel it was said in
-          const header = node.querySelector('header');
-          if (header) header.appendChild(el('span', 'where', '#' + m.room));
-          node.addEventListener('click', function (e) {
-            if (e.target.closest('a, button')) return;
-            route('/m/' + m.id, true);
-          });
-          results.appendChild(node);
-        }
-      } catch (err) { failed(err); }
-    };
-    input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(run, 300); });
-    input.focus();
-    if (allWords) run();
-  }
-
-  function openSearch() {
-    const box = openPanel(t('Search'), 'search');
-    const input = el('input');
-    input.type = 'search';
-    input.placeholder = t('Words to find');
-    const scope = el('label', 'scope');
-    const only = el('input');
-    only.type = 'checkbox';
-    const inDm = S.view === 'dm', withName = S.dm;
-    only.checked = S.view === 'room' || inDm;
-    scope.append(only, document.createTextNode(inDm ? t(' only in this conversation') : t(' only in this channel')));
-    const results = el('div', 'threadlist');
-    box.append(input, scope, results);
-    // the server finds words only in what it can read
-    if (inDm && S.dmLocked) box.insertBefore(el('p', 'notice', t('Locked messages are not searched: the server cannot read them.')), results);
-    input.focus();
-    let timer = 0;
-    const run = async function () {
-      const q = input.value.trim();
-      if (q.length < 2) { results.replaceChildren(); return; }
-      try {
-        if (inDm && only.checked) {
-          const found = await get('/api/dm/search?with=' + enc(withName) + '&q=' + enc(q));
-          results.replaceChildren();
-          if (!found.length) results.appendChild(el('p', 'notice', t('Nothing found.')));
-          for (const m of found.reverse()) {
-            const node = renderDm(m, await openSealed(m));
-            node.classList.add('result');
-            node.querySelector('.more').remove();
-            node.menu = null;
-            node.addEventListener('click', function (e) {
-              if (e.target.closest('a, button')) return;
-              const there = stream.querySelector('.msg[data-id="' + m.id + '"]');
-              if (!there || S.dm !== withName) { toast(t('That message is further back.')); return; }
-              flash(there);
-            });
-            results.appendChild(node);
-          }
-          return;
-        }
-        const list = await get('/api/search?q=' + enc(q) + (only.checked && !inDm ? '&room=' + enc(S.room) : ''));
-        results.replaceChildren();
-        if (!list.length) results.appendChild(el('p', 'notice', t('Nothing found.')));
-        for (const m of list) {
-          const node = renderMessage(m, true);
-          node.classList.add('result');
-          node.addEventListener('click', function (e) {
-            if (e.target.closest('a, button')) return;
-            route('/m/' + m.id, true);
-          });
-          results.appendChild(node);
-        }
-      } catch (err) { failed(err); }
-    };
-    input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(run, 300); });
-    only.addEventListener('change', run);
-  }
-
-  // ------------------------------------------------------------- the card
-
-  // What other scripts show over a room's messages.
-  function renderCard(info) {
-    const card = $('#card');
-    card.replaceChildren();
-    for (const show of Extras.cards) show(info, card);
-  }
-
-  // --------------------------------------------------------------- composer
-
-  // A box grows with its text, to 300px or to what the list above it can
-  // give up: a phone's keyboard leaves little room, and a box taller than
-  // that would have its last lines under the keyboard.
-  function fit(area) {
-    area.style.height = 'auto';
-    const list = area.closest('#main, #panel').querySelector('#stream, .threadlist');
-    area.style.height = Math.max(area.clientHeight, Math.min(area.scrollHeight, 300, area.clientHeight + list.clientHeight - 24)) + 'px';
-  }
-  // the keyboard opening, or changing its height, changes that room
-  (window.visualViewport || window).addEventListener('resize', function () {
-    document.querySelectorAll('.composer textarea').forEach(fit);
-  });
-
-  // True while the caret sits inside an open ``` block, where Enter makes a new line.
-  function inFence(area) {
-    return (area.value.slice(0, area.selectionStart).match(/```/g) || []).length % 2 === 1;
-  }
-
-  // Sends one file; told(share) hears how much of it has gone up, 0 to 1.
-  function upload(file, expire, sealedFor, told) {
-    if (sealedFor) return Keys.sealFile(sealedFor, file, expire);
-    const form = new FormData();
-    form.append('expire', expire || '');
-    form.append('file', file, file.name || 'pasted.png');
-    return new Promise(function (resolve, reject) {
-      const ask = new XMLHttpRequest();
-      ask.open('POST', '/api/upload');
-      if (told) ask.upload.addEventListener('progress', function (e) { if (e.lengthComputable) told(e.loaded / e.total); });
-      ask.addEventListener('load', function () {
-        if (ask.status >= 200 && ask.status < 300) {
-          try { resolve(JSON.parse(ask.responseText)); } catch (err) { reject(err); }
-          return;
-        }
-        const e = new Error(ask.responseText);
-        e.status = ask.status;
-        reject(e);
-      });
-      ask.addEventListener('error', function () { reject(new Error(t('The file did not go up. Check the connection and try again.'))); });
-      ask.send(form);
-    });
-  }
-
-  // The box members type in, for a room, a thread (parent) or a private
-  // conversation (dm).
-  const Drafts = new Map();
-
-  function renderComposer(area, parent, dm) {
-    area.replaceChildren();
-    if (!Me.name) {
-      area.appendChild(joinForm(t('Pick a name and a password to join the conversation.')));
-      return;
-    }
-    if (Me.verified === false) {
-      area.appendChild(confirmBox());
-      return;
-    }
-    if (!dm && S.info && (parent ? S.info.can_reply === false : !S.info.can_start)) {
-      area.appendChild(el('p', 'notice', S.info.why_not));
-      return;
-    }
-    const form = el('form', 'composer');
-    const files = el('div', 'attachments');
-    const row = el('div', 'box');
-    const attach = iconButton('attach', t('Attach a file (or paste or drop one)'));
-    const area2 = el('textarea');
-    area2.rows = 1;
-    area2.maxLength = 8000;
-    area2.placeholder = dm ? t('Private message to %s', dm) : parent ? t('Reply in the thread') :
-      S.info && S.info.kind === 'shelf' ? t('Put something on your shelf') : t('Message %s', S.info ? roomTitle(S.info) : '');
-    // What was typed and not sent waits here for the next visit.
-    const draftKey = dm ? 'dm ' + dm : parent ? 'thread ' + parent : 'room ' + S.room;
-    area2.value = Drafts.get(draftKey) || '';
-    const code = iconButton('code', t('Code block'));
-    const send = el('button', 'send', t('Send'));
-    row.append(attach, area2, code);
-    const answering = el('div', 'answering');
-    answering.dataset.key = draftKey;
-    // an answer begun in another channel or conversation, or in another
-    // thread, is dropped
-    if (S.answer && S.answer.key !== draftKey && (!parent || S.answer.key.startsWith('thread '))) S.answer = null;
-    if (dm) {
-      const beam = iconButton('beam', t('Beam a file: straight to them, never stored here'));
-      beam.addEventListener('click', function () { pick(beamPick, beam); });
-      row.appendChild(beam);
-    }
-    row.appendChild(send);
-    const filePick = el('input');
-    filePick.type = 'file';
-    filePick.multiple = true;
-    filePick.hidden = true;
-    const beamPick = el('input');
-    beamPick.type = 'file';
-    beamPick.hidden = true;
-    const options = el('div', 'options');
-    const expire = el('select');
-    [['', t('Keep files')], ['hour', t('Delete after an hour')], ['day', t('Delete after a day')],
-      ['week', t('Delete after a week')], ['once', t('Delete after one download')]].forEach(function (o) {
-      const opt = el('option', '', o[1]);
-      opt.value = o[0];
-      expire.appendChild(opt);
-    });
-    options.appendChild(expire);
-    options.appendChild(el('span', 'hints', t('Enter sends · Shift+Enter new line · ``` for code · / for commands')));
-    form.append(answering, files, row, options, filePick, beamPick);
-    area.appendChild(form);
-    showAnswer();
-    const pending = [];
-    // each upload's chip, apart from the upload itself, which may be sent as it is
-    const chips = new Map();
-
-    // the uploads still on their way: Send waits for them
-    const busy = new Set();
-
-    // A camera photo that can go up smaller: its chip asks which, with both
-    // sizes.  Send without an answer takes the smaller one.
-    const asking = new Set();
-    const whichSize = function (chip, file, small) {
-      return new Promise(function (done) {
-        const ask = el('span', 'sizes');
-        const choose = function (picked) {
-          asking.delete(smaller);
-          ask.remove();
-          done(picked);
-        };
-        const smaller = function () { choose(small); };
-        const less = el('button', '', t('Smaller') + ' · ' + sizeText(small.size));
-        const all = el('button', '', t('Full size') + ' · ' + sizeText(file.size));
-        less.type = all.type = 'button';
-        less.addEventListener('click', smaller);
-        all.addEventListener('click', function () { choose(file); });
-        ask.append(less, all);
-        chip.appendChild(ask);
-        asking.add(smaller);
-      });
-    };
-
-    const add = function (list) {
-      const run = (async function () {
-        // two files go up side by side; the chips show in the order they were chosen
-        const waiting = Array.from(list).map(function (file) {
-          const chip = el('span', 'chip busy', file.name || t('picture'));
-          files.appendChild(chip);
-          return {file: file, chip: chip};
+    function Show(List) {
+      var I = 0;
+      var Now = false;
+      function AddRow(It, N) {
+        var Row = null;
+        Row = pas.chat_shared.El("div","item",undefined);
+        Row.appendChild(pas.chat_shared.El("b","",It.label));
+        if (It.hint) Row.appendChild(pas.chat_shared.El("span","",It.hint));
+        Row.addEventListener("mousemove",function (E) {
+          if (Index !== N) Select(N);
         });
-        const worker = async function () {
-          while (waiting.length) {
-            const next = waiting.shift(), file = next.file, chip = next.chip;
-            const share = el('span', 'share', '');
-            try {
-              const small = await Keys.smaller(file);
-              const sent = small === file ? file : await whichSize(chip, file, small);
-              chip.appendChild(share);
-              const goes = function (which) {
-                return upload(which, expire.value, dm && S.dmLocked ? dm : '', function (part) {
-                  share.textContent = Math.round(part * 100) + '%';
-                  chip.style.setProperty('--up', Math.round(part * 100) + '%');
-                });
-              };
-              // a photo too big for this site as it is still goes, smaller
-              const done = await goes(sent).catch(function (err) {
-                if (sent === small) throw err;
-                toast(t('That photo did not go up at full size. Sending it smaller.'));
-                return goes(small);
-              });
-              share.remove();
-              chip.style.removeProperty('--up');
-              pending.push(done);
-              chips.set(done, chip);
-              chip.classList.remove('busy');
-              const x = el('button', '', '×');
-              x.type = 'button';
-              x.addEventListener('click', function () { pending.splice(pending.indexOf(done), 1); chip.remove(); });
-              chip.appendChild(x);
-            } catch (err) {
-              chip.remove();
-              failed(err);
-            }
-          }
-        };
-        await Promise.all([worker(), worker()]);
-      })();
-      busy.add(run);
-      run.then(function () { busy.delete(run); });
-    };
-
-    // Android's chooser has the camera and the file browser, and the gallery
-    // only for an input that asks for pictures and videos alone: there the
-    // button asks which first.
-    const pick = function (input, button) {
-      if (!/Android/.test(navigator.userAgent)) { input.click(); return; }
-      const open = function (accept) { input.accept = accept; input.click(); };
-      popMenu(button, [[t('Photos and videos'), function () { open('image/*,video/*'); }],
-        [t('Camera or file'), function () { open(''); }]]);
-    };
-    attach.addEventListener('click', function () { pick(filePick, attach); });
-    filePick.addEventListener('change', function () { add(Array.from(filePick.files)); filePick.value = ''; });
-    beamPick.addEventListener('change', function () {
-      if (beamPick.files[0]) beamFile(dm, beamPick.files[0]);
-      beamPick.value = '';
-    });
-    area2.addEventListener('paste', function (e) {
-      const list = Array.from(e.clipboardData.files || []);
-      if (list.length) { e.preventDefault(); add(list); }
-    });
-    form.addEventListener('dragover', function (e) { e.preventDefault(); form.classList.add('drop'); });
-    form.addEventListener('dragleave', function () { form.classList.remove('drop'); });
-    form.addEventListener('drop', function (e) {
-      e.preventDefault();
-      form.classList.remove('drop');
-      add(Array.from(e.dataTransfer.files));
-    });
-    code.addEventListener('click', function () {
-      const at = area2.selectionStart;
-      const selected = area2.value.slice(at, area2.selectionEnd);
-      area2.setRangeText('```\n' + selected + '\n```', at, area2.selectionEnd, 'end');
-      area2.selectionStart = area2.selectionEnd = at + 4 + selected.length;
-      area2.focus();
-      fit(area2);
-    });
-
-    // a private conversation offers the commands that need no channel
-    const complete = completer(area2, function (c) { return !dm || c.anywhere; });
-
-    let sending = false;
-    const submit = async function () {
-      // Enter again while it goes would send it twice
-      if (sending) return;
-      if (busy.size) {
-        // a message does not go out with half its files
-        sending = true;
-        send.disabled = true;
-        toast(t('Sending when the files are up'));
-        Array.from(asking).forEach(function (smaller) { smaller(); });
-        while (busy.size) await Promise.all(Array.from(busy));
-        sending = false;
-        send.disabled = false;
-      }
-      const text = area2.value.trim();
-      if (!text && !pending.length) return;
-      Drafts.delete(draftKey);
-      // The commands the page does itself: a private message is encrypted
-      // here, so the server never sees one.
-      const word = text.match(/^\/(\w+)\s*([\s\S]*)$/);
-      if (word && Extras.commands[word[1]]) {
-        area2.value = '';
-        fit(area2);
-        Extras.commands[word[1]](word[2]);
-        return;
-      }
-      const local = text.match(/^\/(msg|query)\b\s*@?([\w.-]*)\s*([\s\S]*)$/);
-      if (local) {
-        area2.value = '';
-        fit(area2);
-        if (!local[2]) { note(t('Use: /msg name text'), parent); return; }
-        await route('/dm/' + enc(local[2]), true);
-        if (local[3] && S.view === 'dm') {
-          try { await sendDm(S.dm, local[3], []); } catch (err) { failed(err); }
-        }
-        return;
-      }
-      send.disabled = true;
-      sending = true;
-      // what goes now; what is typed or uploaded while it goes stays for the next
-      const sent = pending.slice();
-      try {
-        if (dm && await dmCommand(text)) sent.length = 0;
-        else if (dm) await sendDm(dm, text, sent);
-        else {
-          const re = answered(draftKey);
-          const said = JSON.parse(await post('/api/post', {room: S.room, parent: parent || '',
-            body: text, files: sent.map(function (p) { return p.token; }).join(','), re: re ? re.id : ''}));
-          if (re === answered(draftKey)) answer();
-          if (said.info) note(said.info, parent);
-          if (said.go) {
-            area2.value = '';
-            send.disabled = false;
-            if (said.info) toast(said.info);
-            // After /part the room is gone from the sidebar.
-            if (said.go === '/') S.rooms = S.rooms.filter(function (r) { return r.slug !== S.room; });
-            roomsWanted = true;
-            route(said.go, true);
-            return;
-          }
-        }
-        if (area2.value.trim() === text) area2.value = '';
-        for (const p of sent) {
-          const at = pending.indexOf(p);
-          if (at >= 0) pending.splice(at, 1);
-          if (chips.has(p)) { chips.get(p).remove(); chips.delete(p); }
-        }
-        fit(area2);
-        if (!dm) syncNow(text.startsWith('/'));
-      } catch (err) { failed(err); }
-      finally { sending = false; }
-      send.disabled = false;
-      area2.focus();
-    };
-
-    form.addEventListener('submit', function (e) { e.preventDefault(); submit(); });
-    area2.addEventListener('keydown', function (e) {
-      if (complete.handle(e)) return;
-      if (e.key === 'Escape' && answered(draftKey)) answer();
-      if (e.key === 'Enter' && !e.shiftKey && !inFence(area2)) { e.preventDefault(); submit(); }
-      if (e.key === 'ArrowUp' && !area2.value && dm) {
-        const mine = Array.from(stream.querySelectorAll('.msg')).filter(function (x) {
-          return x.dm && x.dm.m.from === Me.name && (x.dm.payload.t === 'text' || x.dm.payload.t === 'file');
+        Row.addEventListener("mousedown",function (E) {
+          E.preventDefault();
+          Index = N;
+          Pick();
         });
-        if (mine.length) { e.preventDefault(); startDmEdit(mine[mine.length - 1]); }
-      } else if (e.key === 'ArrowUp' && !area2.value) {
-        const mine = Array.from((parent ? S.threadMessages : S.messages).values())
-          .filter(function (x) { return x.data.name === Me.name && !x.data.deleted && x.data.uid; });
-        if (mine.length) { e.preventDefault(); startEdit(mine[mine.length - 1].data); }
-      }
-    });
-    area2.addEventListener('input', function () {
-      Drafts.set(draftKey, area2.value);
-      fit(area2);
-      complete.update();
-      if (Date.now() - S.typingSent > 3000 && area2.value) {
-        S.typingSent = Date.now();
-        if (dm) post('/api/dm/typing', {to: dm}).catch(function () { });
-        else post('/api/typing', {room: S.room}).catch(function () { });
-      }
-    });
-    fit(area2);
-    if (!parent) area2.focus();
-  }
-
-  // Private text may be sealed, so detect commands in the page. Unknown
-  // commands and /me with words remain messages; other commands go to the
-  // server without a channel and answer only this member.
-  async function dmCommand(text) {
-    const m = text.match(/^\/(\S+)(?:\s+([\s\S]*))?$/);
-    if (!m || (m[1].toLowerCase() === 'me' && m[2])) return false;
-    if (!S.commands) S.commands = await get('/api/commands');
-    if (!S.commands.some(function (c) { return c.name === m[1].toLowerCase(); })) return false;
-    const said = JSON.parse(await post('/api/post', {body: text}));
-    if (said.info) note(said.info);
-    if (said.go) { roomsWanted = true; route(said.go, true); }
-    return true;
-  }
-
-  // A note only this member sees, such as /help's answer.
-  function note(text, inThread) {
-    const box = inThread ? $('.threadlist', panel) : stream;
-    const n = el('div', 'note');
-    n.appendChild(el('pre', '', text));
-    const x = el('button', '', t('Dismiss'));
-    x.type = 'button';
-    x.addEventListener('click', function () { n.remove(); });
-    n.appendChild(x);
-    box.appendChild(n);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  // The emoji a name can be typed for (emoji-names.js).  A reaction of this
-  // site that the list lacks answers to "reaction".
-  async function emojiSet() {
-    const list = await EmojiNames.list();
-    const reactions = Me.reactions ? Me.reactions.shown.concat(Me.reactions.more) : [];
-    return list.concat(reactions.filter(function (r) { return !list.some(function (e) { return e.emoji === r; }); })
-      .map(function (r) { return {emoji: r, name: 'reaction', keywords: ['reaction']}; }));
-  }
-
-  // Suggestions for @member, #room, :emoji and /command as they are typed.
-  // Commands says which commands this box offers; a box with none (one
-  // that edits a message) leaves it out.
-  function completer(area, commands) {
-    const box = el('div', 'complete');
-    box.hidden = true;
-    (area.closest('.composer') || area.parentNode).appendChild(box);
-    let items = [];
-    let index = 0;
-    let start = 0;
-    let eager = false;   // opened by an arrow key: a colon alone is enough
-    let typedAt = -1;    // where the caret was left by typing: arrows open the list only there
-    let waiting = false; // a lookup is under way
-    let ahead = 0;       // arrow keys pressed meanwhile, down less up
-    let taking = false;  // Enter or Tab pressed after them
-
-    const word = function () {
-      const before = area.value.slice(0, area.selectionStart);
-      const m = before.match(/(^|\s)([@#])([\w.-]*)$/) || (commands && before.match(/^(\/)([\w]*)$/));
-      if (m && m[1] === '/') return {kind: '/', text: m[2], at: 0};
-      if (m) return {kind: m[2], text: m[3], at: before.length - m[3].length - 1};
-      // :name for an emoji; the closing colon of :name: makes it the emoji at once
-      const e = EmojiNames.typed(area.value, area.selectionStart, eager);
-      return e && {kind: ':', text: e.word, at: e.from, whole: e.whole};
+        Box.appendChild(Row);
+      };
+      Items = List.slice(0,8);
+      Box.replaceChildren();
+      Box.hidden = Items.length === 0;
+      for (var $l = 0, $end = Items.length - 1; $l <= $end; $l++) {
+        I = $l;
+        AddRow(Items[I],I);
+      };
+      if (Items.length > 0) Select(((Ahead % Items.length) + Items.length) % Items.length);
+      Now = Taking;
+      Waiting = false;
+      Taking = false;
+      Ahead = 0;
+      if (Now) Pick();
     };
-
-    // The one selected row, for the keys and the pointer alike, kept in view.
-    const select = function (i) {
-      index = i;
-      Array.from(box.children).forEach(function (c, n) { c.classList.toggle('on', n === i); });
-      const row = box.children[i];
-      box.scrollTop = Math.min(row.offsetTop, Math.max(box.scrollTop, row.offsetTop + row.offsetHeight - box.clientHeight));
+    function Close() {
+      Box.hidden = true;
+      Items = new Array();
+      Eager = false;
+      Waiting = false;
+      Taking = false;
+      Ahead = 0;
     };
-
-    const show = function (list) {
-      items = list.slice(0, 8);
-      box.replaceChildren();
-      box.hidden = !items.length;
-      items.forEach(function (it, i) {
-        const row = el('div', 'item');
-        row.appendChild(el('b', '', it.label));
-        if (it.hint) row.appendChild(el('span', '', it.hint));
-        row.addEventListener('mousemove', function () { if (index !== i) select(i); });
-        row.addEventListener('mousedown', function (e) { e.preventDefault(); index = i; pick(); });
-        box.appendChild(row);
+    function Pick() {
+      var It = null;
+      It = Items[Index];
+      if (!Boolean(It)) return;
+      Area.setRangeText(It.insert,Start,Area.selectionStart,"end");
+      Close();
+      Area.focus();
+    };
+    async function Found(W, Turn) {
+      var Result = null;
+      var Low = "";
+      var All = null;
+      var Emoji = null;
+      var I = 0;
+      var Seen = null;
+      var Named = null;
+      var More = null;
+      Low = W.text.toLowerCase();
+      if (W.kind === "@") return (await pas.chat_shared.Get("/api/users?q=" + pas.chat_shared.Enc(W.text))).map(function (U, N, A) {
+        var Result = undefined;
+        Result = pas.JS.New(["label","@" + ("" + U["name"]),"insert","@" + ("" + U["name"]) + " "]);
+        return Result;
       });
-      // arrow keys pressed while the list was on its way count from its first row
-      if (items.length) select(((ahead % items.length) + items.length) % items.length);
-      const now = taking;
-      waiting = taking = false;
-      ahead = 0;
-      if (now) pick();
+      if (W.kind === "#") {
+        All = pas.chat_shared.S.rooms.filter(function (R, N, A) {
+          var Result = false;
+          Result = R.kind !== "shelf";
+          return Result;
+        }).map(function (R, N, A) {
+          var Result = undefined;
+          Result = pas.JS.New(["slug",R.slug,"title",R.title]);
+          return Result;
+        });
+        I = 0;
+        while (I < pas.chat_shared.Extras.rooms.length) {
+          More = pas.chat_shared.Extras.rooms[I];
+          All = All.concat(await More(W.text));
+          I += 1;
+        };
+        Seen = new Object();
+        return All.filter(function (R, N, A) {
+          var Result = false;
+          if (Boolean(Seen[R.slug]) || !R.slug.startsWith(Low)) return false;
+          Seen[R.slug] = true;
+          Result = true;
+          return Result;
+        }).map(function (R, N, A) {
+          var Result = undefined;
+          Result = pas.JS.New(["label","#" + R.slug,"hint",R.title,"insert","#" + R.slug + " "]);
+          return Result;
+        });
+      };
+      if (W.kind === ":") {
+        Emoji = await $mod.EmojiSet();
+        if (!W.whole) return window.EmojiNames.matches(Emoji,W.text).map(function (E, N, A) {
+          var Result = undefined;
+          var Hint = undefined;
+          Hint = E["match"];
+          if (!Hint) Hint = E["keywords"][0];
+          Result = pas.JS.New(["label",E["emoji"],"hint",Hint,"insert","" + E["emoji"] + " "]);
+          return Result;
+        });
+        Named = window.EmojiNames.named(Emoji,W.text);
+        if (Boolean(Named) && (Turn === Asked) && (Area.selectionStart === TypedAt)) Area.setRangeText("" + Named["emoji"],Start,TypedAt,"end");
+        return new Array();
+      };
+      if (!Boolean(pas.chat_shared.S.commands)) pas.chat_shared.S.commands = await pas.chat_shared.Get("/api/commands");
+      Result = pas.chat_shared.S.commands.filter(function (C, N, A) {
+        var Result = false;
+        Result = Commands(C) && C["name"].startsWith(Low);
+        return Result;
+      }).map(function (C, N, A) {
+        var Result = undefined;
+        Result = pas.JS.New(["label","/" + ("" + C["name"]),"hint",C["usage"],"insert","/" + ("" + C["name"]) + " "]);
+        return Result;
+      });
+      return Result;
     };
-
-    const close = function () {
-      box.hidden = true;
-      items = [];
-      eager = waiting = taking = false;
-      ahead = 0;
+    function Update() {
+      var At = 0;
+      var Turn = 0;
+      var Wait = 0;
+      var W = null;
+      TypedAt = Area.selectionStart;
+      At = TypedAt;
+      W = WordAt();
+      Asked += 1;
+      Turn = Asked;
+      window.clearTimeout(Timer);
+      if (!Boolean(W)) {
+        Close();
+        return;
+      };
+      Start = W.at;
+      Waiting = true;
+      if (W.kind === "@") {
+        Wait = 150}
+       else Wait = 0;
+      Timer = window.setTimeout(async function () {
+        var List = null;
+        List = new Array();
+        try {
+          List = await Found(W,Turn);
+        } catch ($e) {
+        };
+        if (Turn === Asked) if (Area.selectionStart === At) {
+          Show(List)}
+         else Show(new Array());
+      },Wait);
     };
-
-    const pick = function () {
-      const it = items[index];
-      if (!it) return;
-      area.setRangeText(it.insert, start, area.selectionStart, 'end');
-      close();
-      area.focus();
-    };
-
-    // What fits the word, for every kind alike: label, hint, insert.
-    const found = async function (w, turn) {
-      const low = w.text.toLowerCase();
-      if (w.kind === '@')
-        return (await get('/api/users?q=' + enc(w.text))).map(function (u) { return {label: '@' + u.name, insert: '@' + u.name + ' '}; });
-      if (w.kind === '#') {
-        let all = S.rooms.filter(function (r) { return r.kind !== 'shelf'; }).map(function (r) { return {slug: r.slug, title: r.title}; });
-        for (const more of Extras.rooms) all = all.concat(await more(w.text));
-        const seen = {};
-        return all.filter(function (r) {
-          if (seen[r.slug] || !r.slug.startsWith(low)) return false;
-          seen[r.slug] = true;
+    function Handle(E) {
+      var Result = false;
+      var Arrow = false;
+      var Take = false;
+      var Step = 0;
+      var W = null;
+      Arrow = ((E.key === "ArrowDown") || (E.key === "ArrowUp")) && !E.shiftKey && !E.ctrlKey && !E.altKey && !E.metaKey;
+      if (E.key === "ArrowDown") {
+        Step = 1}
+       else Step = -1;
+      Take = (E.key === "Enter") || (E.key === "Tab");
+      if (Box.hidden || (Items.length === 0)) {
+        if (Waiting && (Arrow || (Take && (Ahead !== 0)))) {
+          if (Arrow) {
+            Ahead = Ahead + Step}
+           else Taking = true;
+          E.preventDefault();
           return true;
-        }).map(function (r) { return {label: '#' + r.slug, hint: r.title, insert: '#' + r.slug + ' '}; });
-      }
-      if (w.kind === ':') {
-        const set = await emojiSet();
-        if (!w.whole) return EmojiNames.matches(set, w.text).map(function (e) { return {label: e.emoji, hint: e.match || e.keywords[0], insert: e.emoji + ' '}; });
-        const named = EmojiNames.named(set, w.text);
-        if (named && turn === asked && area.selectionStart === typedAt) area.setRangeText(named.emoji, start, typedAt, 'end');
-        return [];
-      }
-      if (!S.commands) S.commands = await get('/api/commands');
-      return S.commands.filter(function (c) { return commands(c) && c.name.startsWith(low); })
-        .map(function (c) { return {label: '/' + c.name, hint: c.usage, insert: '/' + c.name + ' '}; });
-    };
-
-    let timer = 0;
-    let asked = 0;   // counts the lookups: an answer that is not the latest is dropped
-    const update = function () {
-      const at = typedAt = area.selectionStart;
-      const w = word(), turn = ++asked;
-      clearTimeout(timer);
-      if (!w) { close(); return; }
-      start = w.at;
-      waiting = true;
-      timer = setTimeout(async function () {
-        let list = [];
-        try { list = await found(w, turn); } catch (err) { }
-        // the caret has left meanwhile: nothing to offer there
-        if (turn === asked) show(area.selectionStart === at ? list : []);
-      }, w.kind === '@' ? 150 : 0);
-    };
-
-    const handle = function (e) {
-      const arrow = (e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey;
-      const step = e.key === 'ArrowDown' ? 1 : -1, take = e.key === 'Enter' || e.key === 'Tab';
-      if (box.hidden || !items.length) {
-        // the list is on its way: arrow keys are kept for it and the caret
-        // stays, and Enter or Tab after them takes the row they lead to
-        if (waiting && (arrow || (take && ahead))) {
-          if (arrow) ahead += step; else taking = true;
-          e.preventDefault();
-          return true;
-        }
-        if (!arrow) return false;
-        // an arrow key after a colon, or a colon and one letter, opens the list
-        eager = area.selectionStart === typedAt && area.selectionEnd === typedAt;
-        const w = eager && word();
-        if (!w || w.kind !== ':' || w.whole || w.text.length > 1) { eager = false; return false; }
-        e.preventDefault();
-        update();
+        };
+        if (!Arrow) return false;
+        Eager = (Area.selectionStart === TypedAt) && (Area.selectionEnd === TypedAt);
+        if (Eager) {
+          W = WordAt()}
+         else W = null;
+        if (!Boolean(W) || (W.kind !== ":") || W.whole || (W.text.length > 1)) {
+          Eager = false;
+          return false;
+        };
+        E.preventDefault();
+        Update();
         return true;
-      }
-      if (arrow) { e.preventDefault(); select((index + step + items.length) % items.length); return true; }
-      if (take) { e.preventDefault(); pick(); return true; }
-      if (e.key === 'Escape') { close(); typedAt = -1; return true; }
-      return false;
+      };
+      if (Arrow) {
+        E.preventDefault();
+        Select((Index + Step + Items.length) % Items.length);
+        return true;
+      };
+      if (Take) {
+        E.preventDefault();
+        Pick();
+        return true;
+      };
+      if (E.key === "Escape") {
+        Close();
+        TypedAt = -1;
+        return true;
+      };
+      Result = false;
+      return Result;
     };
-    area.addEventListener('blur', function () { setTimeout(close, 150); });
-    return {update: update, handle: handle};
-  }
-
-  // ------------------------------------------------------- private messages
-
-  // Private messages are encrypted, so their text is shaped here: code
-  // blocks, inline code, bold and links, everything else escaped.
-  function plainHtml(text, locked) {
-    const esc = function (s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
-    return text.split('```').map(function (part, i) {
-      if (i % 2) return '<div class="code"><div class="codebar"><span>' + esc((/^([\w+#-]+)\n/.exec(part) || ['', t('code')])[1]) + '</span>' +
-        (locked ? '<span class="codenote">' + esc(t('Not colored: the server cannot read a locked conversation.')) + '</span>' : '') + '<button type="button" class="copy">' + esc(t('Copy')) + '</button></div><pre><code>' +
-        esc(part.replace(/^[\w+#-]*\n/, '').replace(/\n$/, '')) + '</code></pre></div>';
-      return esc(part).replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
-        .replace(/(https?:\/\/[^\s<]+)/g, '<a rel="nofollow ugc" target="_blank" href="$1">$1</a>').replace(/\n/g, '<br>');
-    }).join('');
-  }
-
-  async function openDm(name) {
-    const generation = S.generation;
-    const who = await get('/api/key?name=' + enc(name));
-    if (generation !== S.generation) return;
-    S.view = 'dm';
-    S.dm = who.name;
-    S.dmAvatar = who.avatar;
-    S.dmSeen = who.seen || 0;
-    S.dmLast = 0;
-    S.dmFirst = 0;
-    S.dmOlderDone = false;
-    S.title = '@' + who.name;
-    const head = $('#roomhead');
-    const menu = iconButton('menu', t('Channels'), 'menubtn');
-    menu.addEventListener('click', toggleMenu);
-    const titles = el('div', 'titles');
-    const h = el('h1');
-    h.append(avatar(who.name, who.avatar, 'small'), link('/u/' + enc(who.name), '', who.name));
-    titles.appendChild(h);
-    S.dmLocked = !!who.locked;
-    const lock = el('p', 'topic' + (S.dmLocked ? ' secure' : ''));
-    if (S.dmLocked) lock.append(icon('lock'), document.createTextNode(t(' Locked: end to end encrypted. Only your two browsers can read it, and IRC users cannot.')));
-    else lock.appendChild(document.createTextNode(t('Not locked: this site can read it, and it reaches IRC. ')));
-    if (Me.name) {
-      const flip = el('button', 'small-link', S.dmLocked ? t('Unlock') : t('Lock it'));
-      flip.type = 'button';
-      flip.title = S.dmLocked ? t('New messages go plain, readable by this site and on IRC') :
-        t('New messages are encrypted in your browsers; neither this site nor IRC can read them');
-      flip.addEventListener('click', async function () {
-        try { await post('/api/dm/lock', {with: who.name, on: S.dmLocked ? '0' : '1'}); route(SiteBase.path(), false); } catch (err) { failed(err); }
+    Box = pas.chat_shared.El("div","complete",undefined);
+    Box.hidden = true;
+    Holder = Area.closest(".composer");
+    if (Holder === null) Holder = Area.parentNode;
+    Holder.appendChild(Box);
+    Items = new Array();
+    Index = 0;
+    Start = 0;
+    Eager = false;
+    TypedAt = -1;
+    Waiting = false;
+    Ahead = 0;
+    Taking = false;
+    Timer = 0;
+    Asked = 0;
+    Area.addEventListener("blur",function (E) {
+      window.setTimeout(function () {
+        Close();
+      },150);
+    });
+    Result = pas.JS.New(["update",Update,"handle",Handle]);
+    return Result;
+  };
+});
+rtl.module("chat_private",["System","JS","Web","chat_shared"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.PlainHtml = function (Text, Locked) {
+    var Result = "";
+    function Esc(Raw) {
+      var Result = "";
+      Result = Raw.replace(new RegExp("&","g"),"&amp;");
+      Result = Result.replace(new RegExp("<","g"),"&lt;");
+      Result = Result.replace(new RegExp(">","g"),"&gt;");
+      Result = Result.replace(new RegExp('"',"g"),"&quot;");
+      return Result;
+    };
+    var Parts = null;
+    var Part = "";
+    var Lang = "";
+    var Shaped = "";
+    var Found = null;
+    var I = 0;
+    Result = "";
+    Parts = Text.split("```");
+    for (var $l = 0, $end = Parts.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Part = "" + Parts[I];
+      if ((I % 2) !== 0) {
+        Found = (new RegExp("^([\\w+#-]+)\\n")).exec(Part);
+        if (Found !== null) {
+          Lang = "" + Found["1"]}
+         else Lang = window.t("code");
+        Result = Result + '<div class="code"><div class="codebar"><span>' + Esc(Lang) + "</span>";
+        if (Locked) Result = Result + '<span class="codenote">' + Esc(window.t("Not colored: the server cannot read a locked conversation.")) + "</span>";
+        Result = Result + '<button type="button" class="copy">' + Esc(window.t("Copy")) + "</button></div><pre><code>";
+        Shaped = Part.replace(new RegExp("^[\\w+#-]*\\n"),"");
+        Shaped = Shaped.replace(new RegExp("\\n$"),"");
+        Result = Result + Esc(Shaped) + "</code></pre></div>";
+      } else {
+        Shaped = Esc(Part).replace(new RegExp("`([^`\\n]+)`","g"),"<code>$1</code>");
+        Shaped = Shaped.replace(new RegExp("\\*\\*([^*\\n]+)\\*\\*","g"),"<b>$1</b>");
+        Shaped = Shaped.replace(new RegExp("(https?:\\/\\/[^\\s<]+)","g"),'<a rel="nofollow ugc" target="_blank" href="$1">$1</a>');
+        Result = Result + Shaped.replace(new RegExp("\\n","g"),"<br>");
+      };
+    };
+    return Result;
+  };
+  this.OpenDm = async function (Name) {
+    var Generation = 0.0;
+    var Who = null;
+    var Head = null;
+    var MenuButton = null;
+    var Titles = null;
+    var H = null;
+    var Lock = null;
+    var Flip = null;
+    var Tools = null;
+    var Remove = null;
+    var Search = null;
+    Generation = pas.chat_shared.S.generation;
+    Who = await pas.chat_shared.Get("/api/key?name=" + pas.chat_shared.Enc(Name));
+    if (Generation !== pas.chat_shared.S.generation) return;
+    pas.chat_shared.S.view = "dm";
+    pas.chat_shared.S.dm = Who.name;
+    pas.chat_shared.S.dmAvatar = Who.avatar;
+    if (Boolean(Who.seen)) {
+      pas.chat_shared.S.dmSeen = Who.seen}
+     else pas.chat_shared.S.dmSeen = 0;
+    pas.chat_shared.S.dmLast = 0;
+    pas.chat_shared.S.dmFirst = 0;
+    pas.chat_shared.S.dmOlderDone = false;
+    pas.chat_shared.S.title = "@" + Who.name;
+    Head = pas.chat_shared.Find("#roomhead",undefined);
+    MenuButton = pas.chat_shared.IconButton("menu",window.t("Channels"),"menubtn");
+    MenuButton.addEventListener("click",pas.chat_shared.ToggleMenu);
+    Titles = pas.chat_shared.El("div","titles",undefined);
+    H = pas.chat_shared.El("h1",undefined,undefined);
+    H.append(pas.chat_shared.Avatar(Who.name,Who.avatar,"small"),pas.chat_shared.Link("/u/" + pas.chat_shared.Enc(Who.name),"",Who.name));
+    Titles.appendChild(H);
+    pas.chat_shared.S.dmLocked = Boolean(Who.locked);
+    if (pas.chat_shared.S.dmLocked) {
+      Lock = pas.chat_shared.El("p","topic secure",undefined)}
+     else Lock = pas.chat_shared.El("p","topic",undefined);
+    if (pas.chat_shared.S.dmLocked) {
+      Lock.append(pas.chat_shared.Icon("lock"),document.createTextNode(window.t(" Locked: end to end encrypted. Only your two browsers can read it, and IRC users cannot.")))}
+     else Lock.appendChild(document.createTextNode(window.t("Not locked: this site can read it, and it reaches IRC. ")));
+    if (pas.chat_shared.Me.name !== "") {
+      if (pas.chat_shared.S.dmLocked) {
+        Flip = pas.chat_shared.El("button","small-link",window.t("Unlock"))}
+       else Flip = pas.chat_shared.El("button","small-link",window.t("Lock it"));
+      Flip.type = "button";
+      if (pas.chat_shared.S.dmLocked) {
+        Flip.title = window.t("New messages go plain, readable by this site and on IRC")}
+       else Flip.title = window.t("New messages are encrypted in your browsers; neither this site nor IRC can read them");
+      Flip.addEventListener("click",async function (E) {
+        var Turn = "";
+        try {
+          if (pas.chat_shared.S.dmLocked) {
+            Turn = "0"}
+           else Turn = "1";
+          await pas.chat_shared.Post("/api/dm/lock",pas.JS.New(["with",Who.name,"on",Turn]));
+          pas.chat_shared.Route(window.SiteBase.path(),false);
+        } catch ($e) {
+          pas.chat_shared.Failed($e);
+        };
       });
-      lock.appendChild(flip);
-    }
-    titles.appendChild(lock);
-    if (S.dmLocked && Me.name) Keys.partner(who.name).then(function (p) {
-      const code = el('p', 'topic', t('Safety code: %s', p.code));
-      code.title = t('The same code shows on their side. Compare it another way (a call, in person) to be sure nobody sits between you.');
-      titles.appendChild(code);
-      if (!p.changed) return;
-      const warn = el('p', 'topic problem', t('%s has a new key since you last wrote here. That happens after a password reset. If you did not expect it, compare the safety code with them before you write anything private.', who.name) + ' ');
-      const ok = el('button', 'small-link', t('I checked'));
-      ok.type = 'button';
-      ok.addEventListener('click', function () { Keys.trust(who.name).then(function () { warn.remove(); }).catch(failed); });
-      warn.appendChild(ok);
-      titles.appendChild(warn);
-    }).catch(function (err) {
-      // only this one is said here: a conversation not opened on this device yet is asked for elsewhere
-      if (err && err.notOwn) titles.appendChild(el('p', 'topic problem', err.message));
+      Lock.appendChild(Flip);
+    };
+    Titles.appendChild(Lock);
+    if (pas.chat_shared.S.dmLocked && (pas.chat_shared.Me.name !== "")) window.Keys.partner(Who.name).then(function (Value) {
+      var Result = undefined;
+      var P = null;
+      var Code = null;
+      var Warn = null;
+      var Ok = null;
+      P = Value;
+      Code = pas.chat_shared.El("p","topic",window.t("Safety code: %s",P.code));
+      Code.title = window.t("The same code shows on their side. Compare it another way (a call, in person) to be sure nobody sits between you.");
+      Titles.appendChild(Code);
+      if (!P.changed) return Result;
+      Warn = pas.chat_shared.El("p","topic problem",window.t("%s has a new key since you last wrote here. That happens after a password reset. If you did not expect it, compare the safety code with them before you write anything private.",Who.name) + " ");
+      Ok = pas.chat_shared.El("button","small-link",window.t("I checked"));
+      Ok.type = "button";
+      Ok.addEventListener("click",function (E) {
+        window.Keys.trust(Who.name).then(function (Done) {
+          var Result = undefined;
+          Warn.remove();
+          return Result;
+        }).catch(pas.chat_shared.FailedFn);
+      });
+      Warn.appendChild(Ok);
+      Titles.appendChild(Warn);
+      return Result;
+    }).catch(function (Err) {
+      var Result = undefined;
+      if (Boolean(Err) && Boolean(Err["notOwn"])) Titles.appendChild(pas.chat_shared.El("p","topic problem",Err["message"]));
+      return Result;
     });
-    head.append(menu, titles);
-    if (Me.name) {
-      // The same as the arrow on its row in the room list, where a phone
-      // hides it.
-      const tools = el('div', 'headtools');
-      const remove = iconButton('trash', t('Delete this conversation'));
-      remove.addEventListener('click', function () { deleteDm(who.name); });
-      const find = iconButton('search', t('Search'));
-      find.addEventListener('click', openSearch);
-      tools.append(find, remove);
-      head.appendChild(tools);
-    }
-    if (!Me.name) {
-      stream.appendChild(el('p', 'notice', t('Sign in to send private messages.')));
-      renderComposer($('#composer-area'), 0, null);
+    Head.append(MenuButton,Titles);
+    if (pas.chat_shared.Me.name !== "") {
+      Tools = pas.chat_shared.El("div","headtools",undefined);
+      Remove = pas.chat_shared.IconButton("trash",window.t("Delete this conversation"),undefined);
+      Remove.addEventListener("click",function (E) {
+        pas.chat_sidebar.DeleteDm(Who.name);
+      });
+      Search = pas.chat_shared.IconButton("search",window.t("Search"),undefined);
+      Search.addEventListener("click",function (E) {
+        pas.chat_panels.OpenSearch();
+      });
+      Tools.append(Search,Remove);
+      Head.appendChild(Tools);
+    };
+    if (pas.chat_shared.Me.name === "") {
+      pas.chat_shared.Stream.appendChild(pas.chat_shared.El("p","notice",window.t("Sign in to send private messages.")));
+      pas.chat_composer.RenderComposer(pas.chat_shared.Find("#composer-area",undefined),0,null);
       return;
-    }
-    if (!Keys.ready()) {
-      stream.appendChild(el('p', 'notice', t('Private messages need this page opened over https.')));
+    };
+    if (!window.Keys.ready()) {
+      pas.chat_shared.Stream.appendChild(pas.chat_shared.El("p","notice",window.t("Private messages need this page opened over https.")));
       return;
-    }
-    if (S.dmLocked && !await Keys.myKey()) {
-      stream.appendChild(keyForm());
+    };
+    if (pas.chat_shared.S.dmLocked && !Boolean(await window.Keys.myKey())) {
+      pas.chat_shared.Stream.appendChild($impl.KeyForm());
       return;
-    }
-    renderComposer($('#composer-area'), 0, who.name);
-    pollDm(generation);
-    syncNow(true);
-  }
-
-  // Signed in with GitHub, GitLab or Google: the private key opens with the
-  // account's password, or the account gets its first one here.
-  function keyForm() {
-    const first = !Me.wrapped;
-    const form = el('form', 'invite keyform');
-    const password = el('input');
-    password.type = 'password';
-    password.autocomplete = first ? 'new-password' : 'current-password';
-    password.placeholder = first ? t('A new password, 8 characters or more') : t('Your password');
-    const go = el('button', 'primary', first ? t('Set it') : t('Unlock'));
-    let say = t('Type your password to open your locked messages on this device.');
-    if (first && Me.password) say = t('Locked conversations need a key made from your password. Type it once here.');
-    else if (first) say = t('Locked conversations need a password that never leaves your browser, and this account has none yet. Set one here. It also signs you in with your name, and a forgotten one cannot be reset.');
-    form.append(el('p', 'notice', say), password, go);
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      go.disabled = true;
+    };
+    pas.chat_composer.RenderComposer(pas.chat_shared.Find("#composer-area",undefined),0,Who.name);
+    $mod.PollDm(Generation);
+    pas.chat_sync.SyncNow(true);
+  };
+  this.OpenSealed = async function (M) {
+    var Result = null;
+    var Sent = null;
+    Sent = M;
+    if (!Sent.iv) {
       try {
-        if (first) await Keys.setupKeys(Me.name, password.value);
-        else await Keys.unlock(Me.name, password.value, Me.wrapped);
-        route(SiteBase.path(), false);
-      } catch (err) { failed(err); }
-      go.disabled = false;
-    });
-    return form;
-  }
-
-  async function openSealed(m) {
-    if (!m.iv) {
-      try { return JSON.parse(m.data); } catch (err) { return {t: 'text', text: m.data}; }
-    }
-    try { return await Keys.open(S.dm, m); } catch (err) { return {t: 'text', text: t('(locked, and this device cannot open it)')}; }
-  }
-
-  // The newest messages first; a live ring or the timer brings newer ones.
-  async function pollDm(generation) {
-    if (generation !== S.generation) return;
-    clearTimeout(S.dmTimer);
+        return JSON.parse(Sent.data);
+      } catch ($e) {
+        return pas.JS.New(["t","text","text",Sent.data]);
+      };
+    };
     try {
-      // a tab nobody is looking at leaves the messages unread; back in view, what is shown counts as read
-      const list = await get('/api/dm?with=' + enc(S.dm) + '&after=' + S.dmLast + (document.hidden ? '&peek=1' : S.dmLast ? '&read=' + S.dmLast : ''));
-      if (generation !== S.generation) return;
-      const stick = stream.pinned || nearBottom() || !S.dmLast;
-      for (const m of list) {
-        const payload = await openSealed(m);
-        // A second look that started before this one finished has it already.
-        if (generation !== S.generation || m.id <= S.dmLast) continue;
-        stream.appendChild(renderDm(m, payload));
-        S.dmLast = Math.max(S.dmLast, m.id);
-        if (!S.dmFirst || m.id < S.dmFirst) S.dmFirst = m.id;
-      }
-      if (list.length) {
-        regroup(stream);
-        if (stick) { stream.scrollTop = stream.scrollHeight; stream.pinned = true; }
-      }
-      if (!list.length && !S.dmLast && !$('.empty', stream)) {
-        const p = el('div', 'empty');
-        p.appendChild(el('b', '', t('Nothing between you two yet.')));
-        p.appendChild(el('span', '', S.dmLocked ? t(' Locked: only the two of you will ever read what you write here.') :
-          t(' Lock it at the top when it should stay between your two browsers.')));
-        stream.appendChild(p);
-      } else if (list.length && $('.empty', stream)) $('.empty', stream).remove();
-    } catch (err) { }
-    S.dmTimer = setTimeout(function () { pollDm(generation); }, Live.id ? 60000 : document.hidden ? 15000 : 3000);
-  }
-
-  // Scrolling to the top of a private conversation brings older messages.
-  async function olderDms() {
-    if (!S.dmFirst || S.dmOlderDone || S.loadingOlder) return;
-    S.loadingOlder = true;
-    const generation = S.generation;
+      Result = await window.Keys.open(pas.chat_shared.S.dm,Sent);
+    } catch ($e) {
+      Result = pas.JS.New(["t","text","text",window.t("(locked, and this device cannot open it)")]);
+    };
+    return Result;
+  };
+  this.PollDm = async function (Generation) {
+    var List = null;
+    var Stick = false;
+    var M = null;
+    var Payload = null;
+    var P = null;
+    var I = 0;
+    var Wait = 0;
+    var Tail = "";
+    if (Generation !== pas.chat_shared.S.generation) return;
+    window.clearTimeout(pas.chat_shared.S.dmTimer);
     try {
-      const list = await get('/api/dm?with=' + enc(S.dm) + '&before=' + S.dmFirst);
-      if (generation !== S.generation) return;
-      const height = stream.scrollHeight;
-      const top = stream.querySelector('.msg');
-      for (const m of list) {
-        const node = renderDm(m, await openSealed(m));
-        if (top) top.before(node); else stream.appendChild(node);
-      }
-      if (list.length) S.dmFirst = list[0].id;
-      if (list.length < 100) S.dmOlderDone = true;
-      regroup(stream);
-      stream.scrollTop = stream.scrollHeight - height;
-    } catch (err) { failed(err); }
-    finally { S.loadingOlder = false; }
-  }
-
-  // A quiet mark on the newest of my messages the other has read.  The
-  // server says how far (S.dmSeen: from /api/key when the conversation is
-  // opened, then from the list and the live connection) when the site shows
-  // it; one mark, which moves down as they read.
-  function markSeen() {
-    const old = stream.querySelector(':scope > .msg > .seen');
-    let node = null;
-    if (S.view === 'dm' && S.dmSeen) {
-      for (const mine of stream.querySelectorAll(':scope > .msg.mine')) {
-        if (Number(mine.dataset.id) <= S.dmSeen) node = mine;
-      }
-    }
-    if (old && old.parentNode === node) return;
-    if (old) old.remove();
-    if (!node) return;
-    const mark = el('span', 'seen');
-    mark.title = t('Seen');
-    mark.setAttribute('aria-label', mark.title);
-    mark.appendChild(icon('seen'));
-    node.appendChild(mark);
-  }
-
-  // A private message taken back, by this member or the other: out of the
-  // open conversation, the groups redone.
-  function dropDm(id) {
-    const node = stream.querySelector('.msg[data-id="' + id + '"]');
-    if (!node) return;
-    node.remove();
-    regroup(stream);
-  }
-
-  // One's own private message written again: the same box as in a channel.
-  // The payload keeps its kind and files; a locked conversation seals it again.
-  function startDmEdit(node) {
-    const m = node.dm.m, payload = node.dm.payload;
-    const text = node.querySelector('.body');
-    if (!text) return;
-    const box = el('div', 'editbox');
-    const area = el('textarea');
-    area.value = payload.text || '';
-    const save = el('button', 'primary', t('Save'));
-    const cancel = el('button', '', t('Cancel'));
-    save.type = cancel.type = 'button';
-    box.append(area, save, cancel);
-    text.replaceWith(box);
-    area.focus();
-    area.setSelectionRange(area.value.length, area.value.length);
-    fit(area);
-    const done = function () { box.replaceWith(text); };
-    const store = async function () {
-      const body = area.value.trim();
-      if (!body && !(payload.files && payload.files.length)) {
-        failed(new Error(t('An edited message cannot be empty. Delete it instead.')));
+      if (document.hidden) {
+        Tail = "&peek=1"}
+       else if (Boolean(pas.chat_shared.S.dmLast)) {
+        Tail = "&read=" + ("" + pas.chat_shared.S.dmLast)}
+       else Tail = "";
+      List = await pas.chat_shared.Get("/api/dm?with=" + pas.chat_shared.Enc(pas.chat_shared.S.dm) + "&after=" + ("" + pas.chat_shared.S.dmLast) + Tail);
+      if (Generation !== pas.chat_shared.S.generation) return;
+      Stick = pas.chat_shared.Stream.pinned || pas.chat_shared.NearBottom(undefined) || !Boolean(pas.chat_shared.S.dmLast);
+      for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+        I = $l;
+        M = List[I];
+        Payload = await $mod.OpenSealed(M);
+        if ((Generation !== pas.chat_shared.S.generation) || (M.id <= pas.chat_shared.S.dmLast)) continue;
+        pas.chat_shared.Stream.appendChild($mod.RenderDm(M,Payload));
+        pas.chat_shared.S.dmLast = Math.max(pas.chat_shared.S.dmLast,M.id);
+        if (!Boolean(pas.chat_shared.S.dmFirst) || (M.id < pas.chat_shared.S.dmFirst)) pas.chat_shared.S.dmFirst = M.id;
+      };
+      if (Boolean(List.length)) {
+        pas.chat_rooms.Regroup(pas.chat_shared.Stream);
+        if (Stick) {
+          pas.chat_shared.Stream.scrollTop = pas.chat_shared.Stream.scrollHeight;
+          pas.chat_shared.Stream.pinned = true;
+        };
+      };
+      if (!Boolean(List.length) && !Boolean(pas.chat_shared.S.dmLast) && (pas.chat_shared.Find(".empty",pas.chat_shared.Stream) === null)) {
+        P = pas.chat_shared.El("div","empty",undefined);
+        P.appendChild(pas.chat_shared.El("b","",window.t("Nothing between you two yet.")));
+        if (pas.chat_shared.S.dmLocked) {
+          P.appendChild(pas.chat_shared.El("span","",window.t(" Locked: only the two of you will ever read what you write here.")))}
+         else P.appendChild(pas.chat_shared.El("span","",window.t(" Lock it at the top when it should stay between your two browsers.")));
+        pas.chat_shared.Stream.appendChild(P);
+      } else if (Boolean(List.length) && (pas.chat_shared.Find(".empty",pas.chat_shared.Stream) !== null)) pas.chat_shared.Find(".empty",pas.chat_shared.Stream).remove();
+    } catch ($e) {
+    };
+    if (Boolean(pas.chat_shared.Live.id)) {
+      Wait = 60000}
+     else if (document.hidden) {
+      Wait = 15000}
+     else Wait = 3000;
+    pas.chat_shared.S.dmTimer = window.setTimeout(function () {
+      $mod.PollDm(Generation);
+    },Wait);
+  };
+  this.OlderDms = async function () {
+    var Generation = 0.0;
+    var List = null;
+    var Height = 0;
+    var I = 0;
+    var Top = null;
+    var Node = null;
+    if (!Boolean(pas.chat_shared.S.dmFirst) || pas.chat_shared.S.dmOlderDone || pas.chat_shared.S.loadingOlder) return;
+    pas.chat_shared.S.loadingOlder = true;
+    Generation = pas.chat_shared.S.generation;
+    try {
+      try {
+        List = await pas.chat_shared.Get("/api/dm?with=" + pas.chat_shared.Enc(pas.chat_shared.S.dm) + "&before=" + ("" + pas.chat_shared.S.dmFirst));
+        if (Generation !== pas.chat_shared.S.generation) return;
+        Height = pas.chat_shared.Stream.scrollHeight;
+        Top = pas.chat_shared.Stream.querySelector(".msg");
+        for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+          I = $l;
+          Node = $mod.RenderDm(List[I],await $mod.OpenSealed(List[I]));
+          if (Top !== null) {
+            Top.before(Node)}
+           else pas.chat_shared.Stream.appendChild(Node);
+        };
+        if (Boolean(List.length)) pas.chat_shared.S.dmFirst = List[0].id;
+        if (List.length < 100) pas.chat_shared.S.dmOlderDone = true;
+        pas.chat_rooms.Regroup(pas.chat_shared.Stream);
+        pas.chat_shared.Stream.scrollTop = pas.chat_shared.Stream.scrollHeight - Height;
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
+    } finally {
+      pas.chat_shared.S.loadingOlder = false;
+    };
+  };
+  this.MarkSeen = function () {
+    var Old = null;
+    var Node = null;
+    var Mine = null;
+    var Mark = null;
+    var List = null;
+    var I = 0;
+    Old = pas.chat_shared.Stream.querySelector(":scope > .msg > .seen");
+    Node = null;
+    if ((pas.chat_shared.S.view === "dm") && Boolean(pas.chat_shared.S.dmSeen)) {
+      List = pas.chat_shared.Stream.querySelectorAll(":scope > .msg.mine");
+      for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Mine = List.item(I);
+        if (Number(Mine.dataset["id"]) <= pas.chat_shared.S.dmSeen) Node = Mine;
+      };
+    };
+    if ((Old !== null) && (Old.parentNode === Node)) return;
+    if (Old !== null) Old.remove();
+    if (Node === null) return;
+    Mark = pas.chat_shared.El("span","seen",undefined);
+    Mark.title = window.t("Seen");
+    Mark.setAttribute("aria-label",Mark.title);
+    Mark.appendChild(pas.chat_shared.Icon("seen"));
+    Node.appendChild(Mark);
+  };
+  this.DropDm = function (Id) {
+    var Node = null;
+    Node = pas.chat_shared.Stream.querySelector('.msg[data-id="' + ("" + Id) + '"]');
+    if (Node === null) return;
+    Node.remove();
+    pas.chat_rooms.Regroup(pas.chat_shared.Stream);
+  };
+  this.StartDmEdit = function (Node) {
+    var M = null;
+    var Payload = null;
+    var Text = null;
+    var Box = null;
+    var Save = null;
+    var Cancel = null;
+    var Area = null;
+    var Complete = null;
+    function Words() {
+      var Result = "";
+      if (Boolean(Payload.text)) {
+        Result = Payload.text}
+       else Result = "";
+      return Result;
+    };
+    function Done() {
+      Box.replaceWith(Text);
+    };
+    async function Store() {
+      var Body = "";
+      var Data = null;
+      Body = Area.value.trim();
+      if ((Body === "") && !(Boolean(Payload.files) && Boolean(Payload.files.length))) {
+        pas.chat_shared.Failed(new Error(window.t("An edited message cannot be empty. Delete it instead.")));
         return;
-      }
-      if (body === (payload.text || '')) { done(); return; }
+      };
+      if (Body === Words()) {
+        Done();
+        return;
+      };
       try {
-        await post('/api/dm/edit', Object.assign({id: m.id}, await dmData(S.dm, Object.assign({}, payload, {text: body}))));
-        done();
-        refreshDm(m.id);
-      } catch (err) { failed(err); }
+        Data = Object.assign(pas.JS.New(["id",M.id]),await $impl.DmData(pas.chat_shared.S.dm,Object.assign(new Object(),Payload,pas.JS.New(["text",Body]))));
+        await pas.chat_shared.Post("/api/dm/edit",Data);
+        Done();
+        $mod.RefreshDm(M.id);
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
     };
-    const complete = completer(area);
-    save.addEventListener('click', store);
-    cancel.addEventListener('click', done);
-    area.addEventListener('input', function () { fit(area); complete.update(); });
-    area.addEventListener('keydown', function (e) {
-      if (complete.handle(e)) return;
-      if (e.key === 'Escape') done();
-      if (e.key === 'Enter' && !e.shiftKey && !inFence(area)) { e.preventDefault(); store(); }
+    M = Node.dm["m"];
+    Payload = Node.dm["payload"];
+    Text = Node.querySelector(".body");
+    if (Text === null) return;
+    Box = pas.chat_shared.El("div","editbox",undefined);
+    Area = pas.chat_shared.El("textarea",undefined,undefined);
+    Area.value = Words();
+    Save = pas.chat_shared.El("button","primary",window.t("Save"));
+    Cancel = pas.chat_shared.El("button","",window.t("Cancel"));
+    Cancel.type = "button";
+    Save.type = "button";
+    Box.append(Area,Save,Cancel);
+    Text.replaceWith(Box);
+    Area.focus();
+    Area.setSelectionRange(Area.value.length,Area.value.length);
+    pas.chat_composer.Fit(Area);
+    Complete = pas.chat_complete.Completer(Area,null);
+    Save.addEventListener("click",function (E) {
+      Store();
     });
-  }
-
-  // A private message changed, here or on the other side: shown again in place.
-  async function refreshDm(id) {
-    const node = stream.querySelector('.msg[data-id="' + id + '"]');
-    if (!node || S.view !== 'dm') return;
-    const generation = S.generation;
+    Cancel.addEventListener("click",function (E) {
+      Done();
+    });
+    Area.addEventListener("input",function (E) {
+      pas.chat_composer.Fit(Area);
+      Complete.update();
+    });
+    Area.addEventListener("keydown",function (E) {
+      var Key = null;
+      Key = E;
+      if (Complete.handle(Key)) return;
+      if (Key.key === "Escape") Done();
+      if ((Key.key === "Enter") && !Key.shiftKey && !pas.chat_composer.InFence(Area)) {
+        E.preventDefault();
+        Store();
+      };
+    });
+  };
+  this.RefreshDm = async function (Id) {
+    var Node = null;
+    var Now = null;
+    var Generation = 0.0;
+    var List = null;
+    var Fresh = null;
+    Node = pas.chat_shared.Stream.querySelector('.msg[data-id="' + ("" + Id) + '"]');
+    if ((Node === null) || (pas.chat_shared.S.view !== "dm")) return;
+    Generation = pas.chat_shared.S.generation;
     try {
-      const list = await get('/api/dm?with=' + enc(S.dm) + '&id=' + id + '&peek=1');
-      if (generation !== S.generation || !list.length) return;
-      const fresh = renderDm(list[0], await openSealed(list[0]));
-      const now = stream.querySelector('.msg[data-id="' + id + '"]');
-      if (now) { now.replaceWith(fresh); regroup(stream); }
-    } catch (err) { }
-  }
-
-  // A private message's words as they are shown: /me waves from Ann reads
-  // "Ann waves", an action as in a channel.  The message keeps what was
-  // typed, so a locked one carries it too.
-  function dmWords(from, text) {
-    const action = /^\/me +(\S.*)$/i.exec(text);
-    return action ? from + ' ' + action[1].trim() : text;
-  }
-
-  function renderDm(m, payload) {
-    // the other side wrote the payload: what is not the expected shape is left out
-    if (!payload || typeof payload !== 'object') payload = {};
-    if (typeof payload.text !== 'string') payload.text = '';
-    if (!Array.isArray(payload.files)) delete payload.files;
-    const node = renderMessage({id: m.id, at: m.at, name: m.from, uid: 1, html: '', room: S.room,
-      avatar: m.from === Me.name ? Me.avatar : S.dmAvatar, edited: !!m.edited, dm: true,
-      files: [], reactions: Array.isArray(m.reactions) ? m.reactions : [], replies: 0, deleted: false}, true);
-    node.dm = {m: m, payload: payload};
-    const said = dmWords(m.from, payload.text);
-    // Its own menu: react, answer, copy, and for one's own words, edit
-    // and delete from both sides.
-    node.menu = function () {
-      const items = [];
-      if (payload.text) {
-        items.push({icon: 'reply', title: t('Answer this message'), run: function () {
-          answer('dm ' + S.dm, {id: m.id, from: m.from, text: firstWords(said) || t('code')});
-        }});
-        items.push({icon: 'copy', title: t('Copy the text'), run: function () {
-          navigator.clipboard.writeText(said).then(function () { toast(t('Text copied.')); });
-        }});
-      }
-      if (m.from === Me.name && (payload.t === 'text' || payload.t === 'file'))
-        items.push({icon: 'edit', title: t('Edit'), run: function () { startDmEdit(node); }});
-      if (m.from === Me.name) items.push({icon: 'trash', title: t('Delete, for both of you'), bad: true, run: async function () {
-        if (!confirm(t('Delete this message? It goes from both sides.'))) return;
-        try { await post('/api/dm/delete', {id: m.id}); dropDm(m.id); } catch (err) { failed(err); }
-      }});
-      return {react: may('react') ? function (r) { react(m.id, r, true); } : null, items: items};
+      List = await pas.chat_shared.Get("/api/dm?with=" + pas.chat_shared.Enc(pas.chat_shared.S.dm) + "&id=" + ("" + Id) + "&peek=1");
+      if ((Generation !== pas.chat_shared.S.generation) || !Boolean(List.length)) return;
+      Fresh = $mod.RenderDm(List[0],await $mod.OpenSealed(List[0]));
+      Now = pas.chat_shared.Stream.querySelector('.msg[data-id="' + ("" + Id) + '"]');
+      if (Now !== null) {
+        Now.replaceWith(Fresh);
+        pas.chat_rooms.Regroup(pas.chat_shared.Stream);
+      };
+    } catch ($e) {
     };
-    const text = node.querySelector('.body');
-    // an unlocked message comes shaped by the server, like a channel's; a
-    // locked one the server cannot read, so its few marks are shaped here
-    if (!m.iv && typeof m.html === 'string') text.innerHTML = m.html;   // safe html: rendered by the server
-    else text.innerHTML = plainHtml(said, !!m.iv);   // safe html: plainHtml escapes everything first
-    text.classList.toggle('action', said !== payload.text);
-    dressCode(text);
-    // the message this one answers: the other side wrote it, so only the
-    // expected shape is shown
-    const re = payload.re;
-    if (re && typeof re === 'object' && typeof re.text === 'string' && typeof re.from === 'string')
-      text.before(quoteOf({id: re.id, from: re.from, text: re.text}, function () { toast(t('That message is further back.')); }));
-    if (m.preview && typeof m.preview === 'object') text.after(previewOf(m.preview));
-    if (payload.files) {
-      const box = el('div', 'files');
-      for (const f of payload.files) box.appendChild(f.iv ? sealedFile(f) : plainFile(f));
-      text.after(box);
-    }
-    if (payload.t === 'beam') text.after(beamCard(m, payload));
-    return node;
-  }
-
-  // The sender wrote this payload: only our own /f/ links get through.
-  function plainFile(f) {
-    if (!String(f.url).startsWith('/f/')) f = {name: String(f.name), size: 0, url: '#'};
-    if (f.image) {
-      const shot = link(f.url, 'shot');
-      const img = el('img');
-      img.src = f.url;
-      img.loading = 'lazy';
-      shot.appendChild(img);
-      return shot;
-    }
-    const a = link(f.url, 'file');
-    a.append(el('span', 'fname', f.name), el('span', 'fsize', sizeText(f.size)));
-    return a;
-  }
-
-  function sealedFile(f) {
-    const a = link('#', 'file');
-    a.append(icon('lock'), el('span', 'fname', f.name), el('span', 'fsize', sizeText(f.size)));
-    const open = async function (e) {
-      if (e) e.preventDefault();
-      try {
-        const blob = await Keys.openFile(S.dm, f);
-        const url = URL.createObjectURL(blob);
-        if ((f.type || '').startsWith('image/')) {
-          const shot = link(url, 'shot');
-          const img = el('img');
-          img.src = url;
-          shot.appendChild(img);
-          a.replaceWith(shot);
-        } else {
-          const save = link(url, '');
-          save.download = f.name;
-          save.click();
-        }
-      } catch (err) { failed(err); }
+  };
+  this.RenderDm = function (M, Payload) {
+    var Result = null;
+    var Sent = null;
+    var Load = null;
+    var Node = null;
+    var Text = null;
+    var Box = null;
+    var Said = "";
+    var Html = undefined;
+    var Face = undefined;
+    var Given = undefined;
+    var Re = null;
+    var I = 0;
+    function Offer() {
+      var Result = null;
+      var Items = null;
+      var Pick = null;
+      Items = new Array();
+      if (Load.text !== "") {
+        Items.push(pas.JS.New(["icon","reply","title",window.t("Answer this message"),"run",function () {
+          var First = "";
+          First = pas.chat_answer.FirstWords(Said);
+          if (First === "") First = window.t("code");
+          pas.chat_answer.Answer("dm " + pas.chat_shared.S.dm,pas.JS.New(["id",Sent.id,"from",Sent.from,"text",First]));
+        }]));
+        Items.push(pas.JS.New(["icon","copy","title",window.t("Copy the text"),"run",function () {
+          window.navigator.clipboard.writeText(Said).then(function (Done) {
+            var Result = undefined;
+            pas.chat_shared.Toast(window.t("Text copied."),undefined);
+            return Result;
+          });
+        }]));
+      };
+      if ((Sent.from === pas.chat_shared.Me.name) && ((Load.t === "text") || (Load.t === "file"))) Items.push(pas.JS.New(["icon","edit","title",window.t("Edit"),"run",function () {
+        $mod.StartDmEdit(Node);
+      }]));
+      if (Sent.from === pas.chat_shared.Me.name) Items.push(pas.JS.New(["icon","trash","title",window.t("Delete, for both of you"),"bad",true,"run",async function () {
+        if (!window.confirm(window.t("Delete this message? It goes from both sides."))) return;
+        try {
+          await pas.chat_shared.Post("/api/dm/delete",pas.JS.New(["id",Sent.id]));
+          $mod.DropDm(Sent.id);
+        } catch ($e) {
+          pas.chat_shared.Failed($e);
+        };
+      }]));
+      Pick = null;
+      if (pas.chat_shared.May("react")) Pick = function (R) {
+        pas.chat_messages.React(Sent.id,R,true);
+      };
+      Result = pas.JS.New(["react",Pick,"items",Items]);
+      return Result;
     };
-    a.addEventListener('click', open);
-    if ((f.type || '').startsWith('image/') && f.size < 8 * 1024 * 1024) setTimeout(open, 0);
-    return a;
-  }
-
-  async function sendDm(other, text, files) {
-    const payload = {t: files.length ? 'file' : 'text', text: text};
-    if (files.length) payload.files = files;
-    const re = answered('dm ' + other);
-    if (re) { payload.re = re; answer(); }
-    await post('/api/dm', Object.assign({to: other, files: files.map(function (f) { return f.token; }).join(',')},
-      await dmData(other, payload)));
-    pollNow();
-  }
-
-  // What /api/dm takes: sealed when the conversation is locked, plain JSON when not.
-  async function dmData(other, payload) {
-    if (!S.dmLocked) return {data: JSON.stringify(payload)};
-    const sealed = await Keys.seal(other, payload);
-    return {iv: sealed.iv, data: sealed.data};
-  }
-
-  function pollNow() {
-    clearTimeout(S.dmTimer);
-    pollDm(S.generation);
-  }
-
-  // Beam: the sender keeps the page open while the file goes across.
-  async function beamFile(other, file) {
-    try {
-      let token = '';
-      token = await Keys.beamSend(other, file, function (done, total, state) {
-        if (S.beams[token]) S.beams[token](done, total, state);
-      });
-      await post('/api/dm', Object.assign({to: other},
-        await dmData(other, {t: 'beam', name: file.name, size: file.size, token: token})));
-      toast(t('Keep this page open until %s has the file.', other));
-      pollNow();
-    } catch (err) {
-      note(t('The beam did not start: %s', err.message || err));
-    }
-  }
-
-  function beamCard(m, payload) {
-    const card = el('div', 'beam');
-    card.appendChild(icon('beam'));
-    card.appendChild(el('b', '', payload.name));
-    card.appendChild(el('span', 'fsize', sizeText(payload.size)));
-    const bar = el('progress');
-    bar.max = 1;
-    bar.value = 0;
-    const state = el('span', 'state');
-    const report = function (done, total, what) {
-      bar.max = total || 1;
-      bar.value = done;
-      state.textContent = {waiting: t('waiting for them to take it'), sending: t('sending'),
-        receiving: t('receiving'), connecting: t('connecting'), done: t('delivered')}[what] || what;
-    };
-    if (m.from === Me.name) {
-      S.beams[payload.token] = report;
-      state.textContent = t('sent from this page, which has to stay open');
-      card.append(bar, state);
+    Sent = M;
+    if (!Boolean(Payload) || (typeof(Payload) !== "object")) Payload = new Object();
+    Load = Payload;
+    if (typeof(Load.text) !== "string") Load.text = "";
+    if (!Array.isArray(Load.files)) pas.JS.JSDelete(Load,"files");
+    if (Sent.from === pas.chat_shared.Me.name) {
+      Face = pas.chat_shared.Me.avatar}
+     else Face = pas.chat_shared.S.dmAvatar;
+    if (Array.isArray(Sent.reactions)) {
+      Given = Sent.reactions}
+     else Given = new Array();
+    Node = pas.chat_messages.RenderMessage(pas.JS.New(["id",Sent.id,"at",Sent.at,"name",Sent.from,"uid",1,"html","","room",pas.chat_shared.S.room,"avatar",Face,"edited",Boolean(Sent.edited),"dm",true,"files",new Array(),"reactions",Given,"replies",0,"deleted",false]),true);
+    Node.dm = pas.JS.New(["m",Sent,"payload",Load]);
+    Said = $impl.DmWords(Sent.from,Load.text);
+    Node.menu = Offer;
+    Text = Node.querySelector(".body");
+    if (!Boolean(Sent.iv) && (typeof(Sent.html) === "string")) {
+      Html = Sent.html;
+      Text.innerHTML = Html;   // safe html: rendered by the server;
     } else {
-      const take = el('button', 'primary', t('Take it'));
-      take.type = 'button';
-      take.addEventListener('click', async function () {
-        take.remove();
-        card.append(bar, state);
-        try {
-          const got = await Keys.beamReceive(payload.token, report);
-          state.textContent = t('received');
-          const save = link(URL.createObjectURL(got), 'primary', t('Save %s', got.name));
-          save.download = got.name;
-          card.appendChild(save);
-          save.click();
-        } catch (err) { state.textContent = err.message; }
+      Html = $mod.PlainHtml(Said,Boolean(Sent.iv));
+      Text.innerHTML = Html;   // safe html: plainHtml escapes everything first;
+    };
+    pas.chat_shared.Toggle(Text,"action",Said !== Load.text);
+    pas.chat_menu.DressCode(Text);
+    Re = Load.re;
+    if (Boolean(Re) && (typeof(Re) === "object") && (typeof(Re["text"]) === "string") && (typeof(Re["from"]) === "string")) Text.before(pas.chat_answer.QuoteOf(pas.JS.New(["id",Re["id"],"from",Re["from"],"text",Re["text"]]),function () {
+      pas.chat_shared.Toast(window.t("That message is further back."),undefined);
+    }));
+    if (Boolean(Sent.preview) && (typeof(Sent.preview) === "object")) Text.after(pas.chat_messages.PreviewOf(Sent.preview));
+    if (Boolean(Load.files)) {
+      Box = pas.chat_shared.El("div","files",undefined);
+      for (var $l = 0, $end = Load.files.length - 1; $l <= $end; $l++) {
+        I = $l;
+        if (Load.files[I]["iv"]) {
+          Box.appendChild($impl.SealedFile(Load.files[I]))}
+         else Box.appendChild($impl.PlainFile(Load.files[I]));
+      };
+      Text.after(Box);
+    };
+    if (Load.t === "beam") Text.after($impl.BeamCard(Sent,Load));
+    Result = Node;
+    return Result;
+  };
+  this.SendDm = async function (Other, Text, Files) {
+    var Payload = null;
+    var Re = null;
+    var Fields = null;
+    if (Boolean(Files.length)) {
+      Payload = pas.JS.New(["t","file","text",Text])}
+     else Payload = pas.JS.New(["t","text","text",Text]);
+    if (Boolean(Files.length)) Payload["files"] = Files;
+    Re = pas.chat_answer.Answered("dm " + Other);
+    if (Re !== null) {
+      Payload["re"] = Re;
+      pas.chat_answer.Answer("",null);
+    };
+    Fields = pas.JS.New(["to",Other,"files",Files.map(function (F, Index, List) {
+      var Result = undefined;
+      Result = F["token"];
+      return Result;
+    }).join(",")]);
+    await pas.chat_shared.Post("/api/dm",Object.assign(Fields,await $impl.DmData(Other,Payload)));
+    $mod.PollNow();
+  };
+  this.PollNow = function () {
+    window.clearTimeout(pas.chat_shared.S.dmTimer);
+    $mod.PollDm(pas.chat_shared.S.generation);
+  };
+  this.BeamFile = async function (Other, Data) {
+    var Token = "";
+    var Why = undefined;
+    try {
+      Token = "";
+      Token = await window.Keys.beamSend(Other,Data,function (Done, Total, What) {
+        if (pas.chat_shared.S.beams[Token]) pas.chat_shared.S.beams[Token](Done,Total,What);
       });
-      card.appendChild(take);
-      card.appendChild(el('span', 'state', t('straight from their browser, never stored on the server')));
-    }
-    return card;
-  }
-
-  // ---------------------------------------------------------------- profile
-
-  // A private message and Ignore on someone else's profile
-  function profileTools(who, tools) {
-    if (Me.name && Me.name !== who.name) {
-      tools.appendChild(link('/dm/' + enc(who.name), 'primary', t('Private message')));
-      const ignore = el('button', '', who.ignored ? t('Stop ignoring') : t('Ignore'));
-      ignore.type = 'button';
-      ignore.title = t('Their messages fold away, and their mentions and private messages do not reach you');
-      ignore.addEventListener('click', async function () {
+      await pas.chat_shared.Post("/api/dm",Object.assign(pas.JS.New(["to",Other]),await $impl.DmData(Other,pas.JS.New(["t","beam","name",Data["name"],"size",Data["size"],"token",Token]))));
+      pas.chat_shared.Toast(window.t("Keep this page open until %s has the file.",Other),undefined);
+      $mod.PollNow();
+    } catch ($e) {
+      Why = $e;
+      if (Why["message"]) Why = Why["message"];
+      pas.chat_composer.Note(window.t("The beam did not start: %s",Why),false);
+    };
+  };
+  $mod.$implcode = function () {
+    $impl.KeyForm = function () {
+      var Result = null;
+      var First = false;
+      var Form = null;
+      var Go = null;
+      var Password = null;
+      var Say = "";
+      First = !Boolean(pas.chat_shared.Me.wrapped);
+      Form = pas.chat_shared.El("form","invite keyform",undefined);
+      Password = pas.chat_shared.El("input",undefined,undefined);
+      Password.type = "password";
+      if (First) {
+        Password.autocomplete = "new-password"}
+       else Password.autocomplete = "current-password";
+      if (First) {
+        Password.placeholder = window.t("A new password, 8 characters or more")}
+       else Password.placeholder = window.t("Your password");
+      if (First) {
+        Go = pas.chat_shared.El("button","primary",window.t("Set it"))}
+       else Go = pas.chat_shared.El("button","primary",window.t("Unlock"));
+      Say = window.t("Type your password to open your locked messages on this device.");
+      if (First && Boolean(pas.chat_shared.Me.password)) {
+        Say = window.t("Locked conversations need a key made from your password. Type it once here.")}
+       else if (First) Say = window.t("Locked conversations need a password that never leaves your browser, and this account has none yet. Set one here. It also signs you in with your name, and a forgotten one cannot be reset.");
+      Form.append(pas.chat_shared.El("p","notice",Say),Password,Go);
+      Form.addEventListener("submit",async function (E) {
+        E.preventDefault();
+        Go.disabled = true;
         try {
-          await post('/api/ignore', {name: who.name, on: who.ignored ? '0' : '1'});
-          route(SiteBase.path(), false);
-        } catch (err) { failed(err); }
+          if (First) {
+            await window.Keys.setupKeys(pas.chat_shared.Me.name,Password.value)}
+           else await window.Keys.unlock(pas.chat_shared.Me.name,Password.value,pas.chat_shared.Me.wrapped);
+          pas.chat_shared.Route(window.SiteBase.path(),false);
+        } catch ($e) {
+          pas.chat_shared.Failed($e);
+        };
+        Go.disabled = false;
       });
-      tools.appendChild(ignore);
-    }
-  }
+      Result = Form;
+      return Result;
+    };
+    $impl.DmWords = function (From, Text) {
+      var Result = "";
+      var Action = null;
+      Action = (new RegExp("^\\/me +(\\S.*)$","i")).exec(Text);
+      if (Action !== null) {
+        Result = From + " " + Action["1"].trim()}
+       else Result = Text;
+      return Result;
+    };
+    $impl.PlainFile = function (F) {
+      var Result = null;
+      var Shot = null;
+      var A = null;
+      var Img = null;
+      if (!String(F["url"]).startsWith("/f/")) F = pas.JS.New(["name",String(F["name"]),"size",0,"url","#"]);
+      if (F["image"]) {
+        Shot = pas.chat_shared.Link(F["url"],"shot",undefined);
+        Img = pas.chat_shared.El("img",undefined,undefined);
+        Img.src = F["url"];
+        Img.loading = "lazy";
+        Shot.appendChild(Img);
+        return Shot;
+      };
+      A = pas.chat_shared.Link(F["url"],"file",undefined);
+      A.append(pas.chat_shared.El("span","fname",F["name"]),pas.chat_shared.El("span","fsize",pas.chat_shared.SizeText(F["size"])));
+      Result = A;
+      return Result;
+    };
+    $impl.SealedFile = function (F) {
+      var Result = null;
+      var A = null;
+      function Kind() {
+        var Result = null;
+        if (F["type"]) {
+          Result = F["type"]}
+         else Result = "";
+        return Result;
+      };
+      async function OpenIt(E) {
+        var Blob = undefined;
+        var Url = "";
+        var Shot = null;
+        var Save = null;
+        var Img = null;
+        if (E !== null) E.preventDefault();
+        try {
+          Blob = await window.Keys.openFile(pas.chat_shared.S.dm,F);
+          Url = URL.createObjectURL(Blob);
+          if (Kind().startsWith("image/")) {
+            Shot = pas.chat_shared.Link(Url,"shot",undefined);
+            Img = pas.chat_shared.El("img",undefined,undefined);
+            Img.src = Url;
+            Shot.appendChild(Img);
+            A.replaceWith(Shot);
+          } else {
+            Save = pas.chat_shared.Link(Url,"",undefined);
+            Save["download"] = F["name"];
+            Save.click();
+          };
+        } catch ($e) {
+          pas.chat_shared.Failed($e);
+        };
+      };
+      A = pas.chat_shared.Link("#","file",undefined);
+      A.append(pas.chat_shared.Icon("lock"),pas.chat_shared.El("span","fname",F["name"]),pas.chat_shared.El("span","fsize",pas.chat_shared.SizeText(F["size"])));
+      A.addEventListener("click",function (E) {
+        OpenIt(E);
+      });
+      if (Kind().startsWith("image/") && (Number(F["size"]) < (8 * 1024 * 1024))) window.setTimeout(function () {
+        OpenIt(null);
+      },0);
+      Result = A;
+      return Result;
+    };
+    $impl.DmData = async function (Other, Payload) {
+      var Result = null;
+      var Sealed = null;
+      if (!pas.chat_shared.S.dmLocked) return pas.JS.New(["data",JSON.stringify(Payload)]);
+      Sealed = await window.Keys.seal(Other,Payload);
+      Result = pas.JS.New(["iv",Sealed["iv"],"data",Sealed["data"]]);
+      return Result;
+    };
+    $impl.BeamCard = function (M, Payload) {
+      var Result = null;
+      var Card = null;
+      var Bar = null;
+      var State = null;
+      var Take = null;
+      var Report = null;
+      Card = pas.chat_shared.El("div","beam",undefined);
+      Card.appendChild(pas.chat_shared.Icon("beam"));
+      Card.appendChild(pas.chat_shared.El("b","",Payload.name));
+      Card.appendChild(pas.chat_shared.El("span","fsize",pas.chat_shared.SizeText(Payload.size)));
+      Bar = pas.chat_shared.El("progress",undefined,undefined);
+      Bar.max = 1;
+      Bar.value = 0;
+      State = pas.chat_shared.El("span","state",undefined);
+      Report = function (Done, Total, What) {
+        var Said = undefined;
+        if (Total) {
+          Bar.max = Total}
+         else Bar.max = 1;
+        Bar.value = Done;
+        Said = pas.JS.New(["waiting",window.t("waiting for them to take it"),"sending",window.t("sending"),"receiving",window.t("receiving"),"connecting",window.t("connecting"),"done",window.t("delivered")])[What];
+        if (!Said) Said = What;
+        State["textContent"] = Said;
+      };
+      if (M.from === pas.chat_shared.Me.name) {
+        pas.chat_shared.S.beams[Payload.token] = Report;
+        State.textContent = window.t("sent from this page, which has to stay open");
+        Card.append(Bar,State);
+      } else {
+        Take = pas.chat_shared.El("button","primary",window.t("Take it"));
+        Take.type = "button";
+        Take.addEventListener("click",async function (E) {
+          var Got = null;
+          var Save = null;
+          Take.remove();
+          Card.append(Bar,State);
+          try {
+            Got = await window.Keys.beamReceive(Payload.token,Report);
+            State.textContent = window.t("received");
+            Save = pas.chat_shared.Link(URL.createObjectURL(Got),"primary",window.t("Save %s",Got["name"]));
+            Save["download"] = Got["name"];
+            Card.appendChild(Save);
+            Save.click();
+          } catch ($e) {
+            State["textContent"] = $e["message"];
+          };
+        });
+        Card.appendChild(Take);
+        Card.appendChild(pas.chat_shared.El("span","state",window.t("straight from their browser, never stored on the server")));
+      };
+      Result = Card;
+      return Result;
+    };
+  };
+},["weborworker","chat_sidebar","chat_rooms","chat_messages","chat_answer","chat_menu","chat_sync","chat_panels","chat_composer","chat_complete"]);
+rtl.module("chat_composer",["System","JS","Web","chat_shared"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.Fit = function (Area) {
+    var List = null;
+    Area.style["height"] = "auto";
+    List = Area.closest("#main, #panel").querySelector("#stream, .threadlist");
+    Area.style["height"] = "" + Math.max(Area.clientHeight,Math.min(Area.scrollHeight,300,(Area.clientHeight + List.clientHeight) - 24)) + "px";
+  };
+  this.InFence = function (Area) {
+    var Result = false;
+    var Fences = undefined;
+    var Count = 0;
+    Fences = Area.value.slice(0,Area.selectionStart).match(new RegExp("```","g"));
+    if (Fences) {
+      Count = Fences.length}
+     else Count = 0;
+    Result = (Count % 2) === 1;
+    return Result;
+  };
+  this.RenderComposer = function (Area, Parent, Dm) {
+    var DmName = "";
+    var DraftKey = "";
+    var Words = "";
+    var Form = null;
+    var Files = null;
+    var Row = null;
+    var Attach = null;
+    var Code = null;
+    var Answering = null;
+    var Options = null;
+    var Beam = null;
+    var Area2 = null;
+    var Send = null;
+    var FilePick = null;
+    var BeamPick = null;
+    var Expire = null;
+    var Draft = undefined;
+    var Pending = null;
+    var Chips = null;
+    var Busy = null;
+    var Asking = null;
+    var Complete = null;
+    var Sending = false;
+    function Choice(Value, Caption) {
+      var Opt = null;
+      Opt = pas.chat_shared.El("option","",Caption);
+      Opt.value = Value;
+      Expire.appendChild(Opt);
+    };
+    function WhichSize(Chip, Data, Small) {
+      var Result = null;
+      var Ask = null;
+      var Less = null;
+      var All = null;
+      var Smaller = null;
+      var Done = null;
+      function Choose(Picked) {
+        Asking.delete(Smaller);
+        Ask.remove();
+        Done(Picked);
+      };
+      Result = new Promise(function (Resolve, Reject) {
+        Done = Resolve;
+        Ask = pas.chat_shared.El("span","sizes",undefined);
+        Smaller = function () {
+          Choose(Small);
+        };
+        Less = pas.chat_shared.El("button","",window.t("Smaller") + " · " + pas.chat_shared.SizeText(Small["size"]));
+        All = pas.chat_shared.El("button","",window.t("Full size") + " · " + pas.chat_shared.SizeText(Data["size"]));
+        All.type = "button";
+        Less.type = "button";
+        Less.addEventListener("click",Smaller);
+        All.addEventListener("click",function (E) {
+          Choose(Data);
+        });
+        Ask.append(Less,All);
+        Chip.appendChild(Ask);
+        Asking.add(Smaller);
+      });
+      return Result;
+    };
+    function Add(List) {
+      var Run = null;
+      var Waiting = null;
+      function Closable(Chip, Done) {
+        var X = null;
+        X = pas.chat_shared.El("button","","×");
+        X.type = "button";
+        X.addEventListener("click",function (E) {
+          Pending.splice(Pending.indexOf(Done),1);
+          Chip.remove();
+        });
+        Chip.appendChild(X);
+      };
+      async function Worker() {
+        var Result = undefined;
+        var Next = null;
+        var Data = null;
+        var Chip = null;
+        var Share = null;
+        var Small = undefined;
+        var Sent = undefined;
+        var Done = undefined;
+        function Goes(Which, Mine, Part) {
+          var Result = null;
+          var Sealed = undefined;
+          if (Boolean(Dm) && pas.chat_shared.S.dmLocked) {
+            Sealed = Dm}
+           else Sealed = "";
+          Result = $impl.Upload(Which,Expire.value,Sealed,function (Sent) {
+            Part.textContent = "" + Math.round(Sent * 100) + "%";
+            Mine.style.setProperty("--up","" + Math.round(Sent * 100) + "%");
+          });
+          return Result;
+        };
+        while (Waiting.length > 0) {
+          Next = Waiting.shift();
+          Data = Next["file"];
+          Chip = Next["chip"];
+          Share = pas.chat_shared.El("span","share","");
+          try {
+            Small = await window.Keys.smaller(Data);
+            if (pas.chat_shared.Same(Small,Data)) {
+              Sent = Data}
+             else Sent = await WhichSize(Chip,Data,Small);
+            Chip.appendChild(Share);
+            Done = await Goes(Sent,Chip,Share).catch(function (Err) {
+              var Result = undefined;
+              if (pas.chat_shared.Same(Sent,Small)) throw Err;
+              pas.chat_shared.Toast(window.t("That photo did not go up at full size. Sending it smaller."),undefined);
+              Result = Goes(Small,Chip,Share);
+              return Result;
+            });
+            Share.remove();
+            Chip.style.removeProperty("--up");
+            Pending.push(Done);
+            Chips.set(Done,Chip);
+            Chip.classList.remove("busy");
+            Closable(Chip,Done);
+          } catch ($e) {
+            Chip.remove();
+            pas.chat_shared.Failed($e);
+          };
+        };
+        return Result;
+      };
+      async function Go() {
+        var Result = undefined;
+        Waiting = Array.from(List).map(function (Data, I, A) {
+          var Result = undefined;
+          var Name = undefined;
+          var Chip = null;
+          Name = Data["name"];
+          if (!Name) Name = window.t("picture");
+          Chip = pas.chat_shared.El("span","chip busy",Name);
+          Files.appendChild(Chip);
+          Result = pas.JS.New(["file",Data,"chip",Chip]);
+          return Result;
+        });
+        await Promise.all([Worker(),Worker()]);
+        return Result;
+      };
+      Run = Go();
+      Busy.add(Run);
+      Run.then(function (Value) {
+        var Result = undefined;
+        Busy.delete(Run);
+        return Result;
+      });
+    };
+    function Pick(Input, Button) {
+      function OpenWith(Accept) {
+        Input.accept = Accept;
+        Input.click();
+      };
+      if (!(new RegExp("Android")).test(window.navigator.userAgent)) {
+        Input.click();
+        return;
+      };
+      pas.chat_shared.PopMenu(Button,Array.of(Array.of(window.t("Photos and videos"),function () {
+        OpenWith("image/*,video/*");
+      }),Array.of(window.t("Camera or file"),function () {
+        OpenWith("");
+      })));
+    };
+    async function Submit() {
+      var Text = "";
+      var Found = undefined;
+      var Parts = null;
+      var Each = null;
+      var Sent = null;
+      var I = 0;
+      var At = 0;
+      var Re = null;
+      var Said = null;
+      var P = undefined;
+      var ParentOr = undefined;
+      var ReId = undefined;
+      if (Sending) return;
+      if (Busy.size > 0) {
+        Sending = true;
+        Send.disabled = true;
+        pas.chat_shared.Toast(window.t("Sending when the files are up"),undefined);
+        Each = Array.from(Asking);
+        for (var $l = 0, $end = Each.length - 1; $l <= $end; $l++) {
+          I = $l;
+          Each[I]();
+        };
+        while (Busy.size > 0) await Promise.all(Array.from(Busy));
+        Sending = false;
+        Send.disabled = false;
+      };
+      Text = Area2.value.trim();
+      if ((Text === "") && (Pending.length === 0)) return;
+      $impl.Drafts.delete(DraftKey);
+      Found = Text.match(new RegExp("^\\/(\\w+)\\s*([\\s\\S]*)$"));
+      Parts = Found;
+      if (Boolean(Found) && Boolean(pas.chat_shared.Extras.commands["" + Parts[1]])) {
+        Area2.value = "";
+        $mod.Fit(Area2);
+        pas.chat_shared.Extras.commands["" + Parts[1]].call(pas.chat_shared.Extras.commands,Parts[2]);
+        return;
+      };
+      Found = Text.match(new RegExp("^\\/(msg|query)\\b\\s*@?([\\w.-]*)\\s*([\\s\\S]*)$"));
+      if (Found) {
+        Parts = Found;
+        Area2.value = "";
+        $mod.Fit(Area2);
+        if (!Parts[2]) {
+          $mod.Note(window.t("Use: /msg name text"),Boolean(Parent));
+          return;
+        };
+        await pas.chat_shared.Route("/dm/" + pas.chat_shared.Enc(Parts[2]),true);
+        if (Boolean(Parts[3]) && (pas.chat_shared.S.view === "dm")) try {
+          await pas.chat_private.SendDm(pas.chat_shared.S.dm,"" + Parts[3],new Array());
+        } catch ($e) {
+          pas.chat_shared.Failed($e);
+        };
+        return;
+      };
+      Send.disabled = true;
+      Sending = true;
+      Sent = Pending.slice(0);
+      try {
+        try {
+          if (Boolean(Dm) && await $mod.DmCommand(Text)) {
+            Sent.length = 0}
+           else if (Dm) {
+            await pas.chat_private.SendDm(DmName,Text,Sent)}
+           else {
+            Re = pas.chat_answer.Answered(DraftKey);
+            if (Boolean(Parent)) {
+              ParentOr = Parent}
+             else ParentOr = "";
+            if (Boolean(Re)) {
+              ReId = Re["id"]}
+             else ReId = "";
+            Said = JSON.parse(await pas.chat_shared.Post("/api/post",pas.JS.New(["room",pas.chat_shared.S.room,"parent",ParentOr,"body",Text,"files",Sent.map(function (F, N, A) {
+              var Result = undefined;
+              Result = F["token"];
+              return Result;
+            }).join(","),"re",ReId])));
+            if (Re === pas.chat_answer.Answered(DraftKey)) pas.chat_answer.Answer("",null);
+            if (Boolean(Said.info)) $mod.Note(Said.info,Boolean(Parent));
+            if (Boolean(Said.go)) {
+              Area2.value = "";
+              Send.disabled = false;
+              if (Boolean(Said.info)) pas.chat_shared.Toast(Said.info,undefined);
+              if (Said.go === "/") pas.chat_shared.S.rooms = pas.chat_shared.S.rooms.filter(function (R, N, A) {
+                var Result = false;
+                Result = !pas.chat_shared.Same(R["slug"],pas.chat_shared.S.room);
+                return Result;
+              });
+              pas.chat_shared.RoomsWanted = true;
+              pas.chat_shared.Route(Said.go,true);
+              return;
+            };
+          };
+          if (Area2.value.trim() === Text) Area2.value = "";
+          for (var $l1 = 0, $end1 = Sent.length - 1; $l1 <= $end1; $l1++) {
+            I = $l1;
+            P = Sent[I];
+            At = Pending.indexOf(P);
+            if (At >= 0) Pending.splice(At,1);
+            if (Chips.has(P)) {
+              Chips.get(P).remove();
+              Chips.delete(P);
+            };
+          };
+          $mod.Fit(Area2);
+          if (!Dm) pas.chat_sync.SyncNow(Text.startsWith("/"));
+        } catch ($e) {
+          pas.chat_shared.Failed($e);
+        };
+      } finally {
+        Sending = false;
+      };
+      Send.disabled = false;
+      Area2.focus();
+    };
+    Area.replaceChildren();
+    if (pas.chat_shared.Me.name === "") {
+      Area.appendChild(pas.chat_shared.JoinForm(window.t("Pick a name and a password to join the conversation.")));
+      return;
+    };
+    if (pas.chat_shared.Me.verified === false) {
+      Area.appendChild(pas.chat_shared.ConfirmBox());
+      return;
+    };
+    if (!Boolean(Dm) && Boolean(pas.chat_shared.S.info)) if ((Boolean(Parent) && pas.chat_shared.Same(pas.chat_shared.S.info.can_reply,false)) || (!Boolean(Parent) && !pas.chat_shared.S.info.can_start)) {
+      Area.appendChild(pas.chat_shared.El("p","notice",pas.chat_shared.S.info.why_not));
+      return;
+    };
+    DmName = "" + Dm;
+    Form = pas.chat_shared.El("form","composer",undefined);
+    Files = pas.chat_shared.El("div","attachments",undefined);
+    Row = pas.chat_shared.El("div","box",undefined);
+    Attach = pas.chat_shared.IconButton("attach",window.t("Attach a file (or paste or drop one)"),undefined);
+    Area2 = pas.chat_shared.El("textarea",undefined,undefined);
+    Area2.rows = 1;
+    Area2.maxLength = 8000;
+    if (Dm) {
+      Words = window.t("Private message to %s",Dm)}
+     else if (Boolean(Parent)) {
+      Words = window.t("Reply in the thread")}
+     else if (Boolean(pas.chat_shared.S.info) && (pas.chat_shared.S.info.kind === "shelf")) {
+      Words = window.t("Put something on your shelf")}
+     else if (Boolean(pas.chat_shared.S.info)) {
+      Words = window.t("Message %s",pas.chat_rooms.RoomTitle(pas.chat_shared.S.info))}
+     else Words = window.t("Message %s","");
+    Area2.placeholder = Words;
+    if (Dm) {
+      DraftKey = "dm " + DmName}
+     else if (Boolean(Parent)) {
+      DraftKey = "thread " + ("" + Parent)}
+     else DraftKey = "room " + pas.chat_shared.S.room;
+    Draft = $impl.Drafts.get(DraftKey);
+    if (!Draft) Draft = "";
+    Area2.value = "" + Draft;
+    Code = pas.chat_shared.IconButton("code",window.t("Code block"),undefined);
+    Send = pas.chat_shared.El("button","send",window.t("Send"));
+    Row.append(Attach,Area2,Code);
+    Answering = pas.chat_shared.El("div","answering",undefined);
+    Answering.dataset["key"] = DraftKey;
+    if (Boolean(pas.chat_shared.S.answer) && (pas.chat_shared.S.answer.key !== DraftKey) && (!Boolean(Parent) || pas.chat_shared.S.answer.key.startsWith("thread "))) pas.chat_shared.S.answer = null;
+    if (Dm) {
+      Beam = pas.chat_shared.IconButton("beam",window.t("Beam a file: straight to them, never stored here"),undefined);
+      Beam.addEventListener("click",function (E) {
+        Pick(BeamPick,Beam);
+      });
+      Row.appendChild(Beam);
+    };
+    Row.appendChild(Send);
+    FilePick = pas.chat_shared.El("input",undefined,undefined);
+    FilePick.type = "file";
+    FilePick.multiple = true;
+    FilePick.hidden = true;
+    BeamPick = pas.chat_shared.El("input",undefined,undefined);
+    BeamPick.type = "file";
+    BeamPick.hidden = true;
+    Options = pas.chat_shared.El("div","options",undefined);
+    Expire = pas.chat_shared.El("select",undefined,undefined);
+    Choice("",window.t("Keep files"));
+    Choice("hour",window.t("Delete after an hour"));
+    Choice("day",window.t("Delete after a day"));
+    Choice("week",window.t("Delete after a week"));
+    Choice("once",window.t("Delete after one download"));
+    Options.appendChild(Expire);
+    Options.appendChild(pas.chat_shared.El("span","hints",window.t("Enter sends · Shift+Enter new line · ``` for code · / for commands")));
+    Form.append(Answering,Files,Row,Options,FilePick,BeamPick);
+    Area.appendChild(Form);
+    pas.chat_answer.ShowAnswer();
+    Pending = new Array();
+    Chips = new Map();
+    Busy = new Set();
+    Asking = new Set();
+    Attach.addEventListener("click",function (E) {
+      Pick(FilePick,Attach);
+    });
+    FilePick.addEventListener("change",function (E) {
+      Add(Array.from(FilePick.files));
+      FilePick.value = "";
+    });
+    BeamPick.addEventListener("change",function (E) {
+      var First = undefined;
+      First = BeamPick.files["0"];
+      if (First) pas.chat_private.BeamFile(DmName,First);
+      BeamPick.value = "";
+    });
+    Area2.addEventListener("paste",function (E) {
+      var Given = undefined;
+      var List = null;
+      Given = E["clipboardData"]["files"];
+      if (!Given) Given = new Array();
+      List = Array.from(Given);
+      if (List.length > 0) {
+        E.preventDefault();
+        Add(List);
+      };
+    });
+    Form.addEventListener("dragover",function (E) {
+      E.preventDefault();
+      Form.classList.add("drop");
+    });
+    Form.addEventListener("dragleave",function (E) {
+      Form.classList.remove("drop");
+    });
+    Form.addEventListener("drop",function (E) {
+      E.preventDefault();
+      Form.classList.remove("drop");
+      Add(Array.from(E["dataTransfer"]["files"]));
+    });
+    Code.addEventListener("click",function (E) {
+      var At = 0;
+      var Selected = "";
+      At = Area2.selectionStart;
+      Selected = Area2.value.slice(At,Area2.selectionEnd);
+      Area2.setRangeText("```\n" + Selected + "\n```",At,Area2.selectionEnd,"end");
+      Area2.selectionEnd = At + 4 + Selected.length;
+      Area2.selectionStart = At + 4 + Selected.length;
+      Area2.focus();
+      $mod.Fit(Area2);
+    });
+    Complete = pas.chat_complete.Completer(Area2,function (Command) {
+      var Result = false;
+      Result = !Boolean(Dm) || Boolean(Command["anywhere"]);
+      return Result;
+    });
+    Sending = false;
+    Form.addEventListener("submit",function (E) {
+      E.preventDefault();
+      Submit();
+    });
+    Area2.addEventListener("keydown",function (E) {
+      var Key = null;
+      var Mine = null;
+      var map = null;
+      Key = E;
+      if (Complete.handle(Key)) return;
+      if ((Key.key === "Escape") && Boolean(pas.chat_answer.Answered(DraftKey))) pas.chat_answer.Answer("",null);
+      if ((Key.key === "Enter") && !Key.shiftKey && !$mod.InFence(Area2)) {
+        E.preventDefault();
+        Submit();
+      };
+      if ((Key.key === "ArrowUp") && (Area2.value === "") && Boolean(Dm)) {
+        Mine = Array.from(pas.chat_shared.Stream.querySelectorAll(".msg")).filter(function (X, N, A) {
+          var Result = false;
+          var D = null;
+          D = X.dm;
+          Result = Boolean(D) && pas.chat_shared.Same(D["m"]["from"],pas.chat_shared.Me.name) && (pas.chat_shared.Same(D["payload"]["t"],"text") || pas.chat_shared.Same(D["payload"]["t"],"file"));
+          return Result;
+        });
+        if (Mine.length > 0) {
+          E.preventDefault();
+          pas.chat_private.StartDmEdit(Mine[Mine.length - 1]);
+        };
+      } else if ((Key.key === "ArrowUp") && (Area2.value === "")) {
+        if (Boolean(Parent)) {
+          map = pas.chat_shared.S.threadMessages}
+         else map = pas.chat_shared.S.messages;
+        Mine = Array.from(map.values()).filter(function (X, N, A) {
+          var Result = false;
+          var D = null;
+          D = X["data"];
+          Result = (D.name === pas.chat_shared.Me.name) && !D.deleted && Boolean(D.uid);
+          return Result;
+        });
+        if (Mine.length > 0) {
+          E.preventDefault();
+          pas.chat_menu.StartEdit(Mine[Mine.length - 1]["data"]);
+        };
+      };
+    });
+    Area2.addEventListener("input",function (E) {
+      $impl.Drafts.set(DraftKey,Area2.value);
+      $mod.Fit(Area2);
+      Complete.update();
+      if (((Date.now() - pas.chat_shared.S.typingSent) > 3000) && (Area2.value !== "")) {
+        pas.chat_shared.S.typingSent = Date.now();
+        if (Dm) {
+          pas.chat_shared.Post("/api/dm/typing",pas.JS.New(["to",Dm])).catch(function (Err) {
+            var Result = undefined;
+            return Result;
+          })}
+         else pas.chat_shared.Post("/api/typing",pas.JS.New(["room",pas.chat_shared.S.room])).catch(function (Err) {
+          var Result = undefined;
+          return Result;
+        });
+      };
+    });
+    $mod.Fit(Area2);
+    if (!Boolean(Parent)) Area2.focus();
+  };
+  this.DmCommand = async function (Text) {
+    var Result = false;
+    var Found = undefined;
+    var Parts = null;
+    var Said = null;
+    Found = Text.match(new RegExp("^\\/(\\S+)(?:\\s+([\\s\\S]*))?$"));
+    if (!Found) return false;
+    Parts = Found;
+    if ((Parts[1].toLowerCase() === "me") && Boolean(Parts[2])) return false;
+    if (!Boolean(pas.chat_shared.S.commands)) pas.chat_shared.S.commands = await pas.chat_shared.Get("/api/commands");
+    if (!pas.chat_shared.S.commands.some(function (C, N, A) {
+      var Result = false;
+      Result = pas.chat_shared.Same(C["name"],Parts[1].toLowerCase());
+      return Result;
+    })) return false;
+    Said = JSON.parse(await pas.chat_shared.Post("/api/post",pas.JS.New(["body",Text])));
+    if (Boolean(Said.info)) $mod.Note(Said.info,false);
+    if (Boolean(Said.go)) {
+      pas.chat_shared.RoomsWanted = true;
+      pas.chat_shared.Route(Said.go,true);
+    };
+    Result = true;
+    return Result;
+  };
+  this.Note = function (Text, InThread) {
+    var Box = null;
+    var N = null;
+    var X = null;
+    if (InThread) {
+      Box = pas.chat_shared.Find(".threadlist",pas.chat_shared.Panel)}
+     else Box = pas.chat_shared.Stream;
+    N = pas.chat_shared.El("div","note",undefined);
+    N.appendChild(pas.chat_shared.El("pre","",Text));
+    X = pas.chat_shared.El("button","",window.t("Dismiss"));
+    X.type = "button";
+    X.addEventListener("click",function (E) {
+      N.remove();
+    });
+    N.appendChild(X);
+    Box.appendChild(N);
+    Box.scrollTop = Box.scrollHeight;
+  };
+  this.Start = function () {
+    var View = undefined;
+    var Target = null;
+    View = window["visualViewport"];
+    if (View) {
+      Target = View}
+     else Target = window;
+    Target.addEventListener("resize",function (E) {
+      var Areas = null;
+      var I = 0;
+      Areas = document.querySelectorAll(".composer textarea");
+      for (var $l = 0, $end = Areas.length - 1; $l <= $end; $l++) {
+        I = $l;
+        $mod.Fit(Areas.item(I));
+      };
+    });
+    $impl.Drafts = new Map();
+  };
+  $mod.$implcode = function () {
+    $impl.Drafts = null;
+    $impl.Upload = function (Data, Expire, SealedFor, Told) {
+      var Result = null;
+      var Form = null;
+      var Name = undefined;
+      if (SealedFor) return window.Keys.sealFile(SealedFor,Data,Expire);
+      Form = new FormData();
+      Form.append("expire",Expire);
+      Name = Data["name"];
+      if (!Name) Name = "pasted.png";
+      Form.append("file",Data,Name);
+      Result = new Promise(function (Resolve, Reject) {
+        var Ask = null;
+        Ask = new XMLHttpRequest();
+        Ask.open("POST","/api/upload");
+        if (Told !== null) Ask.upload.addEventListener("progress",function (E) {
+          if (E.lengthComputable) Told(E.loaded / E.total);
+        });
+        Ask.addEventListener("load",function (E) {
+          var Refused = null;
+          if ((Ask.status >= 200) && (Ask.status < 300)) {
+            try {
+              Resolve(JSON.parse(Ask.responseText));
+            } catch ($e) {
+              Reject($e);
+            };
+            return;
+          };
+          Refused = new Error(Ask.responseText);
+          Refused["status"] = Ask.status;
+          Reject(Refused);
+        });
+        Ask.addEventListener("error",function (E) {
+          Reject(new Error(window.t("The file did not go up. Check the connection and try again.")));
+        });
+        Ask.send(Form);
+      });
+      return Result;
+    };
+  };
+},["chat_rooms","chat_answer","chat_sync","chat_menu","chat_private","chat_complete"]);
+rtl.module("chat_panels",["System","JS","Web","chat_shared"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.OpenThread = async function (Id) {
+    var Box = null;
+    var List = null;
+    var Area = null;
+    var Messages = null;
+    Box = pas.chat_shared.OpenPanel(window.t("Thread"),"thread");
+    pas.chat_shared.S.thread = Id;
+    pas.chat_shared.S.threadMessages.clear();
+    List = pas.chat_shared.El("div","threadlist",undefined);
+    Box.appendChild(List);
+    pas.chat_shared.KeepPinned(List);
+    if (window.SiteBase.path() !== ("/m/" + ("" + Id))) window.history.replaceState(new Object(),"","/m/" + ("" + Id));
+    try {
+      Messages = await pas.chat_shared.Get("/api/thread?id=" + ("" + Id));
+      if (pas.chat_shared.S.thread !== Id) return;
+      $mod.AddThread(Messages);
+    } catch ($e) {
+      pas.chat_shared.Failed($e);
+    };
+    Area = pas.chat_shared.El("div","panelcomposer",undefined);
+    Box.appendChild(Area);
+    pas.chat_composer.RenderComposer(Area,Id,undefined);
+  };
+  this.AddThread = function (Messages) {
+    var List = null;
+    var Root = null;
+    var Count = null;
+    var Stick = false;
+    var I = 0;
+    List = pas.chat_shared.Find(".threadlist",pas.chat_shared.Panel);
+    if (!Boolean(List)) return;
+    Stick = List.pinned || pas.chat_shared.NearBottom(List);
+    for (var $l = 0, $end = Messages.length - 1; $l <= $end; $l++) {
+      I = $l;
+      pas.chat_rooms.Upsert(Messages[I],List,pas.chat_shared.S.threadMessages,true);
+    };
+    Root = List.querySelector(".msg");
+    if (Boolean(Root) && !Boolean(pas.chat_shared.Find(".threadcount",List))) Root.after(pas.chat_shared.El("div","threadcount",undefined));
+    Count = pas.chat_shared.Find(".threadcount",List);
+    if (Boolean(Count)) Count.textContent = window.tn(pas.chat_shared.S.threadMessages.size - 1,"%d replies","%d replies");
+    pas.chat_rooms.Regroup(List);
+    if (Stick) List.scrollTop = List.scrollHeight;
+  };
+  this.OpenPins = async function () {
+    var Box = null;
+    var Holder = null;
+    var List = null;
+    var I = 0;
+    Box = pas.chat_shared.OpenPanel(window.t("Pinned"),"pins");
+    try {
+      List = await pas.chat_shared.Get("/api/pins?room=" + pas.chat_shared.Enc(pas.chat_shared.S.room));
+      if (!Boolean(List.length)) Box.appendChild(pas.chat_shared.El("p","notice",window.t("Nothing is pinned here. The channel's owner and moderators pin messages that should stay in view.")));
+      Holder = pas.chat_shared.El("div","threadlist",undefined);
+      for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Holder.appendChild(pas.chat_messages.RenderMessage(List[I],true));
+      };
+      Box.appendChild(Holder);
+    } catch ($e) {
+      pas.chat_shared.Failed($e);
+    };
+  };
+  this.OpenMembers = async function () {
+    var Info = null;
+    var Box = null;
+    var Here = null;
+    var List = null;
+    var Form = null;
+    var Name = null;
+    var Go = null;
+    var I = 0;
+    function AddHere(P) {
+      var Who = null;
+      var Row = null;
+      Who = pas.chat_shared.Link("/u/" + pas.chat_shared.Enc(P.name),"who",undefined);
+      Who.append(pas.chat_shared.Avatar(P.name,P.avatar,$impl.SmallFace(P)),$impl.StatusDot(true,P.away),pas.chat_shared.El("span","",P.name));
+      Row = pas.chat_shared.El("div","person",undefined);
+      Row.appendChild(Who);
+      if (P.away) Row.appendChild(pas.chat_shared.El("span","role",window.t("away")));
+      Here.appendChild(Row);
+    };
+    function AddMember(P) {
+      var Who = null;
+      var Row = null;
+      var Out = null;
+      Row = pas.chat_shared.El("div","person",undefined);
+      Who = pas.chat_shared.Link("/u/" + pas.chat_shared.Enc(P.name),"who",undefined);
+      Who.append(pas.chat_shared.Avatar(P.name,P.avatar,$impl.SmallFace(P)),$impl.StatusDot(P.online,P.away),pas.chat_shared.El("span","",P.name));
+      Row.appendChild(Who);
+      if (P.owner) Row.appendChild(pas.chat_shared.El("span","role",window.t("owner")));
+      if (P.roles) Row.appendChild(pas.chat_shared.El("span","role",P.roles.replace("room-moderator",window.t("moderator"))));
+      if (Info.private && pas.chat_shared.MayHere("kick") && !Boolean(P.owner) && (P.name !== pas.chat_shared.Me.name)) {
+        Out = pas.chat_shared.El("button","small-link",window.t("Take out"));
+        Out.type = "button";
+        Out.addEventListener("click",async function (E) {
+          await $mod.Command("/kick " + P.name);
+          Show();
+        });
+        Row.appendChild(Out);
+      };
+      List.appendChild(Row);
+    };
+    async function Show() {
+      var People = null;
+      var N = 0;
+      try {
+        People = await pas.chat_shared.Get("/api/room/members?room=" + pas.chat_shared.Enc(Info.slug));
+        List.replaceChildren();
+        if (!Boolean(People.length)) if (Info.owner) {
+          List.appendChild(pas.chat_shared.El("p","notice",window.t("%s owns this channel. Nobody else holds a role in it.",Info.owner)))}
+         else List.appendChild(pas.chat_shared.El("p","notice",window.t("Nobody holds a role in this channel. Site moderators look after it.")));
+        for (var $l = 0, $end = People.length - 1; $l <= $end; $l++) {
+          N = $l;
+          AddMember(People[N]);
+        };
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
+    };
+    Info = pas.chat_shared.S.info;
+    Box = pas.chat_shared.OpenPanel(window.t("People"),"members");
+    if (Boolean(pas.chat_shared.S.here.length)) {
+      Box.appendChild(pas.chat_shared.El("h4","",window.t("Here now")))}
+     else Box.appendChild(pas.chat_shared.El("h4","",window.t("Nobody else is here right now")));
+    Here = pas.chat_shared.El("div","memberlist",undefined);
+    for (var $l = 0, $end = pas.chat_shared.S.here.length - 1; $l <= $end; $l++) {
+      I = $l;
+      AddHere(pas.chat_shared.S.here[I]);
+    };
+    Box.appendChild(Here);
+    if (Info.private) {
+      Box.appendChild(pas.chat_shared.El("h4","",window.t("In this channel")))}
+     else Box.appendChild(pas.chat_shared.El("h4","",window.t("Channel moderators")));
+    List = pas.chat_shared.El("div","memberlist",undefined);
+    Box.appendChild(List);
+    await Show();
+    if (Info.private && pas.chat_shared.MayHere("invite")) {
+      Form = pas.chat_shared.El("form","invite",undefined);
+      Name = pas.chat_shared.El("input",undefined,undefined);
+      Name.placeholder = window.t("Invite someone by name");
+      Go = pas.chat_shared.El("button","primary",window.t("Invite"));
+      Form.append(Name,Go);
+      Form.addEventListener("submit",async function (E) {
+        E.preventDefault();
+        if (Name.value.trim() === "") return;
+        await $mod.Command("/invite " + Name.value.trim());
+        Name.value = "";
+        Show();
+      });
+      Box.appendChild(Form);
+    };
+    if (Info.private) {
+      Box.appendChild(pas.chat_shared.El("p","hint",window.t("Commands work too: /invite name, /kick name, /op name makes a channel moderator.")))}
+     else Box.appendChild(pas.chat_shared.El("p","hint",window.t("The owner names channel moderators with /op name. /mute name [minutes] quiets someone here.")));
+  };
+  this.Command = async function (Text) {
+    var Answer = null;
+    try {
+      Answer = JSON.parse(await pas.chat_shared.Post("/api/post",pas.JS.New(["room",pas.chat_shared.S.room,"body",Text])));
+      if (Answer["info"]) pas.chat_shared.Toast(Answer["info"],undefined);
+      pas.chat_sync.SyncNow(false);
+    } catch ($e) {
+      pas.chat_shared.Failed($e);
+    };
+  };
+  this.NewRoom = function () {
+    var Box = null;
+    var Form = null;
+    var NameLabel = null;
+    var TopicLabel = null;
+    var Kind = null;
+    var Go = null;
+    var Name = null;
+    var Topic = null;
+    var Priv = null;
+    Box = pas.chat_shared.OpenPanel(window.t("Open a channel"),"newroom");
+    pas.chat_shared.Body.classList.remove("menu");
+    Form = pas.chat_shared.El("form","settings",undefined);
+    NameLabel = pas.chat_shared.El("label",undefined,undefined);
+    NameLabel.appendChild(pas.chat_shared.El("span","",window.t("Name")));
+    Name = pas.chat_shared.El("input",undefined,undefined);
+    Name.placeholder = window.t("lowercase-with-hyphens");
+    Name.maxLength = 40;
+    NameLabel.appendChild(Name);
+    TopicLabel = pas.chat_shared.El("label",undefined,undefined);
+    TopicLabel.appendChild(pas.chat_shared.El("span","",window.t("What it is for")));
+    Topic = pas.chat_shared.El("input",undefined,undefined);
+    TopicLabel.appendChild(Topic);
+    Kind = pas.chat_shared.El("label","check",undefined);
+    Priv = pas.chat_shared.El("input",undefined,undefined);
+    Priv.type = "checkbox";
+    Priv.checked = !pas.chat_shared.May("create-channel");
+    Priv.disabled = !pas.chat_shared.May("create-channel") || !pas.chat_shared.May("create-private");
+    Kind.append(Priv,document.createTextNode(window.t(" Private: only people invited see it")));
+    Go = pas.chat_shared.El("button","primary",window.t("Open it"));
+    Form.append(NameLabel,TopicLabel,Kind,Go);
+    Box.appendChild(Form);
+    Name.focus();
+    Name.addEventListener("input",function (E) {
+      Name.value = Name.value.toLowerCase().replace(new RegExp("[^a-z0-9-]+","g"),"-");
+    });
+    Form.addEventListener("submit",async function (E) {
+      var Made = null;
+      var Flag = "";
+      E.preventDefault();
+      try {
+        if (Priv.checked) {
+          Flag = "1"}
+         else Flag = "0";
+        Made = JSON.parse(await pas.chat_shared.Post("/api/room/create",pas.JS.New(["slug",Name.value.replace(new RegExp("^-+|-+$","g"),""),"topic",Topic.value,"private",Flag])));
+        pas.chat_shared.RoomsWanted = true;
+        pas.chat_shared.Route("/p/" + pas.chat_shared.Enc(Made["slug"]),true);
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
+    });
+  };
+  this.OpenSearchAll = function () {
+    var Head = null;
+    var MenuButton = null;
+    var Results = null;
+    var Input = null;
+    var Timer = 0;
+    var Asked = 0;
+    function AddHit(M) {
+      var Node = null;
+      var Header = null;
+      Node = pas.chat_messages.RenderMessage(M,true);
+      Node.classList.add("result");
+      Header = Node.querySelector("header");
+      if (Boolean(Header)) Header.appendChild(pas.chat_shared.El("span","where","#" + M.room));
+      $impl.OpensMessage(Node,M);
+      Results.appendChild(Node);
+    };
+    async function Run() {
+      var Q = "";
+      var Turn = 0;
+      var I = 0;
+      var List = null;
+      $impl.AllWords = Input.value.trim();
+      Q = $impl.AllWords;
+      Asked += 1;
+      Turn = Asked;
+      if (Q.length < 2) {
+        Results.replaceChildren();
+        return;
+      };
+      try {
+        List = await pas.chat_shared.Get("/api/search?q=" + pas.chat_shared.Enc(Q));
+        if ((Turn !== Asked) || !Results.isConnected) return;
+        Results.replaceChildren();
+        if (!Boolean(List.length)) Results.appendChild(pas.chat_shared.El("p","notice",window.t("Nothing found.")));
+        for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+          I = $l;
+          AddHit(List[I]);
+        };
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
+    };
+    pas.chat_shared.S.view = "search";
+    pas.chat_shared.S.title = window.t("Search all chats");
+    Head = pas.chat_shared.Find("#roomhead",undefined);
+    MenuButton = pas.chat_shared.IconButton("menu",window.t("Channels"),"menubtn");
+    MenuButton.addEventListener("click",pas.chat_shared.ToggleMenu);
+    Head.append(MenuButton,pas.chat_shared.El("div","titles",undefined));
+    pas.chat_shared.Find(".titles",Head).appendChild(pas.chat_shared.El("h1","",pas.chat_shared.S.title));
+    pas.chat_shared.Stream.className = "findall-view";
+    pas.chat_shared.Stream.noPin = true;
+    Input = pas.chat_shared.El("input",undefined,undefined);
+    Input.type = "search";
+    Input.placeholder = window.t("Words to find");
+    Input.value = $impl.AllWords;
+    Results = pas.chat_shared.El("div","findall-hits",undefined);
+    pas.chat_shared.Stream.append(Input,pas.chat_shared.El("p","notice",window.t("Looks in every channel you can read. A private conversation is searched from inside it.")),Results);
+    Timer = 0;
+    Asked = 0;
+    Input.addEventListener("input",function (E) {
+      window.clearTimeout(Timer);
+      Timer = window.setTimeout(function () {
+        Run();
+      },300);
+    });
+    Input.focus();
+    if ($impl.AllWords !== "") Run();
+  };
+  this.OpenSearch = function () {
+    var Box = null;
+    var Scope = null;
+    var Results = null;
+    var Input = null;
+    var Only = null;
+    var InDm = false;
+    var WithName = "";
+    var Timer = 0;
+    function AddFound(M, Payload) {
+      var Node = null;
+      Node = pas.chat_private.RenderDm(M,Payload);
+      Node.classList.add("result");
+      Node.querySelector(".more").remove();
+      Node.menu = null;
+      Node.addEventListener("click",function (E) {
+        var There = null;
+        if (Boolean(E.target.closest("a, button"))) return;
+        There = pas.chat_shared.Stream.querySelector('.msg[data-id="' + ("" + M["id"]) + '"]');
+        if (!Boolean(There) || (pas.chat_shared.S.dm !== WithName)) {
+          pas.chat_shared.Toast(window.t("That message is further back."),undefined);
+          return;
+        };
+        pas.chat_answer.Flash(There);
+      });
+      Results.appendChild(Node);
+    };
+    function AddHit(M) {
+      var Node = null;
+      Node = pas.chat_messages.RenderMessage(M,true);
+      Node.classList.add("result");
+      $impl.OpensMessage(Node,M);
+      Results.appendChild(Node);
+    };
+    async function Run() {
+      var Q = "";
+      var Where = "";
+      var Found = null;
+      var List = null;
+      var I = 0;
+      var M = null;
+      Q = Input.value.trim();
+      if (Q.length < 2) {
+        Results.replaceChildren();
+        return;
+      };
+      try {
+        if (InDm && Only.checked) {
+          Found = await pas.chat_shared.Get("/api/dm/search?with=" + pas.chat_shared.Enc(WithName) + "&q=" + pas.chat_shared.Enc(Q));
+          Results.replaceChildren();
+          if (!Boolean(Found.length)) Results.appendChild(pas.chat_shared.El("p","notice",window.t("Nothing found.")));
+          Found.reverse();
+          for (var $l = 0, $end = Found.length - 1; $l <= $end; $l++) {
+            I = $l;
+            M = Found[I];
+            AddFound(M,await pas.chat_private.OpenSealed(M));
+          };
+          return;
+        };
+        Where = "";
+        if (Only.checked && !InDm) Where = "&room=" + pas.chat_shared.Enc(pas.chat_shared.S.room);
+        List = await pas.chat_shared.Get("/api/search?q=" + pas.chat_shared.Enc(Q) + Where);
+        Results.replaceChildren();
+        if (!Boolean(List.length)) Results.appendChild(pas.chat_shared.El("p","notice",window.t("Nothing found.")));
+        for (var $l1 = 0, $end1 = List.length - 1; $l1 <= $end1; $l1++) {
+          I = $l1;
+          AddHit(List[I]);
+        };
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
+    };
+    Box = pas.chat_shared.OpenPanel(window.t("Search"),"search");
+    Input = pas.chat_shared.El("input",undefined,undefined);
+    Input.type = "search";
+    Input.placeholder = window.t("Words to find");
+    Scope = pas.chat_shared.El("label","scope",undefined);
+    Only = pas.chat_shared.El("input",undefined,undefined);
+    Only.type = "checkbox";
+    InDm = pas.chat_shared.S.view === "dm";
+    WithName = pas.chat_shared.S.dm;
+    Only.checked = (pas.chat_shared.S.view === "room") || InDm;
+    if (InDm) {
+      Scope.append(Only,document.createTextNode(window.t(" only in this conversation")))}
+     else Scope.append(Only,document.createTextNode(window.t(" only in this channel")));
+    Results = pas.chat_shared.El("div","threadlist",undefined);
+    Box.append(Input,Scope,Results);
+    if (InDm && pas.chat_shared.S.dmLocked) Box.insertBefore(pas.chat_shared.El("p","notice",window.t("Locked messages are not searched: the server cannot read them.")),Results);
+    Input.focus();
+    Timer = 0;
+    Input.addEventListener("input",function (E) {
+      window.clearTimeout(Timer);
+      Timer = window.setTimeout(function () {
+        Run();
+      },300);
+    });
+    Only.addEventListener("change",function (E) {
+      Run();
+    });
+  };
+  $mod.$implcode = function () {
+    $impl.AllWords = "";
+    $impl.StatusDot = function (Online, Away) {
+      var Result = null;
+      var State = "";
+      if (Online) {
+        if (Away) {
+          State = "away"}
+         else State = "online";
+      } else State = "off";
+      Result = pas.chat_shared.El("span","dot " + State,undefined);
+      if (State === "online") {
+        Result.title = window.t("Online")}
+       else if (State === "away") {
+        Result.title = window.t("Away")}
+       else Result.title = window.t("Not here");
+      return Result;
+    };
+    $impl.SmallFace = function (P) {
+      var Result = "";
+      if (P.away) {
+        Result = "small away"}
+       else Result = "small";
+      return Result;
+    };
+    $impl.OpensMessage = function (Node, M) {
+      Node.addEventListener("click",function (E) {
+        if (Boolean(E.target.closest("a, button"))) return;
+        pas.chat_shared.Route("/m/" + ("" + M.id),true);
+      });
+    };
+  };
+},["chat_rooms","chat_messages","chat_answer","chat_sync","chat_composer","chat_private"]);
+rtl.module("chat_rooms",["System","JS","Web","chat_shared"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.RoomTitle = function (Info) {
+    var Result = "";
+    if (Info.kind === "channel") return "#" + Info.title;
+    Result = Info.title;
+    return Result;
+  };
+  this.RenderHead = function (Info, Extra) {
+    var Head = null;
+    var Menu = null;
+    var Titles = null;
+    var H = null;
+    var Topic = null;
+    var Here = null;
+    var Tools = null;
+    var Follow = null;
+    var People = null;
+    var Pins = null;
+    var Search = null;
+    var Words = undefined;
+    var Cls = "";
+    async function SetTopic(E) {
+      var Next = undefined;
+      var Was = undefined;
+      if (Info.topic) {
+        Was = Info.topic}
+       else Was = "";
+      Next = window.prompt(window.t("Topic for %s",$mod.RoomTitle(Info)),"" + Was);
+      if (pas.chat_shared.Same(Next,null)) return;
+      try {
+        await pas.chat_shared.Post("/api/topic",pas.JS.New(["room",Info.slug,"topic",Next]));
+        Info.topic = Next;
+        if (Next) {
+          Topic.textContent = "" + Next}
+         else Topic.textContent = window.t("Add a topic");
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
+    };
+    async function SetFollow(E) {
+      var Turn = "";
+      if (Info.private && Info.following && !window.confirm(window.t("Leave %s? Only an invite gets you back in.",Info.title))) return;
+      try {
+        if (Info.following) {
+          Turn = "0"}
+         else Turn = "1";
+        await pas.chat_shared.Post("/api/follow",pas.JS.New(["room",Info.slug,"on",Turn]));
+        Info.following = !Info.following;
+        if (Info.following) {
+          Follow.textContent = window.t("Following")}
+         else Follow.textContent = window.t("Follow");
+        pas.chat_shared.Toggle(Follow,"on",Info.following);
+        pas.chat_sync.SyncNow(true);
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
+    };
+    Head = pas.chat_shared.Find("#roomhead",undefined);
+    Head.replaceChildren();
+    Menu = pas.chat_shared.IconButton("menu",window.t("Channels"),"menubtn");
+    Menu.addEventListener("click",pas.chat_shared.ToggleMenu);
+    Head.appendChild(Menu);
+    Titles = pas.chat_shared.El("div","titles",undefined);
+    H = pas.chat_shared.El("h1",undefined,undefined);
+    H.appendChild(pas.chat_shared.El("span","roomname",$mod.RoomTitle(Info)));
+    if (Info.avatar) H.prepend(pas.chat_shared.Avatar(Info.title,Info.avatar,"small roomicon"));
+    if (Info.private) {
+      H.prepend(pas.chat_shared.Icon("lock"));
+      H.appendChild(pas.chat_shared.El("span","kindtag",window.t("private")));
+    } else if (Info.kind !== "channel") H.appendChild(pas.chat_shared.El("span","kindtag",Info.kind));
+    Titles.appendChild(H);
+    if (Info.topic) {
+      Words = Info.topic}
+     else Words = "";
+    Topic = pas.chat_shared.El("p","topic",Words);
+    if (Boolean(Info.can) && Boolean(Info.can["set-topic"])) {
+      Topic.title = window.t("Click to change the topic");
+      Topic.classList.add("editable");
+      if (!Info.topic) Topic.textContent = window.t("Add a topic");
+      Topic.addEventListener("click",SetTopic);
+    };
+    Titles.appendChild(Topic);
+    Head.appendChild(Titles);
+    Here = pas.chat_shared.El("button","here",undefined);
+    Here.type = "button";
+    Here.title = window.t("Who is here");
+    Here.addEventListener("click",function (E) {
+      pas.chat_panels.OpenMembers();
+    });
+    Head.appendChild(Here);
+    Tools = pas.chat_shared.El("div","headtools",undefined);
+    if (Extra !== null) Tools.appendChild(Extra);
+    if ((pas.chat_shared.Me.name !== "") && (Info.kind !== "shelf")) {
+      if (Info.following) {
+        Cls = "on"}
+       else Cls = "";
+      if (Info.following) {
+        Words = window.t("Following")}
+       else Words = window.t("Follow");
+      Follow = pas.chat_shared.El("button","pill " + Cls,Words);
+      Follow.type = "button";
+      if (Info.private) {
+        Follow.title = window.t("If you leave a private channel, someone must invite you back")}
+       else Follow.title = window.t("Followed channels sit in your sidebar with their unread counts");
+      Follow.addEventListener("click",SetFollow);
+      H.appendChild(Follow);
+    };
+    People = pas.chat_shared.IconButton("people",window.t("People: who is here, and who is in this channel or runs it"),undefined);
+    People.addEventListener("click",function (E) {
+      pas.chat_panels.OpenMembers();
+    });
+    Tools.appendChild(People);
+    Pins = pas.chat_shared.IconButton("pin",window.t("Pinned messages"),undefined);
+    Pins.addEventListener("click",function (E) {
+      pas.chat_panels.OpenPins();
+    });
+    Search = pas.chat_shared.IconButton("search",window.t("Search"),undefined);
+    Search.addEventListener("click",function (E) {
+      pas.chat_panels.OpenSearch();
+    });
+    Tools.append(Pins,Search);
+    Head.appendChild(Tools);
+  };
+  this.RenderHere = function (List) {
+    var Box = null;
+    var A = null;
+    var Shown = null;
+    var P = null;
+    var I = 0;
+    var Cls = "";
+    Box = pas.chat_shared.Find("#roomhead .here",undefined);
+    if (Box === null) return;
+    Box.replaceChildren();
+    pas.chat_shared.S.here = List;
+    Shown = List.slice(0,6);
+    for (var $l = 0, $end = Shown.length - 1; $l <= $end; $l++) {
+      I = $l;
+      P = Shown[I];
+      if (P.away) {
+        Cls = "tiny away"}
+       else Cls = "tiny";
+      A = pas.chat_shared.Avatar(P.name,P.avatar,Cls);
+      if (P.away) {
+        A.title = window.t("%s is away: %s",P.name,P.away)}
+       else A.title = window.t("%s is here",P.name);
+      Box.appendChild(A);
+    };
+    if (List.length !== 0) Box.appendChild(pas.chat_shared.El("span","count",window.tn(List.length,"%d here","%d here")));
+  };
+  this.NoteTyping = function (Names) {
+    var I = 0;
+    for (var $l = 0, $end = Names.length - 1; $l <= $end; $l++) {
+      I = $l;
+      if (!pas.chat_shared.Same(Names[I],pas.chat_shared.Me.name)) pas.chat_shared.S.typers["" + Names[I]] = Date.now() + 5000;
+    };
+    $mod.RenderTyping();
+  };
+  this.RenderTyping = function () {
+    var Box = null;
+    var Now = 0;
+    var Names = null;
+    var N = "";
+    var I = 0;
+    var Text = "";
+    Box = pas.chat_shared.Find("#typing",undefined);
+    Now = Date.now();
+    Names = Object.keys(pas.chat_shared.S.typers);
+    for (var $l = 0, $end = Names.length - 1; $l <= $end; $l++) {
+      I = $l;
+      N = "" + Names[I];
+      if (Number(pas.chat_shared.S.typers[N]) < Now) pas.JS.JSDelete(pas.chat_shared.S.typers,N);
+    };
+    Names = Object.keys(pas.chat_shared.S.typers);
+    if (Names.length === 0) {
+      Box.replaceChildren();
+      return;
+    };
+    if (Names.length === 1) {
+      Text = window.t("%s is typing",Names[0])}
+     else if (Names.length === 2) {
+      Text = window.t("%s and %s are typing",Names[0],Names[1])}
+     else Text = window.t("Several people are typing");
+    Box.replaceChildren(pas.chat_shared.El("span","dots",undefined),pas.chat_shared.El("span","",Text));
+  };
+  this.OpenRoom = async function (Slug, Thread) {
+    var Generation = 0.0;
+    var Info = null;
+    Generation = pas.chat_shared.S.generation;
+    Info = await pas.chat_shared.Get("/api/room?slug=" + pas.chat_shared.Enc(Slug));
+    if (Generation !== pas.chat_shared.S.generation) return;
+    pas.chat_shared.S.view = "room";
+    pas.chat_shared.S.room = Info.slug;
+    pas.chat_shared.S.info = Info;
+    pas.chat_shared.S.title = $mod.RoomTitle(Info);
+    if (!Info.private) try {
+      window.localStorage.setItem("last-room",Info.slug);
+    } catch ($e) {
+    };
+    $mod.RenderHead(Info,null);
+    $mod.RenderCard(Info);
+    await $mod.LoadMessages(Generation);
+    pas.chat_composer.RenderComposer(pas.chat_shared.Find("#composer-area",undefined),0,undefined);
+    if (Boolean(Thread)) pas.chat_panels.OpenThread(Thread);
+    pas.chat_sync.SyncNow(true);
+  };
+  this.LoadMessages = async function (Generation) {
+    var Data = null;
+    var M = null;
+    var I = 0;
+    Data = await pas.chat_shared.Get("/api/messages?room=" + pas.chat_shared.Enc(pas.chat_shared.S.room));
+    if (Generation !== pas.chat_shared.S.generation) return;
+    pas.chat_shared.S.lastRead = Data.last_read;
+    pas.chat_shared.S.divider = 0;
+    pas.chat_shared.S.since = Data.rev - 3000000;
+    pas.chat_shared.S.oldest = Infinity;
+    pas.chat_shared.S.older = Data.messages.length === 50;
+    for (var $l = 0, $end = Data.messages.length - 1; $l <= $end; $l++) {
+      I = $l;
+      M = Data.messages[I];
+      if (!Boolean(pas.chat_shared.S.divider) && (pas.chat_shared.Me.name !== "") && (M.id > pas.chat_shared.S.lastRead) && (M.name !== pas.chat_shared.Me.name) && (pas.chat_shared.S.lastRead > 0)) pas.chat_shared.S.divider = M.id;
+    };
+    $mod.AddMessages(Data.messages,true);
+    if (Data.messages.length === 0) pas.chat_shared.Stream.appendChild($mod.EmptyNote());
+  };
+  this.EmptyNote = function () {
+    var Result = null;
+    var P = null;
+    P = pas.chat_shared.El("div","empty",undefined);
+    P.appendChild(pas.chat_shared.El("b","",window.t("Nothing said here yet.")));
+    if (pas.chat_shared.Me.name !== "") {
+      P.appendChild(pas.chat_shared.El("span","",window.t(" Say hello.")))}
+     else P.appendChild(pas.chat_shared.El("span","",window.t(" Join to say hello.")));
+    Result = P;
+    return Result;
+  };
+  this.AddMessages = function (List, Initial) {
+    var Stick = false;
+    var Empty = null;
+    var I = 0;
+    Stick = Initial || pas.chat_shared.Stream.pinned || pas.chat_shared.NearBottom(undefined);
+    Empty = pas.chat_shared.Find(".empty",pas.chat_shared.Stream);
+    if ((Empty !== null) && (List.length !== 0)) Empty.remove();
+    for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+      I = $l;
+      $mod.Upsert(List[I],pas.chat_shared.Stream,pas.chat_shared.S.messages,false);
+    };
+    $mod.Regroup(pas.chat_shared.Stream);
+    if (Stick) {
+      pas.chat_shared.Stream.scrollTop = pas.chat_shared.Stream.scrollHeight;
+      pas.chat_shared.Stream.pinned = true;
+    };
+  };
+  this.Upsert = function (M, Box, map, InThread) {
+    var Old = null;
+    var Node = null;
+    var After = null;
+    var Nodes = null;
+    var I = 0;
+    Old = map.get(M.id);
+    if (Boolean(Old) && (Old.data.rev === M.rev)) return;
+    Node = pas.chat_messages.RenderMessage(M,InThread);
+    if (Boolean(Old)) {
+      Old.node.replaceWith(Node)}
+     else {
+      After = null;
+      Nodes = Box.querySelectorAll(":scope > .msg");
+      for (var $l = Nodes.length - 1; $l >= 0; $l--) {
+        I = $l;
+        if (Number(Nodes.item(I).dataset["id"]) < M.id) {
+          After = Nodes.item(I);
+          break;
+        };
+      };
+      if (After !== null) {
+        After.after(Node)}
+       else Box.prepend(Node);
+    };
+    map.set(M.id,pas.JS.New(["data",M,"node",Node]));
+    if ((Box === pas.chat_shared.Stream) && (M.id < pas.chat_shared.S.oldest)) pas.chat_shared.S.oldest = M.id;
+  };
+  this.Regroup = function (Box) {
+    var Lines = null;
+    var Nodes = null;
+    var Prev = null;
+    var Node = null;
+    var Line = null;
+    var When = null;
+    var Day = "";
+    var Together = false;
+    var I = 0;
+    Lines = Box.querySelectorAll(":scope > .day, :scope > .divider");
+    for (var $l = 0, $end = Lines.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Lines.item(I).remove();
+    };
+    Prev = null;
+    Nodes = Box.querySelectorAll(":scope > .msg");
+    for (var $l1 = 0, $end1 = Nodes.length - 1; $l1 <= $end1; $l1++) {
+      I = $l1;
+      Node = Nodes.item(I);
+      When = new Date(Node.dataset["at"]);
+      Day = When.toDateString();
+      if ((Prev === null) || ((new Date(Prev.dataset["at"])).toDateString() !== Day)) {
+        Line = pas.chat_shared.El("div","day",undefined);
+        Line.appendChild(pas.chat_shared.El("span","",pas.chat_shared.DayLabel(When)));
+        Node.before(Line);
+        Prev = null;
+      };
+      if ((Box === pas.chat_shared.Stream) && Boolean(pas.chat_shared.S.divider) && (Number(Node.dataset["id"]) === pas.chat_shared.S.divider)) {
+        Line = pas.chat_shared.El("div","divider",undefined);
+        Line.appendChild(pas.chat_shared.El("span","",window.t("New")));
+        Node.before(Line);
+        Prev = null;
+      };
+      Together = (Prev !== null) && (Prev.dataset["name"] === Node.dataset["name"]) && !Prev.classList.contains("system") && ((When.getTime() - (new Date(Prev.dataset["at"])).getTime()) < (6 * 60000)) && !Node.classList.contains("hasthread") && !Prev.classList.contains("hasthread");
+      pas.chat_shared.Toggle(Node,"cont",Together);
+      Prev = Node;
+    };
+    if ((Box === pas.chat_shared.Stream) && (pas.chat_shared.S.view === "dm")) pas.chat_private.MarkSeen();
+  };
+  this.RenderCard = function (Info) {
+    var Card = null;
+    var Show = null;
+    var I = 0;
+    Card = pas.chat_shared.Find("#card",undefined);
+    Card.replaceChildren();
+    for (var $l = 0, $end = pas.chat_shared.Extras.cards.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Show = pas.chat_shared.Extras.cards[I];
+      Show(Info,Card);
+    };
+  };
+  this.Start = function () {
+    window.setInterval(function () {
+      if (rtl.length(Object.keys(pas.chat_shared.S.typers)) !== 0) $mod.RenderTyping();
+    },1000);
+    pas.chat_shared.Stream.addEventListener("scroll",$impl.StreamScrolled);
+  };
+  $mod.$implcode = function () {
+    $impl.StreamScrolled = async function (E) {
+      var Generation = 0.0;
+      var Data = null;
+      var Height = 0;
+      var I = 0;
+      if ((pas.chat_shared.Stream.scrollTop <= 80) && (pas.chat_shared.S.view === "dm")) {
+        pas.chat_private.OlderDms();
+        return;
+      };
+      if ((pas.chat_shared.Stream.scrollTop > 80) || !pas.chat_shared.S.older || (pas.chat_shared.S.view !== "room") || pas.chat_shared.S.loadingOlder) return;
+      pas.chat_shared.S.loadingOlder = true;
+      Generation = pas.chat_shared.S.generation;
+      try {
+        try {
+          Data = await pas.chat_shared.Get("/api/messages?room=" + pas.chat_shared.Enc(pas.chat_shared.S.room) + "&before=" + ("" + pas.chat_shared.S.oldest));
+          if (Generation !== pas.chat_shared.S.generation) return;
+          Height = pas.chat_shared.Stream.scrollHeight;
+          pas.chat_shared.S.older = Data.messages.length === 50;
+          for (var $l = 0, $end = Data.messages.length - 1; $l <= $end; $l++) {
+            I = $l;
+            $mod.Upsert(Data.messages[I],pas.chat_shared.Stream,pas.chat_shared.S.messages,false);
+          };
+          $mod.Regroup(pas.chat_shared.Stream);
+          pas.chat_shared.Stream.scrollTop = pas.chat_shared.Stream.scrollHeight - Height;
+        } catch ($e) {
+          pas.chat_shared.Failed($e);
+        };
+      } finally {
+        pas.chat_shared.S.loadingOlder = false;
+      };
+    };
+  };
+},["chat_messages","chat_sync","chat_panels","chat_composer","chat_private"]);
+rtl.module("chat_sync",["System","JS","Web","chat_shared"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.SyncNow = function (WithRooms) {
+    if (WithRooms) pas.chat_shared.RoomsWanted = true;
+    window.clearTimeout($impl.SyncTimer);
+    $mod.Sync();
+  };
+  this.SidebarSoon = function (Ms) {
+    if (Boolean($impl.SidebarTimer)) return;
+    $impl.SidebarTimer = window.setTimeout(function () {
+      $impl.SidebarTimer = 0;
+      $mod.SyncNow(true);
+    },Ms);
+  };
+  this.Sync = async function () {
+    var Generation = 0.0;
+    var Params = null;
+    var A = null;
+    var Dms = null;
+    var Shown = undefined;
+    var Wait = 0;
+    if ($impl.Syncing) {
+      $impl.Again = true;
+      return;
+    };
+    $impl.Syncing = true;
+    $impl.Again = false;
+    Generation = pas.chat_shared.S.generation;
+    Params = new URLSearchParams(pas.JS.New(["since",pas.chat_shared.S.since]));
+    if (!pas.chat_shared.FromRing) Params.set("here","1");
+    pas.chat_shared.FromRing = false;
+    if (pas.chat_shared.S.view === "room") Params.set("room",pas.chat_shared.S.room);
+    if (Boolean(pas.chat_shared.S.thread)) Params.set("thread",pas.chat_shared.S.thread);
+    if (Boolean(pas.chat_shared.Live.id)) Params.set("live",pas.chat_shared.Live.id);
+    if ((pas.chat_shared.Me.name !== "") && (pas.chat_shared.RoomsWanted || (!Boolean(pas.chat_shared.Live.id) && ((pas.chat_shared.S.tick % 5) === 0)))) Params.set("rooms","1");
+    pas.chat_shared.RoomsWanted = false;
+    if ((pas.chat_shared.S.view === "room") && !document.hidden && pas.chat_shared.NearBottom(undefined) && Boolean(pas.chat_shared.S.messages.size)) Params.set("read",Math.max.apply(null,Array.from(pas.chat_shared.S.messages.keys())));
+    pas.chat_shared.S.tick = pas.chat_shared.S.tick + 1;
+    try {
+      A = await pas.chat_shared.Get("/api/sync?" + ("" + Params));
+      if (Generation === pas.chat_shared.S.generation) {
+        if (Boolean(A.messages)) pas.chat_rooms.AddMessages(A.messages,false);
+        if (Boolean(A.thread)) pas.chat_panels.AddThread(A.thread);
+        if (Boolean(A.typing)) pas.chat_rooms.NoteTyping(A.typing);
+        if (Boolean(A.here)) pas.chat_rooms.RenderHere(A.here);
+        if (A.more) {
+          pas.chat_shared.S.since = A.messages[A.messages.length - 1].rev;
+          $impl.Again = true;
+        } else pas.chat_shared.S.since = Math.max(pas.chat_shared.S.since,A.rev - 3000000);
+      };
+      if (Boolean(A.rooms)) {
+        Dms = A.dms;
+        if (!Boolean(Dms)) Dms = new Array();
+        pas.chat_sidebar.NotifyNews(A.rooms,Dms);
+        pas.chat_shared.S.rooms = A.rooms;
+        if (Boolean(A.dms)) {
+          pas.chat_shared.S.dms = A.dms}
+         else pas.chat_shared.S.dms = new Array();
+        pas.chat_sidebar.RenderSidebar();
+        Shown = false;
+        if (pas.chat_shared.S.view === "dm") Shown = pas.chat_shared.S.dms.find(function (X, Index, All) {
+          var Result = false;
+          Result = X.name === pas.chat_shared.S.dm;
+          return Result;
+        });
+        if (Shown) {
+          if (Boolean(Shown.seen)) {
+            pas.chat_shared.S.dmSeen = Shown.seen}
+           else pas.chat_shared.S.dmSeen = 0;
+          pas.chat_private.MarkSeen();
+        };
+      };
+    } catch ($e) {
+    };
+    $impl.Syncing = false;
+    window.clearTimeout($impl.SyncTimer);
+    if ($impl.Again) {
+      $mod.Sync();
+      return;
+    };
+    if (Boolean(pas.chat_shared.Live.id)) {
+      Wait = 50000}
+     else if (document.hidden) {
+      Wait = 15000}
+     else Wait = 3000;
+    $impl.SyncTimer = window.setTimeout(function () {
+      $mod.Sync();
+    },Wait);
+  };
+  this.Start = function () {
+    document.addEventListener("visibilitychange",function (E) {
+      if (document.hidden) return;
+      $mod.SyncNow(true);
+      if (Boolean(pas.chat_shared.S.dm)) pas.chat_private.PollDm(pas.chat_shared.S.generation);
+    });
+  };
+  $mod.$implcode = function () {
+    $impl.SyncTimer = 0;
+    $impl.Syncing = false;
+    $impl.Again = false;
+    $impl.SidebarTimer = 0;
+  };
+},["chat_sidebar","chat_rooms","chat_panels","chat_private"]);
+rtl.module("chat_messages",["System","JS","Web","chat_shared"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.RenderMessage = function (M, InThread) {
+    var Result = null;
+    var Node = null;
+    var Gutter = null;
+    var More = null;
+    var Content = null;
+    var Head = null;
+    var Time = null;
+    var Text = null;
+    var Show = null;
+    var Line = null;
+    var A = null;
+    var At = null;
+    var Badge = null;
+    var B = undefined;
+    var I = 0;
+    Node = pas.chat_shared.El("article","msg",undefined);
+    Node.dataset["id"] = "" + M.id;
+    Node.dataset["at"] = M.at;
+    Node.dataset["name"] = M.name;
+    if (!M.uid) Node.classList.add("system");
+    if (M.name === pas.chat_shared.Me.name) Node.classList.add("mine");
+    if (M.mentions_me) Node.classList.add("mention");
+    if (M.deleted) Node.classList.add("deleted");
+    if (Boolean(M.replies) && !InThread) Node.classList.add("hasthread");
+    Gutter = pas.chat_shared.El("div","gutter",undefined);
+    if (M.uid) {
+      A = pas.chat_shared.Link("/u/" + pas.chat_shared.Enc(M.name),"face",undefined);
+      A.appendChild(pas.chat_shared.Avatar(M.name,M.avatar,undefined));
+      Gutter.appendChild(A);
+    } else Gutter.appendChild(pas.chat_shared.Avatar(M.name,"","bot"));
+    At = new Date(M.at);
+    if (!M.deleted) {
+      More = pas.chat_shared.IconButton("down",window.t("More"),"more");
+      More.setAttribute("aria-haspopup","menu");
+      More.setAttribute("aria-expanded","false");
+      More.addEventListener("click",function (E) {
+        if ((pas.chat_shared.Menu !== null) && (pas.chat_shared.Menu.node === Node)) {
+          pas.chat_menu.CloseMenu(true)}
+         else pas.chat_menu.OpenMenu(Node,null);
+      });
+      Gutter.appendChild(More);
+      Node.menu = function () {
+        var Result = null;
+        Result = pas.chat_menu.MessageMenu(M,InThread);
+        return Result;
+      };
+    };
+    Node.appendChild(Gutter);
+    Content = pas.chat_shared.El("div","content",undefined);
+    Head = pas.chat_shared.El("header",undefined,undefined);
+    if (M.uid) {
+      Head.appendChild(pas.chat_shared.Link("/u/" + pas.chat_shared.Enc(M.name),"who",M.name))}
+     else Head.appendChild(pas.chat_shared.El("b","who",M.name));
+    if (M.badge) Head.appendChild(pas.chat_shared.El("span","role",M.badge));
+    for (var $l = 0, $end = pas.chat_shared.Extras.badges.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Badge = pas.chat_shared.Extras.badges[I];
+      B = Badge(M);
+      if (B) Head.appendChild(B);
+    };
+    if ((M.room !== pas.chat_shared.S.room) && !InThread) Head.appendChild(pas.chat_shared.Link("/p/" + pas.chat_shared.Enc(M.room),"where","#" + M.room));
+    Time = pas.chat_shared.El("time","",pas.chat_shared.Clock(At));
+    Time.title = window.dateTimeText(At);
+    Head.appendChild(Time);
+    if (M.edited && !M.deleted) Head.appendChild(pas.chat_shared.El("span","edited",window.t("(edited)")));
+    if (M.pinned) Head.appendChild(pas.chat_shared.El("span","pinned",window.t("pinned")));
+    Content.appendChild(Head);
+    Text = pas.chat_shared.El("div","body",undefined);
+    if (M.deleted) {
+      Text.textContent = window.t("This message was deleted.")}
+     else {
+      Text.innerHTML = M.html;   // safe html: rendered by the server, members' HTML escaped;
+      pas.chat_menu.DressCode(Text);
+    };
+    if (Boolean(M.re) && !M.deleted) Content.appendChild(pas.chat_answer.QuoteOf(M.re,function () {
+      pas.chat_shared.Route("/m/" + ("" + M.re["id"]),true);
+    }));
+    Content.appendChild(Text);
+    if (!M.deleted) $impl.FoldLong(Text,Content);
+    if (Boolean(M.preview) && !M.deleted) Content.appendChild($mod.PreviewOf(M.preview));
+    if (M.ignored && !M.deleted) {
+      Node.classList.add("ignored");
+      Show = pas.chat_shared.El("button","unfold",window.t("A message from %s, whom you ignore. Show it",M.name));
+      Show.type = "button";
+      Show.addEventListener("click",function (E) {
+        Node.classList.remove("ignored");
+        Show.remove();
+      });
+      Content.insertBefore(Show,Text);
+    };
+    if (Boolean(M.files) && Boolean(M.files.length)) Content.appendChild($mod.RenderFiles(M.files));
+    if (Boolean(M.reactions) && Boolean(M.reactions.length)) Content.appendChild($mod.RenderReactions(M));
+    if (Boolean(M.replies) && !InThread) {
+      Line = pas.chat_shared.El("button","threadline",undefined);
+      Line.type = "button";
+      Line.appendChild(pas.chat_shared.Icon("reply"));
+      Line.appendChild(pas.chat_shared.El("b","",window.tn(M.replies,"%d reply","%d replies")));
+      Line.appendChild(pas.chat_shared.El("span","",window.t("last %s",pas.chat_shared.Ago(M.last_reply))));
+      Line.addEventListener("click",function (E) {
+        pas.chat_panels.OpenThread(M.id);
+      });
+      Content.appendChild(Line);
+    };
+    Node.appendChild(Content);
+    pas.chat_shared.C.pinWatch.observe(Node);
+    Result = Node;
+    return Result;
+  };
+  this.RenderFiles = function (Files) {
+    var Result = null;
+    var Box = null;
+    var F = null;
+    var A = null;
+    var Img = null;
+    var I = 0;
+    Box = pas.chat_shared.El("div","files",undefined);
+    for (var $l = 0, $end = Files.length - 1; $l <= $end; $l++) {
+      I = $l;
+      F = Files[I];
+      if (F.image) {
+        A = pas.chat_shared.Link(F.url,"shot",undefined);
+        Img = pas.chat_shared.El("img",undefined,undefined);
+        Img.src = F.url;
+        Img.alt = F.name;
+        Img.loading = "lazy";
+        A.appendChild(Img);
+        Box.appendChild(A);
+      } else {
+        A = pas.chat_shared.Link(F.url,"file",undefined);
+        A.appendChild(pas.chat_shared.Icon("attach"));
+        A.appendChild(pas.chat_shared.El("span","fname",F.name));
+        A.appendChild(pas.chat_shared.El("span","fsize",pas.chat_shared.SizeText(F.size)));
+        if (F.once) {
+          A.appendChild(pas.chat_shared.El("span","fexp",window.t("deletes after one download")))}
+         else if (F.expires) A.appendChild(pas.chat_shared.El("span","fexp",window.t("until %s",window.dateTimeText(F.expires))));
+        Box.appendChild(A);
+      };
+    };
+    Result = Box;
+    return Result;
+  };
+  this.RenderReactions = function (M) {
+    var Result = null;
+    Result = window.Reactions.chips(M.reactions,pas.JS.New(["toggle",function (R) {
+      $mod.React(M.id,R["r"],M.dm);
+    },"who",function (R) {
+      var Result = null;
+      var Url = "";
+      if (M.dm) {
+        Url = "/api/dm/reacted"}
+       else Url = "/api/reacted";
+      Result = pas.chat_shared.Get(Url + "?id=" + ("" + M.id) + "&r=" + pas.chat_shared.Enc(R["r"]));
+      return Result;
+    }]));
+    return Result;
+  };
+  this.React = async function (Id, R, Dm) {
+    if (pas.chat_shared.Me.name === "") {
+      pas.chat_shared.Toast(window.t("Join to react."),undefined);
+      return;
+    };
+    try {
+      if (Dm) {
+        await pas.chat_shared.Post("/api/dm/react",pas.JS.New(["id",Id,"r",R]));
+        pas.chat_private.RefreshDm(Id);
+        return;
+      };
+      await pas.chat_shared.Post("/api/react",pas.JS.New(["id",Id,"r",R]));
+      pas.chat_sync.SyncNow(false);
+    } catch ($e) {
+      pas.chat_shared.Failed($e);
+    };
+  };
+  this.PreviewOf = function (P) {
+    var Result = null;
+    var Pre = null;
+    var Box = null;
+    var Line = null;
+    var More = null;
+    var Go = null;
+    var Host = undefined;
+    var Title = undefined;
+    Pre = P;
+    Box = pas.chat_shared.El("div","preview",undefined);
+    Line = pas.chat_shared.El("button","line",undefined);
+    Line.type = "button";
+    Host = Pre.site;
+    if (!Host) try {
+      Host = (new URL(Pre.url)).host;
+    } catch ($e) {
+      Host = "";
+    };
+    if (Pre.title) {
+      Title = Pre.title}
+     else Title = Pre.url;
+    Line.append(pas.chat_shared.El("span","site",Host),pas.chat_shared.El("span","title",Title));
+    Line.title = Pre.url;
+    More = pas.chat_shared.El("div","more",undefined);
+    More.hidden = true;
+    if (Pre.description) More.appendChild(pas.chat_shared.El("p","",Pre.description));
+    Go = pas.chat_shared.El("a","small-link",window.t("Open the page"));
+    Go.href = Pre.url;
+    Go.target = "_blank";
+    Go.rel = "noopener nofollow ugc";
+    More.appendChild(Go);
+    Line.addEventListener("click",function (E) {
+      var Open = false;
+      var Img = null;
+      Open = Box.classList.toggle("open");
+      More.hidden = !Open;
+      if (Open && Boolean(Pre.image) && (More.querySelector("img") === null)) {
+        Img = pas.chat_shared.El("img",undefined,undefined);
+        Img.alt = "";
+        Img.referrerPolicy = "no-referrer";
+        Img.src = Pre.image;
+        More.prepend(Img);
+      };
+    });
+    Box.append(Line,More);
+    Result = Box;
+    return Result;
+  };
+  $mod.$implcode = function () {
+    $impl.FoldLong = function (Text, Content) {
+      window.requestAnimationFrame(function (Time) {
+        var Whole = null;
+        if ((Text.parentNode === null) || (Text.scrollHeight <= 640)) return;
+        Text.classList.add("folded");
+        Whole = pas.chat_shared.El("button","unfold whole",window.t("Show all"));
+        Whole.type = "button";
+        Whole.setAttribute("aria-expanded","false");
+        Whole.addEventListener("click",function (E) {
+          var Open = false;
+          Open = Text.classList.contains("folded");
+          if (Open) {
+            Text.classList.remove("folded")}
+           else Text.classList.add("folded");
+          if (Open) {
+            Whole.textContent = window.t("Show less")}
+           else Whole.textContent = window.t("Show all");
+          Whole.setAttribute("aria-expanded","" + Open);
+          if (!Open) Text.scrollIntoView(pas.JS.New(["block","nearest"]));
+        });
+        Content.insertBefore(Whole,Text.nextSibling);
+      });
+    };
+  };
+},["chat_answer","chat_menu","chat_sync","chat_panels","chat_private"]);
+rtl.module("chat_menu",["System","JS","Web","chat_shared"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.MessageMenu = function (M, InThread) {
+    var Result = null;
+    var Items = null;
+    var MayReact = false;
+    var AsSent = false;
+    var From = "";
+    var PinTitle = "";
+    var Entry = null;
+    var React = null;
+    Items = new Array();
+    MayReact = (pas.chat_shared.Me.name !== "") && pas.chat_shared.MayHere("react");
+    if (Boolean(pas.chat_shared.S.thread) && ((M.parent === pas.chat_shared.S.thread) || (InThread && (M.id === pas.chat_shared.S.thread)))) {
+      From = "thread " + ("" + pas.chat_shared.S.thread)}
+     else if (InThread) {
+      From = ""}
+     else From = "room " + M.room;
+    if ((From !== "") && Boolean(pas.chat_answer.AnswerStrip(From))) Items.push($impl.Item("reply",window.t("Answer this message"),function () {
+      var Words = undefined;
+      Words = pas.chat_answer.FirstWords(M.body);
+      if (!Words) if (M.files.length !== 0) {
+        Words = M.files[0]["name"]}
+       else Words = window.t("code");
+      pas.chat_answer.Answer(From,pas.JS.New(["id",M.id,"from",M.name,"text",Words]));
+    }));
+    if (MayReact && !InThread && !Boolean(M.parent)) Items.push($impl.Item("reply",window.t("Reply in a thread"),function () {
+      pas.chat_panels.OpenThread(M.id);
+    }));
+    if (Boolean(M.body)) Items.push($impl.Item("copy",window.t("Copy the text"),function () {
+      window.navigator.clipboard.writeText(M.body).then(function (Value) {
+        var Result = undefined;
+        pas.chat_shared.Toast(window.t("Text copied."),undefined);
+        return Result;
+      });
+    }));
+    Items.push($impl.Item("link",window.t("Copy a link to this"),function () {
+      window.navigator.clipboard.writeText(window.location.origin + window.SiteBase.url("/m/" + ("" + M.id))).then(function (Value) {
+        var Result = undefined;
+        pas.chat_shared.Toast(window.t("Link copied."),undefined);
+        return Result;
+      });
+    }));
+    AsSent = Boolean(pas.chat_shared.S.info) && pas.chat_shared.S.info.as_sent;
+    if ((M.name === pas.chat_shared.Me.name) && Boolean(M.uid) && pas.chat_shared.May("edit-own") && !AsSent) Items.push($impl.Item("edit",window.t("Edit"),function () {
+      $mod.StartEdit(M);
+    }));
+    if (pas.chat_shared.MayHere("pin") && !Boolean(M.parent)) {
+      if (M.pinned) {
+        PinTitle = window.t("Unpin")}
+       else PinTitle = window.t("Pin to the channel");
+      Items.push($impl.Item("pin",PinTitle,async function () {
+        try {
+          await pas.chat_shared.Post("/api/pin",pas.JS.New(["id",M.id]));
+          pas.chat_sync.SyncNow(false);
+        } catch ($e) {
+          pas.chat_shared.Failed($e);
+        };
+      }));
+    };
+    if (!AsSent && (((M.name === pas.chat_shared.Me.name) && Boolean(M.uid) && pas.chat_shared.May("delete-own")) || pas.chat_shared.MayHere("delete-any"))) {
+      Entry = $impl.Item("trash",window.t("Delete"),async function () {
+        if (!window.confirm(window.t("Delete this message?"))) return;
+        try {
+          await pas.chat_shared.Post("/api/delete",pas.JS.New(["id",M.id]));
+          pas.chat_sync.SyncNow(false);
+        } catch ($e) {
+          pas.chat_shared.Failed($e);
+        };
+      });
+      Entry.bad = true;
+      Items.push(Entry);
+    };
+    React = null;
+    if (MayReact) React = function (R) {
+      pas.chat_messages.React(M.id,R,false);
+    };
+    Result = pas.JS.New(["react",React,"items",Items]);
+    return Result;
+  };
+  this.CloseMenu = function (Refocus) {
+    if (!Boolean(pas.chat_shared.Menu)) return;
+    pas.chat_shared.Menu.box.remove();
+    pas.chat_shared.Menu.node.classList.remove("held");
+    pas.chat_shared.Menu.arrow.setAttribute("aria-expanded","false");
+    if (Refocus) pas.chat_shared.Menu.arrow.focus(pas.JS.New(["preventScroll",true]));
+    pas.chat_shared.Menu = null;
+  };
+  this.OpenMenu = function (Node, At) {
+    var Offer = null;
+    var Arrow = null;
+    var Box = null;
+    var List = null;
+    var First = null;
+    var Buttons = null;
+    var Pick = null;
+    var Place = null;
+    var I = 0;
+    function Entry(B) {
+      var Result = null;
+      B.type = "button";
+      B.tabIndex = -1;
+      B.setAttribute("role","menuitem");
+      Result = B;
+      return Result;
+    };
+    function Choice(B, Run) {
+      var Result = null;
+      Entry(B).addEventListener("click",function (E) {
+        $mod.CloseMenu(true);
+        Run();
+      });
+      Result = B;
+      return Result;
+    };
+    function Add(It) {
+      var B = null;
+      if (It.bad && Boolean(List.lastChild) && !List.lastChild.classList.contains("bad")) List.appendChild(pas.chat_shared.El("hr",undefined,undefined));
+      if (It.bad) {
+        B = Choice(pas.chat_shared.El("button","bad",undefined),It.run)}
+       else B = Choice(pas.chat_shared.El("button","",undefined),It.run);
+      B.append(pas.chat_shared.Icon(It.icon),pas.chat_shared.El("span","",It.title));
+      List.appendChild(B);
+    };
+    $mod.CloseMenu(false);
+    Offer = Node.menu();
+    Arrow = Node.querySelector(":scope > .gutter > .more");
+    if (!Boolean(Offer.react) && (Offer.items.length === 0)) return;
+    Box = pas.chat_shared.El("div","msgmenu",undefined);
+    Box.setAttribute("role","menu");
+    Box.tabIndex = -1;
+    Place = function () {
+      if (Boolean(At)) {
+        window.Reactions.under(Box,pas.JS.New(["left",At["x"],"top",At["y"],"bottom",At["y"]]))}
+       else window.Reactions.under(Box,Arrow.getBoundingClientRect());
+    };
+    if (Node.classList.contains("cont")) Box.appendChild(pas.chat_shared.El("div","when",window.dateTimeText(new Date(Node.dataset["at"]))));
+    if (Boolean(Offer.react)) {
+      Pick = function (R) {
+        $mod.CloseMenu(true);
+        Offer.react(R);
+      };
+      window.Reactions.offer(Box,pas.chat_shared.Me.reactions,Pick,Place);
+      Buttons = Box.querySelectorAll("button");
+      for (var $l = 0, $end = Buttons.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Entry(Buttons.item(I));
+      };
+    };
+    List = pas.chat_shared.El("div","items",undefined);
+    for (var $l1 = 0, $end1 = Offer.items.length - 1; $l1 <= $end1; $l1++) {
+      I = $l1;
+      Add(Offer.items[I]);
+    };
+    Box.appendChild(List);
+    Box.addEventListener("keydown",function (E) {
+      var Key = "";
+      var Shown = null;
+      var Dest = undefined;
+      Key = E.key;
+      if ((Key === "Escape") || (Key === "Tab")) {
+        if (Key === "Escape") E.preventDefault();
+        $mod.CloseMenu(true);
+        return;
+      };
+      Shown = Array.from(Box.querySelectorAll("button")).filter(function (B, Index, All) {
+        var Result = false;
+        Result = Boolean(B.offsetParent);
+        return Result;
+      });
+      if (Shown.includes(document.activeElement)) {
+        Dest = $impl.MenuStep(Shown,document.activeElement,Key)}
+       else if ((new RegExp("^(Arrow|Home|End)")).test(Key)) {
+        Dest = Shown[0]}
+       else Dest = null;
+      if (!Dest) return;
+      E.preventDefault();
+      Dest.focus();
+    });
+    document.body.appendChild(Box);
+    Place();
+    Node.classList.add("held");
+    Arrow.setAttribute("aria-expanded","true");
+    pas.chat_shared.Menu = pas.JS.New(["box",Box,"node",Node,"arrow",Arrow]);
+    if (Boolean(At)) {
+      First = Box}
+     else First = Box.querySelector("button");
+    First.focus(pas.JS.New(["preventScroll",true]));
+  };
+  this.StartEdit = function (M) {
+    var Entry = undefined;
+    var Text = null;
+    var Box = null;
+    var Area = null;
+    var Save = null;
+    var Cancel = null;
+    var Complete = null;
+    function Done() {
+      Box.replaceWith(Text);
+    };
+    async function Store() {
+      try {
+        await pas.chat_shared.Post("/api/edit",pas.JS.New(["id",M.id,"body",Area.value]));
+        Done();
+        pas.chat_sync.SyncNow(false);
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
+    };
+    Entry = pas.chat_shared.S.messages.get(M.id);
+    if (!Entry) Entry = pas.chat_shared.S.threadMessages.get(M.id);
+    if (!Entry) return;
+    Text = Entry.node.querySelector(".body");
+    Box = pas.chat_shared.El("div","editbox",undefined);
+    Area = pas.chat_shared.El("textarea",undefined,undefined);
+    Area.value = M.body;
+    Save = pas.chat_shared.El("button","primary",window.t("Save"));
+    Cancel = pas.chat_shared.El("button","",window.t("Cancel"));
+    Cancel.type = "button";
+    Save.type = "button";
+    Box.append(Area,Save,Cancel);
+    Text.replaceWith(Box);
+    Area.focus();
+    pas.chat_composer.Fit(Area);
+    Complete = pas.chat_complete.Completer(Area,null);
+    Save.addEventListener("click",function (E) {
+      Store();
+    });
+    Cancel.addEventListener("click",function (E) {
+      Done();
+    });
+    Area.addEventListener("input",function (E) {
+      pas.chat_composer.Fit(Area);
+      Complete.update();
+    });
+    Area.addEventListener("keydown",function (E) {
+      if (Complete.handle(E)) return;
+      if (E.key === "Escape") Done();
+      if ((E.key === "Enter") && !E.shiftKey && !pas.chat_composer.InFence(Area)) {
+        E.preventDefault();
+        Store();
+      };
+    });
+  };
+  this.DressCode = function (Root) {
+    var Boxes = null;
+    var I = 0;
+    function Dress(Box) {
+      var Pre = null;
+      var Code = null;
+      var Mark = null;
+      var Flip = null;
+      var Nums = null;
+      var Fold = null;
+      var Lines = 0;
+      var N = 0;
+      var Id = "";
+      var List = "";
+      var Name = undefined;
+      function Say() {
+        var Shut = false;
+        Shut = Box.classList.contains("folded");
+        if (Shut) {
+          Fold.textContent = window.tn(Lines,"Show all %d line","Show all %d lines")}
+         else Fold.textContent = window.t("Show less");
+        if (Shut) {
+          Fold.setAttribute("aria-expanded","false")}
+         else Fold.setAttribute("aria-expanded","true");
+      };
+      Pre = Box.querySelector(":scope > pre");
+      Code = Pre;
+      if (Boolean(Pre)) Code = Pre.querySelector(":scope > code");
+      if (!Boolean(Code) || Boolean(Pre.querySelector(".nums"))) return;
+      Lines = Code.textContent.replace(new RegExp("\\n+$"),"").split("\n").length;
+      Mark = Box.querySelector(":scope > .codebar span");
+      if (Boolean(Mark)) {
+        Id = Mark.textContent.trim().toLowerCase();
+        Name = $impl.CODE_NAMES[Id];
+        if (!Name) Name = Mark.textContent.trim();
+        Mark["textContent"] = Name;
+        if (Lines > 1) Mark.after(pas.chat_shared.El("span","codelines",window.tn(Lines,"%d line","%d lines")));
+      };
+      Flip = Box.querySelector(":scope > .codebar .flip");
+      if (Boolean(Flip)) {
+        Flip.textContent = window.t("Source");
+        Flip.setAttribute("aria-pressed","false");
+      };
+      if (Lines < 2) return;
+      Nums = pas.chat_shared.El("span","nums",undefined);
+      Nums.setAttribute("aria-hidden","true");
+      List = "";
+      for (var $l = 1, $end = Lines; $l <= $end; $l++) {
+        N = $l;
+        List = List + ("" + N) + "\n";
+      };
+      Nums.textContent = List;
+      Pre.prepend(Nums);
+      Box.classList.add("numbered");
+      if (Lines <= (20 + 5)) return;
+      Box.classList.add("folded");
+      Fold = pas.chat_shared.El("button","codefold",undefined);
+      Fold.type = "button";
+      Fold.addEventListener("click",function (E) {
+        Box.classList.toggle("folded");
+        Say();
+        if (Box.classList.contains("folded") && (Box.getBoundingClientRect().top < 0)) Box.scrollIntoView(pas.JS.New(["block","nearest"]));
+      });
+      Say();
+      Box.appendChild(Fold);
+    };
+    Boxes = Root.querySelectorAll(".code");
+    for (var $l = 0, $end = Boxes.length - 1; $l <= $end; $l++) {
+      I = $l;
+      Dress(Boxes.item(I));
+    };
+  };
+  this.Start = function () {
+    var Lightbox = null;
+    document.addEventListener("pointerdown",function (E) {
+      if (Boolean(pas.chat_shared.Menu) && !pas.chat_shared.Menu.box.contains(E.target) && !pas.chat_shared.Menu.arrow.contains(E.target)) $mod.CloseMenu(false);
+    },true);
+    document.addEventListener("scroll",function (E) {
+      if (Boolean(pas.chat_shared.Menu) && !pas.chat_shared.Menu.box.contains(E.target)) $mod.CloseMenu(true);
+    },true);
+    window.addEventListener("resize",function (E) {
+      $mod.CloseMenu(true);
+    });
+    $impl.CODE_NAMES = pas.JS.New(["pascal","Pascal","lfm","LFM","bash","Bash","javascript","JavaScript","js","JavaScript","typescript","TypeScript","ts","TypeScript","css","CSS","html","HTML","xml","XML","sql","SQL","json","JSON","ini","INI","yaml","YAML","toml","TOML","go","Go","c","C","cpp","C++","csharp","C#","java","Java","kotlin","Kotlin","swift","Swift","rust","Rust","zig","Zig","d","D","python","Python","ruby","Ruby","lua","Lua","php","PHP","perl","Perl","basic","BASIC","diff","Diff","makefile","Makefile","asm","Assembly","batch","Batch","powershell","PowerShell","dockerfile","Dockerfile","fortran","Fortran","ada","Ada","barye","Barye","markdown","Markdown","md","Markdown","rst","reStructuredText","restructuredtext","reStructuredText"]);
+    document.addEventListener("click",function (E) {
+      var Flip = null;
+      var Copy = null;
+      var Box = null;
+      var Shot = null;
+      var Source = false;
+      var Img = null;
+      Flip = E.target.closest(".code .flip");
+      if (Boolean(Flip)) {
+        Box = Flip.closest(".code");
+        Source = Box.classList.toggle("source");
+        if (Source) {
+          Flip.textContent = window.t("Rendered")}
+         else Flip.textContent = window.t("Source");
+        if (Source) {
+          Flip.setAttribute("aria-pressed","true")}
+         else Flip.setAttribute("aria-pressed","false");
+        return;
+      };
+      Copy = E.target.closest(".code .copy");
+      if (Boolean(Copy)) {
+        window.navigator.clipboard.writeText(Copy.closest(".code").querySelector(":scope > pre > code").textContent).then(function (Value) {
+          var Result = undefined;
+          Copy.textContent = window.t("Copied");
+          window.setTimeout(function () {
+            Copy.textContent = window.t("Copy");
+          },1500);
+          return Result;
+        });
+        return;
+      };
+      Shot = E.target.closest("a.shot");
+      if (Boolean(Shot) && !E.ctrlKey && !E.metaKey) {
+        E.preventDefault();
+        Box = pas.chat_shared.Find("#lightbox",undefined);
+        Img = pas.chat_shared.El("img",undefined,undefined);
+        Img.src = Shot.href;
+        Box.replaceChildren(Img);
+        Box.hidden = false;
+        pas.chat_shared.LayerOpened();
+      };
+    });
+    Lightbox = pas.chat_shared.Find("#lightbox",undefined);
+    Lightbox.addEventListener("click",function (E) {
+      Lightbox.hidden = true;
+      pas.chat_shared.LayerClosed();
+    });
+  };
+  $mod.$implcode = function () {
+    $impl.FOLD_LINES = 20;
+    $impl.CODE_NAMES = null;
+    $impl.Item = function (Icon, Title, Run) {
+      var Result = null;
+      Result = pas.JS.New(["icon",Icon,"title",Title,"run",Run]);
+      return Result;
+    };
+    $impl.MenuStep = function (Buttons, Here, Key) {
+      var Result = undefined;
+      var I = 0;
+      var N = 0;
+      var K = 0;
+      var Down = false;
+      var From = null;
+      var R = null;
+      var Best = undefined;
+      var Row = 0.0;
+      var Off = 0.0;
+      var Far = 0.0;
+      var Aside = 0.0;
+      I = Buttons.indexOf(Here);
+      N = Buttons.length;
+      if (Key === "Home") return Buttons[0];
+      if (Key === "End") return Buttons[N - 1];
+      if (Key === "ArrowRight") return Buttons[(I + 1) % N];
+      if (Key === "ArrowLeft") return Buttons[((I + N) - 1) % N];
+      if ((Key !== "ArrowDown") && (Key !== "ArrowUp")) return null;
+      Down = Key === "ArrowDown";
+      From = Here.getBoundingClientRect();
+      Best = null;
+      Row = 0;
+      Off = 0;
+      for (var $l = 0, $end = N - 1; $l <= $end; $l++) {
+        K = $l;
+        R = Buttons[K].getBoundingClientRect();
+        if (Down) {
+          if (R.top < (From.bottom - 1)) continue;
+        } else if (R.bottom > (From.top + 1)) continue;
+        Far = Math.abs(R.top - From.top);
+        Aside = Math.abs(R.left - From.left);
+        if (!Boolean(Best) || (Far < (Row - 1)) || ((Far < (Row + 1)) && (Aside < Off))) {
+          Best = Buttons[K];
+          Row = Far;
+          Off = Aside;
+        };
+      };
+      if (Best) return Best;
+      if (Down) {
+        Result = Buttons[0]}
+       else Result = Buttons[N - 1];
+      return Result;
+    };
+  };
+},["chat_answer","chat_messages","chat_sync","chat_panels","chat_composer","chat_complete"]);
+rtl.module("chat_sidebar",["System","JS","Web","chat_shared"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.RenderSidebar = function () {
+    var Nav = null;
+    var Words = "";
+    var Unread = 0.0;
+    var List = null;
+    var I = 0;
+    var Head = null;
+    var Name = undefined;
+    var Count = "";
+    function AddRoom(G, R) {
+      var Href = "";
+      var Badge = "";
+      var A = null;
+      var Quiet = false;
+      var Lock = null;
+      var More = null;
+      var Items = null;
+      if (R.kind === "shelf") {
+        Href = "/u/" + pas.chat_shared.Enc(R.title)}
+       else Href = "/p/" + pas.chat_shared.Enc(R.slug);
+      A = pas.chat_shared.Link(Href,"room",undefined);
+      A.dataset["slug"] = R.slug;
+      if (R.slug === pas.chat_shared.S.room) A.classList.add("active");
+      Quiet = R.notify === "none";
+      if (Quiet) A.classList.add("quiet");
+      if (Boolean(R.unread) && !Quiet && (R.notify !== "mentions")) A.classList.add("unread");
+      if (R.private) {
+        Lock = pas.chat_shared.El("span","sigil",undefined);
+        Lock.appendChild(pas.chat_shared.Icon("lock"));
+        A.appendChild(Lock);
+      } else if (R.avatar) {
+        A.appendChild(pas.chat_shared.Avatar(R.title,R.avatar,"tiny roomicon"))}
+       else A.appendChild(pas.chat_shared.El("span","sigil",G.sigil));
+      A.appendChild(pas.chat_shared.El("span","name",R.title));
+      if (Boolean(R.mentions) && !Quiet) {
+        A.appendChild(pas.chat_shared.El("span","badge mention","@" + ("" + R.mentions)))}
+       else if (Boolean(R.unread) && !Quiet && (R.notify !== "mentions")) {
+        if (R.unread > 99) {
+          Badge = "99+"}
+         else Badge = "" + R.unread;
+        A.appendChild(pas.chat_shared.El("span","badge",Badge));
+      };
+      Items = $impl.RoomMenuItems(R);
+      if (Items.length !== 0) {
+        More = pas.chat_shared.IconButton("down",window.t("More"),"rowmenu");
+        More.addEventListener("click",function (E) {
+          E.preventDefault();
+          E.stopPropagation();
+          pas.chat_shared.PopMenu(More,Items);
+        });
+        A.appendChild(More);
+      };
+      Nav.appendChild(A);
+      if (!Quiet) Unread = Unread + R.mentions;
+    };
+    function AddGroup(G) {
+      var Rooms = null;
+      var Head = null;
+      var Add = null;
+      var Extra = null;
+      var Title = undefined;
+      var J = 0;
+      Rooms = pas.chat_shared.S.rooms.filter(G.test).filter(function (Room, Index, All) {
+        var Result = false;
+        Result = (Words === "") || Room.title.toLowerCase().includes(Words,0) || Room.slug.includes(Words,0);
+        return Result;
+      });
+      Head = pas.chat_shared.El("div","group",undefined);
+      if (pas.chat_shared.Same(G.title,"Channels")) {
+        Title = window.t("Channels")}
+       else if (pas.chat_shared.Same(G.title,"Shelves")) {
+        Title = window.t("Shelves")}
+       else if (pas.chat_shared.Same(G.title,"Benches")) {
+        Title = window.t("Benches")}
+       else Title = G.title;
+      Head.appendChild(pas.chat_shared.El("span","",Title));
+      if (pas.chat_shared.Same(G.title,"Channels") && (pas.chat_shared.May("create-private") || pas.chat_shared.May("create-channel"))) {
+        Add = pas.chat_shared.IconButton("plus",window.t("Open a channel"),undefined);
+        Add.classList.add("small");
+        Add.addEventListener("click",function (E) {
+          pas.chat_panels.NewRoom();
+        });
+        Head.appendChild(Add);
+      };
+      if (Boolean(G.button)) {
+        Extra = pas.chat_shared.El("button","small-link",G.button["label"]);
+        Extra.type = "button";
+        Extra.addEventListener("click",G.button["click"]);
+        Head.appendChild(Extra);
+      };
+      if ((Rooms.length === 0) && !Boolean(G.always)) return;
+      Nav.appendChild(Head);
+      for (var $l = 0, $end = Rooms.length - 1; $l <= $end; $l++) {
+        J = $l;
+        AddRoom(G,Rooms[J]);
+      };
+    };
+    function AddDm(D) {
+      var A = null;
+      var More = null;
+      if ((Words !== "") && !D.name.toLowerCase().includes(Words,0)) return;
+      A = pas.chat_shared.Link("/dm/" + pas.chat_shared.Enc(D.name),"room person",undefined);
+      if ((pas.chat_shared.S.view === "dm") && (pas.chat_shared.S.dm === D.name)) A.classList.add("active");
+      if (Boolean(D.unread)) A.classList.add("unread");
+      A.append(pas.chat_shared.Avatar(D.name,D.avatar,"tiny"),pas.chat_shared.El("span","name",D.name));
+      if (Boolean(D.unread)) A.appendChild(pas.chat_shared.El("span","badge mention","" + D.unread));
+      More = pas.chat_shared.IconButton("down",window.t("More"),"rowmenu");
+      More.addEventListener("click",function (E) {
+        E.preventDefault();
+        E.stopPropagation();
+        pas.chat_shared.PopMenu(More,Array.of(Array.of(window.t("Delete conversation"),function () {
+          $mod.DeleteDm(D.name);
+        })));
+      });
+      A.appendChild(More);
+      Nav.appendChild(A);
+      Unread = Unread + D.unread;
+    };
+    function AddNotice(N) {
+      var A = null;
+      A = pas.chat_shared.Link($impl.NoticePath(N.link),"room notice unread",undefined);
+      A.append(pas.chat_shared.El("span","sigil","!"),pas.chat_shared.El("span","name",N.text));
+      A.title = N.text;
+      A.addEventListener("click",function (E) {
+        var Dest = "";
+        E.preventDefault();
+        Dest = A.getAttribute("href");
+        pas.chat_shared.Post("/api/notices",pas.JS.New(["id","" + N.id])).catch(function (Why) {
+          var Result = undefined;
+          return Result;
+        }).then(function (Value) {
+          var Result = undefined;
+          window.location.assign(Dest);
+          return Result;
+        });
+      });
+      Nav.appendChild(A);
+    };
+    Nav = pas.chat_shared.Find("#roomlist",undefined);
+    Words = pas.chat_shared.Find("#jump",undefined).value.toLowerCase().trim();
+    Nav.replaceChildren();
+    Unread = 0;
+    List = Array.of($impl.Groups[0]).concat(pas.chat_shared.Extras.groups,$impl.Groups.slice(1));
+    for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+      I = $l;
+      AddGroup(List[I]);
+    };
+    if (pas.chat_shared.S.dms.length !== 0) {
+      Head = pas.chat_shared.El("div","group",undefined);
+      Head.appendChild(pas.chat_shared.El("span","",window.t("Private")));
+      Nav.appendChild(Head);
+      for (var $l1 = 0, $end1 = pas.chat_shared.S.dms.length - 1; $l1 <= $end1; $l1++) {
+        I = $l1;
+        AddDm(pas.chat_shared.S.dms[I]);
+      };
+    };
+    if (Boolean(pas.chat_shared.Notices.unseen)) {
+      Head = pas.chat_shared.El("div","group",undefined);
+      Head.appendChild(pas.chat_shared.El("span","",window.t("Notices")));
+      Nav.appendChild(Head);
+      for (var $l2 = 0, $end2 = pas.chat_shared.Notices.items.length - 1; $l2 <= $end2; $l2++) {
+        I = $l2;
+        AddNotice(pas.chat_shared.Notices.items[I]);
+      };
+      if (pas.chat_shared.Notices.unseen > pas.chat_shared.Notices.items.length) Nav.appendChild(pas.chat_shared.El("div","hint",window.tn(pas.chat_shared.Notices.unseen - pas.chat_shared.Notices.items.length,"%d more notice","%d more notices")));
+      Unread = Unread + pas.chat_shared.Notices.unseen;
+    };
+    if (Boolean(Unread)) {
+      Count = "(" + ("" + Unread) + ") "}
+     else Count = "";
+    if (pas.chat_shared.S.title) {
+      Name = pas.chat_shared.S.title}
+     else Name = pas.chat_shared.Site;
+    document.title = Count + ("" + Name) + " - " + ("" + pas.chat_shared.Site);
+  };
+  this.DeleteDm = async function (Name) {
+    if (!window.confirm(window.t("Delete your conversation with %s?\n\nYour copy is gone for good. %s keeps theirs. If they write again, a new conversation starts.",Name,Name))) return;
+    try {
+      await pas.chat_shared.Post("/api/dm/delete",pas.JS.New(["with",Name]));
+      pas.chat_shared.S.dms = pas.chat_shared.S.dms.filter(function (D, Index, All) {
+        var Result = false;
+        Result = D.name !== Name;
+        return Result;
+      });
+      $mod.RenderSidebar();
+      if ((pas.chat_shared.S.view === "dm") && (pas.chat_shared.S.dm === Name)) pas.chat_shared.Route("/",true);
+      pas.chat_shared.Toast(window.t("Conversation deleted."),undefined);
+    } catch ($e) {
+      pas.chat_shared.Failed($e);
+    };
+  };
+  this.NotifyNews = function (Rooms, Dms) {
+    var Seen = null;
+    var News = null;
+    var R = null;
+    var D = null;
+    var Key = "";
+    var Sign = "";
+    var I = 0;
+    Seen = pas.chat_shared.S.alerts;
+    News = new Array();
+    for (var $l = 0, $end = Rooms.length - 1; $l <= $end; $l++) {
+      I = $l;
+      R = Rooms[I];
+      Key = "r:" + R.slug;
+      if (!pas.chat_shared.Same(Seen[Key],undefined) && (R.mentions > Number(Seen[Key])) && (R.notify !== "none") && (document.hidden || (R.slug !== pas.chat_shared.S.room))) {
+        if (R.kind === "channel") {
+          Sign = "#"}
+         else Sign = "";
+        News.push(window.t("You were mentioned in %s",Sign + R.title));
+      };
+      Seen[Key] = R.mentions;
+    };
+    for (var $l1 = 0, $end1 = Dms.length - 1; $l1 <= $end1; $l1++) {
+      I = $l1;
+      D = Dms[I];
+      Key = "d:" + D.name;
+      if (!pas.chat_shared.Same(Seen[Key],undefined) && (D.unread > Number(Seen[Key])) && (document.hidden || (pas.chat_shared.S.dm !== D.name))) News.push(window.t("%s sent you a private message",D.name));
+      Seen[Key] = D.unread;
+    };
+    if (News.length === 0) return;
+    if (pas.JS.jsIn("Notification",window) && (Notification.permission === "granted") && document.hidden) {
+      pas.chat_shared.Notify(pas.chat_shared.Site,News.join("\n"))}
+     else News.forEach(function (N, Index, All) {
+      pas.chat_shared.Toast(N,undefined);
+    });
+  };
+  this.Start = function () {
+    var FindAll = null;
+    FindAll = document.getElementById("findall");
+    if (FindAll !== null) {
+      FindAll.hidden = false;
+      FindAll.prepend(window.Side.icon("search"));
+      FindAll.addEventListener("click",function (E) {
+        document.body.classList.remove("menu");
+        pas.chat_shared.Route("/chat-search",true);
+      });
+    };
+    $impl.Groups = Array.of(pas.JS.New(["title","Channels","sigil","#","test",function (R, Index, All) {
+      var Result = false;
+      Result = R.kind === "channel";
+      return Result;
+    }]),pas.JS.New(["title","Benches","sigil","","test",function (R, Index, All) {
+      var Result = false;
+      Result = R.kind === "bench";
+      return Result;
+    }]),pas.JS.New(["title","Shelves","sigil","~","test",function (R, Index, All) {
+      var Result = false;
+      Result = R.kind === "shelf";
+      return Result;
+    }]));
+    pas.chat_shared.Find("#jump",undefined).addEventListener("input",function (E) {
+      $mod.RenderSidebar();
+    });
+    pas.chat_shared.Find("#jump",undefined).addEventListener("keydown",function (E) {
+      var First = null;
+      if (E.key !== "Enter") return;
+      First = pas.chat_shared.Find("#roomlist a.room",undefined);
+      if (First !== null) {
+        pas.chat_shared.Route(window.SiteBase.strip(First.getAttribute("href")),true);
+        E.currentTarget.value = "";
+        $mod.RenderSidebar();
+      };
+    });
+    document.addEventListener("contextmenu",function (E) {
+      var Node = null;
+      var OnArrow = null;
+      Node = E.target.closest(".msg");
+      if ((Node === null) || !Node.menu) return;
+      OnArrow = E.target.closest(".more");
+      if ((OnArrow === null) && (E.shiftKey || !$impl.MenuHere(Node,E.target))) return;
+      E.preventDefault();
+      if (($impl.Hold !== null) && ($impl.Hold.opened === Node)) return;
+      $impl.DropHold();
+      if (OnArrow !== null) {
+        pas.chat_menu.OpenMenu(Node,null)}
+       else pas.chat_menu.OpenMenu(Node,pas.JS.New(["x",E.clientX,"y",E.clientY]));
+    });
+    document.addEventListener("touchstart",function (E) {
+      var Touches = null;
+      var Node = null;
+      var Held = null;
+      $impl.DropHold();
+      Touches = E.touches;
+      if (Touches.length !== 1) return;
+      Node = E.target.closest(".msg");
+      if ((Node === null) || !Node.menu || !$impl.MenuHere(Node,E.target)) return;
+      Held = pas.JS.New(["x",Touches[0].clientX,"y",Touches[0].clientY]);
+      Held.timer = window.setTimeout(function () {
+        Held.opened = Node;
+        pas.chat_menu.OpenMenu(Node,Held);
+      },500);
+      $impl.Hold = Held;
+    },pas.JS.New(["passive",true]));
+    document.addEventListener("touchmove",function (E) {
+      var Touches = null;
+      Touches = E.touches;
+      if (($impl.Hold !== null) && !Boolean($impl.Hold.opened) && (Math.hypot(Touches[0].clientX - $impl.Hold.x,Touches[0].clientY - $impl.Hold.y) > 10)) $impl.DropHold();
+    },pas.JS.New(["passive",true]));
+    document.addEventListener("touchend",function (E) {
+      if (($impl.Hold !== null) && Boolean($impl.Hold.opened) && E.cancelable) E.preventDefault();
+      $impl.DropHold();
+    });
+    document.addEventListener("touchcancel",function (E) {
+      $impl.DropHold();
+    });
+  };
+  $mod.$implcode = function () {
+    $impl.HOLD_MS = 500;
+    $impl.HOLD_SLIP = 10;
+    $impl.Groups = null;
+    $impl.Hold = null;
+    $impl.NoticePath = function (Path) {
+      var Result = undefined;
+      if ((typeof(Path) === "string") && (Path.charAt(0) === "/") && (Path.charAt(1) !== "/") && (Path.charAt(1) !== "\\")) {
+        Result = Path}
+       else Result = "/";
+      return Result;
+    };
+    $impl.RoomMenuItems = function (R) {
+      var Result = null;
+      var Items = null;
+      Items = new Array();
+      if ((pas.chat_shared.Me.name === "") || (R.kind === "shelf")) return Items;
+      if (R.notify !== "none") Items.push(Array.of(window.t("Silence channel"),function () {
+        $impl.SetNotify(R,"none");
+      }));
+      if (R.notify !== "mentions") Items.push(Array.of(window.t("Mentions only"),function () {
+        $impl.SetNotify(R,"mentions");
+      }));
+      if (Boolean(R.notify) && (R.notify !== "all")) Items.push(Array.of(window.t("Notify about everything"),function () {
+        $impl.SetNotify(R,"all");
+      }));
+      Items.push(Array.of(window.t("Leave channel"),function () {
+        $impl.LeaveRoom(R);
+      }));
+      if (R.private && Boolean(R.owner)) Items.push(Array.of(window.t("Delete channel"),function () {
+        $impl.DeleteRoom(R);
+      }));
+      Result = Items;
+      return Result;
+    };
+    $impl.SetNotify = async function (R, Mode) {
+      try {
+        await pas.chat_shared.Post("/api/follow/notify",pas.JS.New(["room",R.slug,"mode",Mode]));
+        R.notify = Mode;
+        $mod.RenderSidebar();
+        if (Mode === "none") {
+          pas.chat_shared.Toast(window.t("%s is silenced.",R.title),undefined)}
+         else if (Mode === "mentions") {
+          pas.chat_shared.Toast(window.t("Only mentions in %s from now on.",R.title),undefined)}
+         else pas.chat_shared.Toast(window.t("%s notifies about everything again.",R.title),undefined);
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
+    };
+    $impl.LeaveRoom = async function (R) {
+      if (R.private && !window.confirm(window.t("Leave %s? Only an invite gets you back in.",R.title))) return;
+      try {
+        await pas.chat_shared.Post("/api/follow",pas.JS.New(["room",R.slug,"on","0"]));
+        pas.chat_shared.S.rooms = pas.chat_shared.S.rooms.filter(function (X, Index, All) {
+          var Result = false;
+          Result = X.slug !== R.slug;
+          return Result;
+        });
+        $mod.RenderSidebar();
+        if ((pas.chat_shared.S.view === "room") && (pas.chat_shared.S.room === R.slug)) {
+          pas.chat_shared.Route("/",true)}
+         else pas.chat_sync.SyncNow(true);
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
+    };
+    $impl.DeleteRoom = async function (R) {
+      var Said = undefined;
+      if (!window.confirm(window.t("Delete %s?\n\nEverything said in it and every file goes, for everyone in it. This cannot be undone.",R.title))) return;
+      try {
+        Said = await pas.chat_shared.Post("/api/room/delete",pas.JS.New(["slug",R.slug]));
+        pas.chat_shared.S.rooms = pas.chat_shared.S.rooms.filter(function (X, Index, All) {
+          var Result = false;
+          Result = X.slug !== R.slug;
+          return Result;
+        });
+        $mod.RenderSidebar();
+        if ((pas.chat_shared.S.view === "room") && (pas.chat_shared.S.room === R.slug)) pas.chat_shared.Route("/",true);
+        if (typeof(Said) === "string") {
+          pas.chat_shared.Toast(Said,undefined)}
+         else pas.chat_shared.Toast(window.t("Channel deleted."),undefined);
+      } catch ($e) {
+        pas.chat_shared.Failed($e);
+      };
+    };
+    $impl.MenuHere = function (Node, Target) {
+      var Result = false;
+      var Marked = null;
+      Marked = window.getSelection();
+      Result = (Target.closest("a, img, pre, code, button, textarea, input") === null) && (Marked.isCollapsed || !Marked.containsNode(Node,true));
+      return Result;
+    };
+    $impl.DropHold = function () {
+      if ($impl.Hold !== null) window.clearTimeout($impl.Hold.timer);
+      $impl.Hold = null;
+    };
+  };
+},["weborworker","chat_menu","chat_sync","chat_panels"]);
+rtl.module("chat_live",["System","JS","Web","chat_shared"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  this.LoadNotices = async function (Fresh) {
+    var A = null;
+    var Known = null;
+    var Items = null;
+    var Unseen = null;
+    var Count = undefined;
+    if (pas.chat_shared.Me.name === "") return;
+    try {
+      A = await pas.chat_shared.Get("/api/notices?unseen=1");
+    } catch ($e) {
+      return;
+    };
+    Known = new Set(pas.chat_shared.Notices.items.map(function (N, Index, All) {
+      var Result = undefined;
+      Result = N.id;
+      return Result;
+    }));
+    Items = A.items;
+    if (!Boolean(Items)) Items = new Array();
+    Unseen = Items.filter(function (N, Index, All) {
+      var Result = false;
+      Result = !N.seen;
+      return Result;
+    });
+    Count = A.unseen;
+    if (!Count) Count = 0;
+    pas.chat_shared.Notices = pas.JS.New(["unseen",Count,"items",Unseen.slice(0,3)]);
+    if (Fresh) Unseen.filter(function (N, Index, All) {
+      var Result = false;
+      Result = !Known.has(N.id);
+      return Result;
+    }).slice(0,3).forEach(function (N, Index, All) {
+      pas.chat_shared.Toast(N.text,undefined);
+    });
+    pas.chat_sidebar.RenderSidebar();
+  };
+  this.ConnectLive = function () {
+    var Ws = null;
+    var Scheme = "";
+    if (!Reflect.has(window,"WebSocket") || (pas.chat_shared.Live.failures > 4)) return;
+    try {
+      if (window.location.protocol === "https:") {
+        Scheme = "wss://"}
+       else Scheme = "ws://";
+      Ws = new WebSocket(Scheme + window.location.host + window.SiteBase.url("/api/live"));
+    } catch ($e) {
+      return;
+    };
+    pas.chat_shared.Live.ws = Ws;
+    Ws.onmessage = function (E) {
+      var Note = undefined;
+      try {
+        Note = JSON.parse(E.data);
+      } catch ($e) {
+        return;
+      };
+      $impl.Heard(Note);
+    };
+    Ws.onclose = function (E) {
+      if (!Boolean(pas.chat_shared.Live.id)) pas.chat_shared.Live.failures = pas.chat_shared.Live.failures + 1;
+      pas.chat_shared.Live.id = "";
+      pas.chat_shared.Live.ws = null;
+      window.setTimeout(function () {
+        $mod.ConnectLive();
+      },pas.chat_shared.Live.wait);
+      pas.chat_shared.Live.wait = Math.min(pas.chat_shared.Live.wait * 2,30000);
+    };
+  };
+  this.Start = function () {
+    window.setInterval(function () {
+      if (Boolean(pas.chat_shared.Live.ws) && (pas.chat_shared.Live.ws.readyState === 1)) pas.chat_shared.Live.ws.send("ping");
+    },25000);
+    document.addEventListener("visibilitychange",function (E) {
+      if (Boolean(pas.chat_shared.Live.ws) && (pas.chat_shared.Live.ws.readyState === 1)) if (document.hidden) {
+        pas.chat_shared.Live.ws.send("hidden")}
+       else pas.chat_shared.Live.ws.send("shown");
+    });
+  };
+  $mod.$implcode = function () {
+    $impl.ReadTimer = 0;
+    $impl.Leaving = false;
+    $impl.LeaveChannel = function (Why) {
+      if ($impl.Leaving) return;
+      $impl.Leaving = true;
+      pas.chat_shared.Toast(Why,undefined);
+      window.setTimeout(function () {
+        window.location.assign(window.SiteBase.url("/"));
+      },2500);
+    };
+    $impl.LeaveIfGone = async function () {
+      var Result = undefined;
+      var Slug = "";
+      var Answer = null;
+      if ((pas.chat_shared.S.view !== "room") || !Boolean(pas.chat_shared.S.info) || !pas.chat_shared.S.info.private) return undefined;
+      Slug = pas.chat_shared.S.room;
+      Answer = await window.fetch("/api/room?slug=" + pas.chat_shared.Enc(Slug));
+      if ((Answer.status !== 404) || (pas.chat_shared.S.view !== "room") || (pas.chat_shared.S.room !== Slug)) return undefined;
+      $impl.LeaveChannel(window.t("You are no longer in #%s.",Slug));
+      Result = undefined;
+      return Result;
+    };
+    $impl.Arrived = function (M) {
+      var Lower = "";
+      var Names = null;
+      var One = null;
+      var P = undefined;
+      var Data = null;
+      Lower = pas.chat_shared.Me.name.toLowerCase();
+      Names = M.names;
+      if (!Boolean(Names)) Names = new Array();
+      M.mentions_me = (pas.chat_shared.Me.name !== "") && Names.some(function (N, Index, All) {
+        var Result = false;
+        Result = N.toLowerCase() === Lower;
+        return Result;
+      });
+      M.ignored = pas.chat_shared.Me.ignores.indexOf(M.uid) >= 0;
+      One = new Array();
+      One.push(M);
+      if (Boolean(M.parent)) {
+        if (pas.chat_shared.S.thread === M.parent) pas.chat_panels.AddThread(One);
+        P = pas.chat_shared.S.messages.get(M.parent);
+        if (P) {
+          Data = P.data;
+          pas.chat_rooms.Upsert(Object.assign(new Object(),Data,pas.JS.New(["replies",Data.replies + 1,"last_reply",M.at,"rev",Data.rev + 1])),pas.chat_shared.Stream,pas.chat_shared.S.messages,false);
+        };
+      } else pas.chat_rooms.AddMessages(One,false);
+      if (!Boolean($impl.ReadTimer) && (pas.chat_shared.Me.name !== "")) $impl.ReadTimer = window.setTimeout(function () {
+        $impl.ReadTimer = 0;
+        pas.chat_shared.FromRing = true;
+        pas.chat_sync.Sync();
+      },4000 + (Math.random() * 6000));
+    };
+    $impl.Heard = function (Note) {
+      var R = undefined;
+      var One = null;
+      if (Note.t === "names") {
+        window.location.reload();
+        return;
+      } else if (Note.t === "hello") {
+        pas.chat_shared.Live.id = Note.id;
+        pas.chat_shared.Live.wait = 1000;
+        pas.chat_shared.Live.failures = 0;
+        pas.chat_sync.SyncNow(true);
+        $mod.LoadNotices(false);
+        $impl.LeaveIfGone().catch(function (Why) {
+          var Result = undefined;
+          return Result;
+        });
+      } else if (Note.t === "notice") {
+        $mod.LoadNotices(true)}
+       else if (Note.t === "room") {
+        if ((Note.room === pas.chat_shared.S.room) && Boolean(Note.m)) {
+          $impl.Arrived(Note.m)}
+         else if (Note.room === pas.chat_shared.S.room) {
+          window.setTimeout(function () {
+            pas.chat_shared.FromRing = true;
+            pas.chat_sync.Sync();
+          },Math.random() * 300)}
+         else {
+          R = pas.chat_shared.S.rooms.find(function (X, Index, All) {
+            var Result = false;
+            Result = X.slug === Note.room;
+            return Result;
+          });
+          if (R) {
+            if (!R.unread) {
+              R.unread = 1;
+              pas.chat_sidebar.RenderSidebar();
+            };
+            pas.chat_sync.SidebarSoon(2000 + (Math.random() * 6000));
+          };
+        };
+      } else if (Note.t === "typing") {
+        if (Note.room === pas.chat_shared.S.room) {
+          One = new Array();
+          One.push(Note.name);
+          pas.chat_rooms.NoteTyping(One);
+        };
+      } else if (Note.t === "dmtyping") {
+        if ((pas.chat_shared.S.view === "dm") && (Note.from === pas.chat_shared.S.dm)) {
+          One = new Array();
+          One.push(Note.from);
+          pas.chat_rooms.NoteTyping(One);
+        };
+      } else if (Note.t === "dmseen") {
+        if ((pas.chat_shared.S.view === "dm") && (Note.from === pas.chat_shared.S.dm)) {
+          pas.chat_shared.S.dmSeen = Note.seen;
+          pas.chat_private.MarkSeen();
+        };
+      } else if (Note.t === "me") {
+        pas.chat_sync.SidebarSoon(300)}
+       else if (Note.t === "gone") {
+        if (Note.room === pas.chat_shared.S.room) $impl.LeaveChannel(window.t("This channel was deleted."));
+        pas.chat_sync.SidebarSoon(300);
+      } else if (Note.t === "dm") {
+        if (Note.gone && (pas.chat_shared.S.view === "dm") && (Note.from === pas.chat_shared.S.dm)) {
+          pas.chat_shared.Route(window.SiteBase.path(),false)}
+         else if (Boolean(Note.deleted) && (pas.chat_shared.S.view === "dm") && (Note.from === pas.chat_shared.S.dm)) {
+          pas.chat_private.DropDm(Note.deleted)}
+         else if (Boolean(Note.edited) && (pas.chat_shared.S.view === "dm") && (Note.from === pas.chat_shared.S.dm)) {
+          pas.chat_private.RefreshDm(Note.edited)}
+         else if ((pas.chat_shared.S.view === "dm") && ((Note.from === pas.chat_shared.S.dm) || (Note.from === pas.chat_shared.Me.name))) {
+          if (Boolean(pas.chat_shared.S.typers[Note.from])) {
+            pas.JS.JSDelete(pas.chat_shared.S.typers,Note.from);
+            pas.chat_rooms.RenderTyping();
+          };
+          pas.chat_private.PollNow();
+        };
+        pas.chat_sync.SidebarSoon(300);
+      };
+    };
+  };
+},["chat_sidebar","chat_rooms","chat_sync","chat_panels","chat_private"]);
+rtl.module("ChatPage",["System"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  $mod.$implcode = function () {
+    $impl.ProfileTools = function (Who, Tools) {
+      var Ignore = null;
+      if ((pas.chat_shared.Me.name !== "") && (pas.chat_shared.Me.name !== Who.name)) {
+        Tools.appendChild(pas.chat_shared.Link("/dm/" + pas.chat_shared.Enc(Who.name),"primary",window.t("Private message")));
+        if (Who.ignored) {
+          Ignore = pas.chat_shared.El("button","",window.t("Stop ignoring"))}
+         else Ignore = pas.chat_shared.El("button","",window.t("Ignore"));
+        Ignore.type = "button";
+        Ignore.title = window.t("Their messages fold away, and their mentions and private messages do not reach you");
+        Ignore.addEventListener("click",async function (E) {
+          var Turn = "";
+          try {
+            if (Who.ignored) {
+              Turn = "0"}
+             else Turn = "1";
+            await pas.chat_shared.Post("/api/ignore",pas.JS.New(["name",Who.name,"on",Turn]));
+            pas.chat_shared.Route(window.SiteBase.path(),false);
+          } catch ($e) {
+            pas.chat_shared.Failed($e);
+          };
+        });
+        Tools.appendChild(Ignore);
+      };
+    };
+    $impl.ProfileShelf = async function (Who, Generation) {
+      var ShelfHead = null;
+      var Empty = null;
+      var Info = null;
+      ShelfHead = pas.chat_shared.El("div","shelfhead",undefined);
+      ShelfHead.append(pas.chat_shared.Icon("shelf"),pas.chat_shared.El("b","",window.t("%s’s shelf",Who.name)),pas.chat_shared.El("span","",window.t("what they put up to stay: things they made, found or want to keep in view")));
+      pas.chat_shared.Find("#card",undefined).appendChild(ShelfHead);
+      Info = null;
+      try {
+        Info = await pas.chat_shared.Get("/api/room?slug=" + pas.chat_shared.Enc("~" + Who.name.toLowerCase()));
+      } catch ($e) {
+      };
+      if ((Generation !== pas.chat_shared.S.generation) || !Boolean(Info)) return;
+      pas.chat_shared.S.view = "room";
+      pas.chat_shared.S.room = Info.slug;
+      pas.chat_shared.S.info = Info;
+      pas.chat_shared.Stream.className = "shelf";
+      await pas.chat_rooms.LoadMessages(Generation);
+      if (!Boolean(pas.chat_shared.S.messages.size)) {
+        Empty = pas.chat_shared.Find(".empty",pas.chat_shared.Stream);
+        if (Boolean(Empty)) {
+          if (pas.chat_shared.Me.name === Who.name) {
+            Empty.replaceWith(pas.chat_shared.El("p","notice empty",window.t("Your shelf is empty. Put something here that should stay: a project, a screenshot, a favorite answer.")))}
+           else Empty.replaceWith(pas.chat_shared.El("p","notice empty",window.t("Nothing on the shelf yet.")));
+        };
+      };
+      if (pas.chat_shared.Me.name === Who.name) {
+        pas.chat_composer.RenderComposer(pas.chat_shared.Find("#composer-area",undefined),0,undefined)}
+       else if (pas.chat_shared.Me.name !== "") pas.chat_shared.Find("#composer-area",undefined).appendChild(pas.chat_shared.El("p","notice",window.t("Reply to anything on the shelf in its thread.")));
+      pas.chat_sync.SyncNow(true);
+    };
+    $impl.Prepare = async function () {
+      if (pas.chat_shared.Me.name === "") try {
+        pas.chat_shared.S.rooms = await pas.chat_shared.Get("/api/rooms");
+      } catch ($e) {
+      };
+    };
+    $impl.StartPart = function () {
+      if ((pas.chat_shared.Me.name !== "") && pas.JS.jsIn("Notification",window) && (Notification.permission === "granted") && pas.JS.jsIn("PushManager",window)) pas.chat_shared.C.subscribePush();
+      pas.chat_shared.C.offerNotifications();
+      pas.chat_live.ConnectLive();
+    };
+    $impl.ViewPart = async function (View, Target, Thread) {
+      var Result = false;
+      if (View === "room") {
+        await pas.chat_rooms.OpenRoom(Target,Thread)}
+       else if (View === "dm") {
+        await pas.chat_private.OpenDm(Target)}
+       else if (View === "search") {
+        pas.chat_panels.OpenSearchAll()}
+       else return false;
+      Result = true;
+      return Result;
+    };
+    $impl.OpenPart = async function (Parts) {
+      var Result = false;
+      var List = null;
+      var First = null;
+      var Root = 0.0;
+      if (pas.chat_shared.Same(Parts[1],"p")) {
+        await pas.chat_rooms.OpenRoom(Parts[2],0)}
+       else if (pas.chat_shared.Same(Parts[1],"m")) {
+        List = await pas.chat_shared.Get("/api/thread?id=" + pas.chat_shared.Enc(Parts[2]));
+        if (!Boolean(List.length)) throw new Error(window.t("That message is gone."));
+        First = List[0];
+        if (Boolean(First.parent)) {
+          Root = First.parent}
+         else Root = First.id;
+        await pas.chat_rooms.OpenRoom(First.room,Root);
+      } else if (pas.chat_shared.Same(Parts[1],"dm")) {
+        await pas.chat_private.OpenDm(Parts[2])}
+       else if (pas.chat_shared.Same(Parts[1],"chat-search")) {
+        pas.chat_panels.OpenSearchAll()}
+       else return false;
+      Result = true;
+      return Result;
+    };
+  };
+  $mod.$init = function () {
+    pas.chat_shared.Setup();
+    pas.chat_shared.Extras.accountLinks.push(pas.JS.New(["href","/irc","title",window.t("Use your IRC client")]));
+    pas.chat_sidebar.Start();
+    pas.chat_rooms.Start();
+    pas.chat_menu.Start();
+    pas.chat_sync.Start();
+    pas.chat_live.Start();
+    pas.chat_composer.Start();
+    pas.chat_shared.C.parts.push(pas.JS.New(["prepare",$impl.Prepare,"sidebar",pas.chat_sidebar.RenderSidebar,"start",$impl.StartPart,"sync",pas.chat_sync.SyncNow,"view",$impl.ViewPart,"open",$impl.OpenPart,"profileTools",$impl.ProfileTools,"profile",$impl.ProfileShelf]));
+  };
+},["JS","Web","chat_shared","chat_sidebar","chat_rooms","chat_menu","chat_sync","chat_live","chat_panels","chat_composer","chat_private"]);
 
-  // What the member put up to stay, under the profile: a room of their own
-  async function profileShelf(who, generation) {
-    const shelfHead = el('div', 'shelfhead');
-    shelfHead.append(icon('shelf'), el('b', '', t('%s’s shelf', who.name)),
-      el('span', '', t('what they put up to stay: things they made, found or want to keep in view')));
-    $('#card').appendChild(shelfHead);
-    let info = null;
-    try { info = await get('/api/room?slug=' + enc('~' + who.name.toLowerCase())); } catch (err) { }
-    if (generation !== S.generation || !info) return;
-    S.view = 'room';
-    S.room = info.slug;
-    S.info = info;
-    stream.className = 'shelf';
-    await loadMessages(generation);
-    if (!S.messages.size) {
-      const empty = $('.empty', stream);
-      if (empty) empty.replaceWith(el('p', 'notice empty', Me.name === who.name ?
-        t('Your shelf is empty. Put something here that should stay: a project, a screenshot, a favorite answer.') :
-        t('Nothing on the shelf yet.')));
-    }
-    if (Me.name === who.name) renderComposer($('#composer-area'), 0);
-    else if (Me.name) $('#composer-area').appendChild(el('p', 'notice', t('Reply to anything on the shelf in its thread.')));
-    syncNow(true);
-  }
-
-  // ------------------------------------------------------------------ start
-
-  C.parts.push({
-    prepare: async function () {
-      if (!Me.name) try { S.rooms = await get('/api/rooms'); } catch (err) { }
-    },
-    sidebar: renderSidebar,
-    start: function () {
-      if (Me.name && 'Notification' in window && Notification.permission === 'granted' && 'PushManager' in window) C.subscribePush();
-      C.offerNotifications();
-      connectLive();
-    },
-    sync: syncNow,
-    view: async function (view, target, thread) {
-      if (view === 'room') await openRoom(target, thread);
-      else if (view === 'dm') await openDm(target);
-      else if (view === 'search') openSearchAll();
-      else return false;
-      return true;
-    },
-    open: async function (parts) {
-      if (parts[1] === 'p') await openRoom(parts[2], 0);
-      else if (parts[1] === 'm') {
-        const list = await get('/api/thread?id=' + enc(parts[2]));
-        if (!list.length) throw new Error(t('That message is gone.'));
-        const root = list[0].parent ? list[0].parent : list[0].id;
-        await openRoom(list[0].room, root);
-      } else if (parts[1] === 'dm') await openDm(parts[2]);
-      else if (parts[1] === 'chat-search') openSearchAll();
-      else return false;
-      return true;
-    },
-    profileTools: profileTools,
-    profile: profileShelf
-  });
-})();
+rtl.run('ChatPage');
+}

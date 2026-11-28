@@ -1,33 +1,82 @@
-// Runs before the page draws, so a dark page never flashes light.
-// auto follows the system; light and dark are the member's choice.
-(function () {
-  let theme = 'auto';
-  try { theme = localStorage.getItem('theme') || 'auto'; } catch (e) { }
-  const valid = function (value) { return ['auto', 'light', 'dark'].includes(value) ? value : 'auto'; };
-  function apply(value) {
-    theme = valid(value);
-    if (theme === 'auto') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = theme;
-    document.querySelectorAll('[data-theme-picker]').forEach(function (picker) { picker.value = theme; });
-    window.dispatchEvent(new Event('themechange'));
-  }
-  window.Theme = {get: function () { return theme; }, set: function (value) {
-    apply(value);
-    try { localStorage.setItem('theme', theme); } catch (e) { }
-  }};
-  apply(theme);
-  window.addEventListener('storage', function (event) {
-    if (event.key === 'theme' || event.key === null) {
-      let saved = 'auto';
-      try { saved = localStorage.getItem('theme') || 'auto'; } catch (e) { }
-      apply(saved);
-    }
-  });
-  document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('[data-theme-picker]').forEach(function (picker) {
-      picker.value = theme;
-      picker.closest('.theme-choice').hidden = false;
-      picker.addEventListener('change', function () { Theme.set(picker.value); });
-    });
-  });
-})();
+if (!pas.ThemePage) {
+rtl.module("ThemePage",["System","JS","Web"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  $mod.$implcode = function () {
+    $impl.Theme = "";
+    $impl.Stored = function () {
+      var Result = "";
+      Result = "auto";
+      try {
+        Result = window.localStorage.getItem("theme");
+        if (!Boolean(Result)) Result = "auto";
+      } catch ($e) {
+      };
+      return Result;
+    };
+    $impl.Valid = function (Value) {
+      var Result = "";
+      if ((new Array("auto","light","dark")).includes(Value)) {
+        Result = "" + Value}
+       else Result = "auto";
+      return Result;
+    };
+    $impl.Apply = function (Value) {
+      var Pickers = null;
+      var I = 0;
+      $impl.Theme = $impl.Valid(Value);
+      if ($impl.Theme === "auto") {
+        pas.JS.JSDelete(document.documentElement.dataset,"theme")}
+       else document.documentElement.dataset["theme"] = $impl.Theme;
+      Pickers = document.querySelectorAll("[data-theme-picker]");
+      for (var $l = 0, $end = Pickers.length - 1; $l <= $end; $l++) {
+        I = $l;
+        Pickers.item(I).value = $impl.Theme;
+      };
+      window.dispatchEvent(new Event("themechange"));
+    };
+    $impl.GetTheme = function () {
+      var Result = "";
+      Result = $impl.Theme;
+      return Result;
+    };
+    $impl.SetTheme = function (Value) {
+      $impl.Apply(Value);
+      try {
+        window.localStorage.setItem("theme",$impl.Theme);
+      } catch ($e) {
+      };
+    };
+    $impl.Show = function (Picker) {
+      Picker.value = $impl.Theme;
+      Picker.closest(".theme-choice").hidden = false;
+      Picker.addEventListener("change",function (E) {
+        Theme.set(Picker.value);
+      });
+    };
+    $impl.Start = function () {
+      $impl.Theme = $impl.Stored();
+      window["Theme"] = pas.JS.New(["get",$impl.GetTheme,"set",$impl.SetTheme]);
+      $impl.Apply($impl.Theme);
+      window.addEventListener("storage",function (E) {
+        if ((E.key === "theme") || pas.JS.isNull(E.key)) $impl.Apply($impl.Stored());
+      });
+      document.addEventListener("DOMContentLoaded",function (E) {
+        var Pickers = null;
+        var I = 0;
+        Pickers = document.querySelectorAll("[data-theme-picker]");
+        for (var $l = 0, $end = Pickers.length - 1; $l <= $end; $l++) {
+          I = $l;
+          $impl.Show(Pickers.item(I));
+        };
+      });
+    };
+  };
+  $mod.$init = function () {
+    $impl.Start();
+  };
+},["PageKit"]);
+
+rtl.run('ThemePage');
+}

@@ -151,6 +151,13 @@ under `site/static` and classes to style by:
 PartPage(ARequest, Me, Title, Html, Side, 'notes.css', 'notes.js', 'notes-body', 'notes-main')
 ```
 
+A module's script can be plain JavaScript in `site/static`. Exedra's own
+scripts are written in Pascal and compiled with pas2js (`src/pages`,
+see CODE-MAP.md), and a module's may be too: a unit there, named in
+`scripts.list`, is built with the rest. Either way it reaches the
+site's names through `window` (`t`, `Site`, `Side` and the rest) the
+same way.
+
 A module that wants a page of a different shape brings its own template
 in `site/templates` and fills it with `FillTemplate('name', [...])`, as
 the forum and the wiki do.

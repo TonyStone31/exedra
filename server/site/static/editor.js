@@ -1,840 +1,1421 @@
-// Shared text editor with a preview from the module's renderer. Text stays
-// as typed except for completed :keyword: emoji. Editor.attach options and
-// the returned editor are in docs/CODE-MAP.md. The plain form still works
-// where the module supports it.
-(function () {
-  'use strict';
-  const t = window.t || function (s) { return s; };
-  const el = function (tag, cls, text) {
-    const e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  };
-  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const mod = mac ? '⌘' : 'Ctrl+';
-  const shiftKey = mac ? '⇧' : 'Shift+';
-  const svg = function (inner) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + inner + '</svg>'; };
-
-  let made = 0;
-
-  function attach(box, options) {
-    if (box.editor) return box.editor;
-    const opts = options || {};
-    const form = box.closest('form');
-    // named on a new code block; with none, the site's own setting says how such a block is colored
-    const language = opts.language || '';
-
-    const editor = {box: box, form: form, el: el, svg: svg, replace: replace, wrap: wrap, lines: lines, prefix: prefix, pop: pop,
-      closePop: closePop, say: say, tool: tool, gap: gap, upload: upload, choose: choose};
-
-    // ---- editing the text, so the browser's undo still works
-
-    function replace(from, to, text, selectFrom, selectTo) {
-      box.focus();
-      box.setSelectionRange(from, to);
-      let done = false;
-      try { done = document.execCommand('insertText', false, text); } catch (e) { done = false; }
-      if (!done) box.setRangeText(text, from, to, 'end');
-      const at = from + (selectFrom === undefined ? text.length : selectFrom);
-      box.setSelectionRange(at, from + (selectTo === undefined ? text.length : selectTo));
-      box.dispatchEvent(new Event('input', {bubbles: true}));
-    }
-
-    // the selected words between two marks, or the marks around a placeholder;
-    // the same marks again take them off
-    function wrap(before, after, placeholder) {
-      const a = box.selectionStart, b = box.selectionEnd, v = box.value;
-      const inner = v.slice(a, b);
-      if (v.slice(a - before.length, a) === before && v.slice(b, b + after.length) === after) {
-        replace(a - before.length, b + after.length, inner, 0, inner.length);
-        return;
-      }
-      const words = inner || placeholder;
-      replace(a, b, before + words + after, before.length, before.length + words.length);
-    }
-
-    // the whole lines the selection touches
-    function lines() {
-      const v = box.value;
-      const from = v.lastIndexOf('\n', box.selectionStart - 1) + 1;
-      let to = v.indexOf('\n', box.selectionEnd - (box.selectionEnd > box.selectionStart && v[box.selectionEnd - 1] === '\n' ? 1 : 0));
-      if (to < 0) to = v.length;
-      return {from: from, to: to, text: v.slice(from, to)};
-    }
-
-    // a mark at the start of each line (a list, a quote); taken off when every line has it
-    function prefix(make, test) {
-      const l = lines();
-      const rows = l.text.split('\n');
-      const all = rows.every(function (r) { return test.test(r); });
-      const out = rows.map(function (r, i) { return all ? r.replace(test, function (m, indent) { return typeof indent === 'string' ? indent : ''; }) : make(i) + r.replace(/^(\s*)([-*+]\s+|\d+[.)]\s+|>\s?)/, '$1'); });
-      replace(l.from, l.to, out.join('\n'), 0, out.join('\n').length);
-    }
-
-    function code() {
-      const a = box.selectionStart, b = box.selectionEnd;
-      const inner = box.value.slice(a, b);
-      if (inner.indexOf('\n') < 0) { wrap('`', '`', t('code')); return; }
-      // a block, its language named so it is colored
-      const block = '```' + language + '\n' + inner.replace(/\n$/, '') + '\n```\n';
-      replace(a, b, block, 3, 3 + language.length);
-    }
-
-    function link() {
-      const a = box.selectionStart, b = box.selectionEnd;
-      const words = box.value.slice(a, b) || t('words');
-      const text = '[' + words + '](https://)';
-      replace(a, b, text, words.length + 3, text.length - 1);
-    }
-
-    function table(columns, rows) {
-      const cell = function (i) { return ' ' + t('Column') + ' ' + (i + 1) + ' '; };
-      let text = '|';
-      for (let i = 0; i < columns; i++) text += cell(i) + '|';
-      text += '\n|';
-      for (let i = 0; i < columns; i++) text += ' --- |';
-      for (let r = 0; r < rows - 1; r++) {
-        text += '\n|';
-        for (let i = 0; i < columns; i++) text += '   |';
-      }
-      const a = box.selectionStart, v = box.value;
-      // a table needs a blank line before it
-      const lead = a === 0 || v.slice(a - 2, a) === '\n\n' ? '' : (v[a - 1] === '\n' ? '\n' : '\n\n');
-      replace(a, box.selectionEnd, lead + text + '\n', lead.length + 2, lead.length + 2 + cell(0).length - 2);
-    }
-
-    // ---- a small box under a button: the heading menu, the table grid, a part's own finder
-
-    let open = null;
-    function closePop() { if (open) { open.remove(); open = null; } }
-    document.addEventListener('pointerdown', function (e) { if (open && !open.contains(e.target) && !e.target.closest('.editor-tools, .editor-side')) closePop(); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && open) { closePop(); box.focus(); } });
-    function pop(button) {
-      closePop();
-      open = el('div', 'editor-tools-pop');
-      button.after(open);
-      // under its own button, but never past the right edge of the bar
-      const card = open;
-      requestAnimationFrame(function () {
-        const room = button.parentElement.clientWidth;
-        card.style.left = Math.max(0, Math.min(button.offsetLeft, room - card.offsetWidth)) + 'px';
-      });
-      return open;
-    }
-
-    function tableGrid(button) {
-      const card = pop(button);
-      const size = el('p', 'editor-tools-size', '');
-      const grid = el('div', 'editor-tools-grid');
-      for (let r = 1; r <= 6; r++) {
-        for (let c = 1; c <= 6; c++) {
-          const cell = el('button');
-          cell.type = 'button';
-          cell.dataset.r = r;
-          cell.dataset.c = c;
-          cell.setAttribute('aria-label', t('%s table', c + ' × ' + r));
-          cell.addEventListener('pointerenter', function () {
-            for (const x of grid.children) x.classList.toggle('on', +x.dataset.r <= r && +x.dataset.c <= c);
-            size.textContent = t('%s table', c + ' × ' + r);
-          });
-          cell.addEventListener('click', function () { closePop(); table(c, r); });
-          grid.appendChild(cell);
-        }
-      }
-      card.append(grid, size);
-    }
-
-    // ---- headings: a short menu, as GitLab has; # is left for the page's own title
-
-    function setHeading(level) {
-      const l = lines();
-      const rest = l.text.replace(/^#{1,6}\s+/, '');
-      replace(l.from, l.to, level ? '#'.repeat(level) + ' ' + rest : rest);
-    }
-
-    function headingMenu(button) {
-      const card = pop(button);
-      card.classList.add('editor-tools-menu');
-      const now = (/^(#{1,6})\s+/.exec(lines().text) || ['', ''])[1].length;
-      for (const [level, words] of [[2, t('Heading')], [3, t('Subheading')], [4, t('Small heading')], [0, t('Normal text')]]) {
-        const b = el('button', 'editor-tools-h' + level, words);
-        b.type = 'button';
-        if (level === now) b.setAttribute('aria-current', 'true');
-        b.addEventListener('click', function () { closePop(); setHeading(level); });
-        card.appendChild(b);
-      }
-      card.querySelector('button').focus();
-    }
-
-    // ---- pictures: dropped on the text, pasted into it or chosen; each stands
-    // as a line saying it is on its way until the part has taken it
-
-    const chooser = el('input');
-    chooser.type = 'file';
-    chooser.accept = opts.pictures ? opts.pictures.accept : '';
-    chooser.multiple = true;
-    chooser.hidden = true;
-    if (form) form.appendChild(chooser);
-    chooser.addEventListener('change', function () { upload(Array.from(chooser.files)); chooser.value = ''; });
-    // the kinds asked for are read when the chooser opens, so one input serves both links
-    function choose(accept) {
-      chooser.accept = typeof accept === 'string' ? accept : (opts.pictures ? opts.pictures.accept : '');
-      chooser.click();
-    }
-    // A camera photo that can go up smaller: a row over the foot asks which,
-    // with both sizes.  One the part would refuse as it is goes smaller unasked.
-    const askRow = el('div', 'editor-ask');
-    function whichSize(f, small) {
-      if (opts.pictures.refuses && opts.pictures.refuses(f)) return Promise.resolve(small);
-      return new Promise(function (done) {
-        const mb = function (file) { return (file.size / 1048576).toFixed(1) + ' MB'; };
-        const row = el('p', '', f.name || t('picture'));
-        const less = el('button', '', t('Smaller') + ' · ' + mb(small));
-        const all = el('button', '', t('Full size') + ' · ' + mb(f));
-        less.type = all.type = 'button';
-        less.addEventListener('click', function () { row.remove(); done(small); });
-        all.addEventListener('click', function () { row.remove(); done(f); });
-        row.append(less, all);
-        askRow.appendChild(row);
-      });
-    }
-
-    let pending = 0;
-    async function upload(list) {
-      if (!opts.pictures) return;
-      if (window.Keys) {
-        // counted as on its way while it asks, so the form is not sent without it
-        pending++;
+if (!pas.EditorPage) {
+rtl.module("EditorPage",["System"],function () {
+  "use strict";
+  var $mod = this;
+  var $impl = $mod.$impl;
+  $mod.$implcode = function () {
+    $impl.CaretLook = ["boxSizing","width","fontFamily","fontSize","fontWeight","fontStyle","lineHeight","letterSpacing","wordSpacing","tabSize","textIndent","paddingTop","paddingRight","paddingBottom","paddingLeft","borderTopWidth","borderRightWidth","borderBottomWidth","borderLeftWidth"];
+    $impl.MirrorLook = ["fontFamily","fontSize","fontWeight","lineHeight","letterSpacing","tabSize","paddingTop","paddingRight","paddingBottom","paddingLeft"];
+    $impl.T = null;
+    $impl.Mac = false;
+    $impl.ModKey = "";
+    $impl.ShiftKey = "";
+    $impl.Made = 0;
+    $impl.El = function (Tag, Cls, Text) {
+      var Result = null;
+      Result = document.createElement(Tag);
+      if (Cls) Result.className = "" + Cls;
+      if (typeof(Text) !== "undefined") Result["textContent"] = Text;
+      return Result;
+    };
+    $impl.Svg = function (Inner) {
+      var Result = "";
+      Result = '<svg viewBox="0 0 24 24" aria-hidden="true">' + Inner + "</svg>";
+      return Result;
+    };
+    $impl.Either = function (A, B) {
+      var Result = undefined;
+      if (A) {
+        Result = A}
+       else Result = B;
+      return Result;
+    };
+    $impl.KeepIndent = function (M, Indent) {
+      var Result = "";
+      if (typeof(Indent) === "string") {
+        Result = "" + Indent}
+       else Result = "";
+      return Result;
+    };
+    $impl.Attach = function (Box, Options) {
+      var Result = null;
+      var Opts = null;
+      var Pictures = null;
+      var Form = null;
+      var Language = "";
+      var Editor = null;
+      var GroupWords = null;
+      var Tabs = null;
+      var Open = null;
+      var AskRow = null;
+      var Shell = null;
+      var Bar = null;
+      var Tools = null;
+      var Side = null;
+      var Suggest = null;
+      var Modes = null;
+      var Whole = null;
+      var Panes = null;
+      var View = null;
+      var Foot = null;
+      var News = null;
+      var Hint = null;
+      var AttachLink = null;
+      var Gallery = null;
+      var HelpButton = null;
+      var Help = null;
+      var LabelEl = null;
+      var SendRow = null;
+      var Sheet = null;
+      var Row = null;
+      var Cell = null;
+      var KeysLine = null;
+      var More = null;
+      var Guide = null;
+      var Mirror = null;
+      var Chooser = null;
+      var Pending = 0;
+      var Chosen = 0;
+      var TypedFrom = 0;
+      var TypedAt = 0;
+      var NewsTimer = 0;
+      var Timer = 0;
+      var Again = 0;
+      var I = 0;
+      var EmojiAsked = null;
+      var Choices = null;
+      var Cheats = null;
+      var Pair = null;
+      var Eager = false;
+      var Stale = false;
+      var Saving = false;
+      var Narrow = null;
+      var StoreKey = "";
+      var Mode = "";
+      var First = "";
+      var Icon = "";
+      var Asking = null;
+      var Ties = [];
+      var Part = undefined;
+      var Stored = undefined;
+      function Fresh() {
+        if (Opts["pictures"]) {
+          Pictures = Opts["pictures"]}
+         else Pictures = null;
+      };
+      function Replace(From, To_, Text, SelectFrom, SelectTo) {
+        var Done = false;
+        var At = 0.0;
+        var Last = 0.0;
+        Box.focus();
+        Box.setSelectionRange(From,To_);
+        Done = false;
         try {
-          list = await Promise.all(list.map(async function (f) {
-            const small = await Keys.smaller(f);
-            return small === f ? f : whichSize(f, small);
-          }));
+          Done = document.execCommand("insertText",false,Text);
+        } catch ($e) {
+          Done = false;
+        };
+        if (!Done) Box.setRangeText(Text,From,To_,"end");
+        if (typeof(SelectFrom) === "undefined") {
+          At = From + Text.length}
+         else At = From + Number(SelectFrom);
+        if (typeof(SelectTo) === "undefined") {
+          Last = From + Text.length}
+         else Last = From + Number(SelectTo);
+        Box.setSelectionRange(At,Last);
+        Box.dispatchEvent(new Event("input",pas.JS.New(["bubbles",true])));
+      };
+      function Wrap(Before, After, Placeholder) {
+        var A = 0;
+        var B = 0;
+        var V = "";
+        var Inner = "";
+        var Words = "";
+        A = Box.selectionStart;
+        B = Box.selectionEnd;
+        V = Box.value;
+        Inner = V.slice(A,B);
+        if ((V.slice(A - Before.length,A) === Before) && (V.slice(B,B + After.length) === After)) {
+          Replace(A - Before.length,B + After.length,Inner,0,Inner.length);
+          return;
+        };
+        if (Inner !== "") {
+          Words = Inner}
+         else Words = Placeholder;
+        Replace(A,B,Before + Words + After,Before.length,Before.length + Words.length);
+      };
+      function Lines() {
+        var Result = null;
+        var V = "";
+        var From = 0;
+        var To_ = 0;
+        var Back = 0;
+        V = Box.value;
+        From = V.lastIndexOf("\n",Box.selectionStart - 1) + 1;
+        Back = 0;
+        if ((Box.selectionEnd > Box.selectionStart) && (V.charAt(Box.selectionEnd - 1) === "\n")) Back = 1;
+        To_ = V.indexOf("\n",Box.selectionEnd - Back);
+        if (To_ < 0) To_ = V.length;
+        Result = pas.JS.New(["from",From,"to",To_,"text",V.slice(From,To_)]);
+        return Result;
+      };
+      function Prefix(Make, Test) {
+        var L = null;
+        var Rows = [];
+        var Out_ = null;
+        var All = false;
+        var N = 0;
+        var Joined = "";
+        L = Lines();
+        Rows = L.text.split("\n");
+        All = true;
+        for (var $l = 0, $end = rtl.length(Rows) - 1; $l <= $end; $l++) {
+          N = $l;
+          if (!Test.test(Rows[N])) {
+            All = false;
+            break;
+          };
+        };
+        Out_ = new Array();
+        for (var $l1 = 0, $end1 = rtl.length(Rows) - 1; $l1 <= $end1; $l1++) {
+          N = $l1;
+          if (All) {
+            Out_.push(Rows[N].replace(Test,$impl.KeepIndent))}
+           else Out_.push(Make(N) + Rows[N].replace(new RegExp("^(\\s*)([-*+]\\s+|\\d+[.)]\\s+|>\\s?)"),"$1"));
+        };
+        Joined = Out_.join("\n");
+        Replace(L.from,L.to,Joined,0,Joined.length);
+      };
+      function Code() {
+        var A = 0;
+        var B = 0;
+        var Inner = "";
+        var Block = "";
+        A = Box.selectionStart;
+        B = Box.selectionEnd;
+        Inner = Box.value.slice(A,B);
+        if (Inner.indexOf("\n",0) < 0) {
+          Wrap("`","`",$impl.T("code"));
+          return;
+        };
+        Block = "```" + Language + "\n" + Inner.replace(new RegExp("\\n$"),"") + "\n" + "```" + "\n";
+        Replace(A,B,Block,3,3 + Language.length);
+      };
+      function Link() {
+        var A = 0;
+        var B = 0;
+        var Words = "";
+        var Text = "";
+        A = Box.selectionStart;
+        B = Box.selectionEnd;
+        Words = Box.value.slice(A,B);
+        if (Words === "") Words = $impl.T("words");
+        Text = "[" + Words + "](https://)";
+        Replace(A,B,Text,Words.length + 3,Text.length - 1);
+      };
+      function Table(Columns, Rows) {
+        var Text = "";
+        var V = "";
+        var Lead = "";
+        var N = 0;
+        var R = 0;
+        var A = 0;
+        function Cell$1(N) {
+          var Result = "";
+          Result = " " + $impl.T("Column") + " " + ("" + (N + 1)) + " ";
+          return Result;
+        };
+        Text = "|";
+        for (var $l = 0, $end = Columns - 1; $l <= $end; $l++) {
+          N = $l;
+          Text = Text + Cell$1(N) + "|";
+        };
+        Text = Text + "\n" + "|";
+        for (var $l1 = 0, $end1 = Columns - 1; $l1 <= $end1; $l1++) {
+          N = $l1;
+          Text = Text + " --- |";
+        };
+        for (var $l2 = 0, $end2 = Rows - 2; $l2 <= $end2; $l2++) {
+          R = $l2;
+          Text = Text + "\n" + "|";
+          for (var $l3 = 0, $end3 = Columns - 1; $l3 <= $end3; $l3++) {
+            N = $l3;
+            Text = Text + "   |";
+          };
+        };
+        A = Box.selectionStart;
+        V = Box.value;
+        if ((A === 0) || (V.slice(A - 2,A) === "\n\n")) {
+          Lead = ""}
+         else if (V.charAt(A - 1) === "\n") {
+          Lead = "\n"}
+         else Lead = "\n\n";
+        Replace(A,Box.selectionEnd,Lead + Text + "\n",Lead.length + 2,(Lead.length + 2 + Cell$1(0).length) - 2);
+      };
+      function ClosePop() {
+        if (Open !== null) {
+          Open.remove();
+          Open = null;
+        };
+      };
+      function Pop(Button) {
+        var Result = null;
+        var Card = null;
+        ClosePop();
+        Open = $impl.El("div","editor-tools-pop",undefined);
+        Button.after(Open);
+        Card = Open;
+        window.requestAnimationFrame(function (Time) {
+          var Room = 0.0;
+          Room = Button.parentElement.clientWidth;
+          Card.style["left"] = "" + Math.max(0,Math.min(Button.offsetLeft,Room - Card.offsetWidth)) + "px";
+        });
+        Result = Open;
+        return Result;
+      };
+      function TableGrid(Button) {
+        var Card = null;
+        var Size = null;
+        var Grid = null;
+        var R = 0;
+        var C = 0;
+        function Add(R, C) {
+          var Cell = null;
+          Cell = $impl.El("button",undefined,undefined);
+          Cell.type = "button";
+          Cell.dataset["r"] = "" + R;
+          Cell.dataset["c"] = "" + C;
+          Cell.setAttribute("aria-label",$impl.T("%s table","" + C + " × " + ("" + R)));
+          Cell.addEventListener("pointerenter",function (E) {
+            var X = undefined;
+            for (var $in = Grid.children, $l = 0, $end = rtl.length($in) - 1; $l <= $end; $l++) {
+              X = $in[$l];
+              X.classList.toggle("on",(Number(X.dataset["r"]) <= R) && (Number(X.dataset["c"]) <= C));
+            };
+            Size.textContent = $impl.T("%s table","" + C + " × " + ("" + R));
+          });
+          Cell.addEventListener("click",function (E) {
+            ClosePop();
+            Table(C,R);
+          });
+          Grid.appendChild(Cell);
+        };
+        Card = Pop(Button);
+        Size = $impl.El("p","editor-tools-size","");
+        Grid = $impl.El("div","editor-tools-grid",undefined);
+        for (R = 1; R <= 6; R++) for (C = 1; C <= 6; C++) Add(R,C);
+        Card.append(Grid,Size);
+      };
+      function SetHeading(Level) {
+        var L = null;
+        var Rest = "";
+        L = Lines();
+        Rest = L.text.replace(new RegExp("^#{1,6}\\s+"),"");
+        if (Level !== 0) {
+          Replace(L.from,L.to,"#".repeat(Level) + " " + Rest,undefined,undefined)}
+         else Replace(L.from,L.to,Rest,undefined,undefined);
+      };
+      function HeadingMenu(Button) {
+        var Card = null;
+        var Now = 0;
+        var Found = [];
+        function Add(Level, Words) {
+          var B = null;
+          B = $impl.El("button","editor-tools-h" + ("" + Level),Words);
+          B.type = "button";
+          if (Level === Now) B.setAttribute("aria-current","true");
+          B.addEventListener("click",function (E) {
+            ClosePop();
+            SetHeading(Level);
+          });
+          Card.appendChild(B);
+        };
+        Card = Pop(Button);
+        Card.classList.add("editor-tools-menu");
+        Found = (new RegExp("^(#{1,6})\\s+")).exec(Lines().text);
+        if (rtl.length(Found) > 0) {
+          Now = Found[1].length}
+         else Now = 0;
+        Add(2,$impl.T("Heading"));
+        Add(3,$impl.T("Subheading"));
+        Add(4,$impl.T("Small heading"));
+        Add(0,$impl.T("Normal text"));
+        Card.querySelector("button").focus();
+      };
+      function Choose(Accept) {
+        Fresh();
+        if (typeof(Accept) === "string") {
+          Chooser["accept"] = Accept}
+         else if (Pictures !== null) {
+          Chooser["accept"] = Pictures.accept}
+         else Chooser.accept = "";
+        Chooser.click();
+      };
+      function WhichSize(F, Small) {
+        var Result = null;
+        function Mb(Sized) {
+          var Result = "";
+          Result = ((Sized.size / 1048576)).toFixed(1) + " MB";
+          return Result;
+        };
+        Fresh();
+        if (Boolean(Pictures["refuses"]) && Boolean(Pictures.refuses(F))) return Promise.resolve(Small);
+        Result = new Promise(function (Done, Fail) {
+          var Row = null;
+          var Less = null;
+          var All = null;
+          Row = $impl.El("p","",$impl.Either(F.name,$impl.T("picture")));
+          Less = $impl.El("button","",$impl.T("Smaller") + " · " + Mb(Small));
+          All = $impl.El("button","",$impl.T("Full size") + " · " + Mb(F));
+          All.type = "button";
+          Less.type = "button";
+          Less.addEventListener("click",function (E) {
+            Row.remove();
+            Done(Small);
+          });
+          All.addEventListener("click",function (E) {
+            Row.remove();
+            Done(F);
+          });
+          Row.append(Less,All);
+          AskRow.appendChild(Row);
+        });
+        return Result;
+      };
+      async function Sized(F) {
+        var Result = undefined;
+        var Small = undefined;
+        Small = await window.Keys.smaller(F);
+        if (Small == F) {
+          Result = F}
+         else Result = WhichSize(F,Small);
+        return Result;
+      };
+      async function Send(F, Name, Mark) {
+        var Put = "";
+        var Done = null;
+        var At = 0;
+        var End_ = 0;
+        var KeepA = 0;
+        var KeepB = 0;
+        var Shift = 0;
+        function Fix(X) {
+          var Result = 0;
+          if (X > At) {
+            Result = Math.max(At,X + Shift)}
+           else Result = X;
+          return Result;
+        };
+        Pending += 1;
+        Busy();
+        Put = "";
+        try {
+          try {
+            Fresh();
+            Done = await Pictures.send(F,Name);
+            if (Done["put"]) {
+              Put = "" + Done["put"]}
+             else Put = "";
+            if (Done["words"]) Say(Done["words"],undefined);
+          } catch ($e) {
+            Say($impl.Either($e["message"],$impl.T("The picture could not be uploaded.")),true);
+          };
         } finally {
-          pending--;
-        }
-      }
-      for (const f of list) {
-        // the part says what it takes; left to itself the editor takes pictures
-        const refusal = opts.pictures.refuses ? opts.pictures.refuses(f)
-          : (opts.pictures.types.test(f.type) ? '' : t('Only pictures can be added: PNG, JPEG, GIF or WebP. %s is not one.', f.name || ''));
-        if (refusal) {
-          say(refusal, true);
-          continue;
-        }
-        // a pasted screenshot has no useful name of its own
-        const name = !f.name || /^image\.\w+$/i.test(f.name) ? 'Screenshot ' + new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-') + '.' + f.type.split('/')[1].replace('jpeg', 'jpg') : f.name;
-        const mark = '[' + t('Uploading %s…', name) + ']';
-        const a = box.selectionStart, v = box.value;
-        const lead = a === 0 || v[a - 1] === '\n' ? '' : '\n';
-        replace(a, box.selectionEnd, lead + mark + '\n');
-        send(f, name, mark);
-      }
-    }
-
-    async function send(f, name, mark) {
-      pending++;
-      busy();
-      let put = '';
-      try {
-        const done = await opts.pictures.send(f, name);
-        put = done.put || '';
-        if (done.words) say(done.words);
-      } catch (e) {
-        say(e.message || t('The picture could not be uploaded.'), true);
-      } finally {
-        pending--;
-        busy();
-      }
-      const at = box.value.indexOf(mark);
-      if (at < 0) return;
-      const end = at + mark.length + (put || box.value[at + mark.length] !== '\n' ? 0 : 1);
-      const keepA = box.selectionStart, keepB = box.selectionEnd, shift = put.length - (end - at);
-      replace(at, end, put);
-      const fix = function (x) { return x > at ? Math.max(at, x + shift) : x; };
-      box.setSelectionRange(fix(keepA), fix(keepB));
-    }
-
-    if (opts.pictures) {
-
-      // the text box takes dropped and pasted pictures
-      box.addEventListener('dragover', function (e) {
-        if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) { e.preventDefault(); shell.classList.add('dropping'); }
-      });
-      box.addEventListener('dragleave', function () { shell.classList.remove('dropping'); });
-      box.addEventListener('drop', function (e) {
-        shell.classList.remove('dropping');
-        const list = e.dataTransfer ? Array.from(e.dataTransfer.files) : [];
-        if (!list.length) return;
-        e.preventDefault();
-        // the drop point becomes the cursor, so the picture goes where it fell
-        if (document.caretPositionFromPoint) {
-          const p = document.caretPositionFromPoint(e.clientX, e.clientY);
-          if (p && p.offsetNode === box) box.setSelectionRange(p.offset, p.offset);
-        }
-        upload(list);
-      });
-      box.addEventListener('paste', function (e) {
-        const list = e.clipboardData ? Array.from(e.clipboardData.files || []) : [];
-        if (!list.length) return;
-        e.preventDefault();
-        upload(list);
-      });
-    }
-
-    // ---- the frame: tools over the text, the views on the right, a line
-    // under it all for help and news
-
-    const shell = el('div', 'editor editor-shell' + (opts.compact ? ' editor-compact' : ''));
-    const bar = el('div', 'editor-bar');
-    const tools = el('div', 'editor-tools');
-    tools.setAttribute('role', 'toolbar');
-    tools.setAttribute('aria-label', t('Formatting'));
-    const side = el('div', 'editor-side');
-    bar.append(tools, side);
-    function tool(label, keys, mark, act) {
-      const b = el('button', 'editor-tool');
-      b.type = 'button';
-      b.title = label + (keys ? ' (' + keys + ')' : '');
-      b.setAttribute('aria-label', label);
-      b.innerHTML = mark;   // safe html: the toolbar's own icons, written here
-      b.addEventListener('click', function () { act(b); });
-      tools.appendChild(b);
-      return b;
-    }
-    function gap() { tools.appendChild(el('span', 'editor-tool-gap')); }
-    tool(t('Heading'), '', 'H<span class="editor-tool-more" aria-hidden="true">▾</span>', headingMenu).setAttribute('aria-haspopup', 'menu');
-    tool(t('Bold'), mod + 'B', '<b>B</b>', function () { wrap('**', '**', t('bold')); });
-    tool(t('Italic'), mod + 'I', '<i>I</i>', function () { wrap('_', '_', t('italic')); });
-    tool(t('Strikethrough'), mod + shiftKey + 'X', '<s>S</s>', function () { wrap('~~', '~~', t('words')); });
-    gap();
-    tool(t('Link'), mod + 'K', svg('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'), link);
-    if (opts.linkTools) opts.linkTools(editor);
-    gap();
-    tool(t('Bulleted list'), mod + shiftKey + '8', svg('<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/>'), bullets);
-    tool(t('Numbered list'), mod + shiftKey + '7', '1.', numbers);
-    tool(t('Quote'), '', '❝', function () { prefix(function () { return '> '; }, /^>\s?/); });
-    gap();
-    tool(t('Code'), mod + 'E', '&lt;/&gt;', code);
-    tool(t('Table'), '', svg('<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 10h18M3 14.5h18M9 5v14M15 5v14"/>'), tableGrid);
-    // ---- emoji: a button with the whole set, and suggestions as a :keyword is typed
-
-    let emojiAsked = null;
-    function emojiSet() {
-      if (!emojiAsked) emojiAsked = Promise.resolve().then(opts.emoji).then(function (list) { return Array.isArray(list) ? list : []; })
-        .catch(function () { emojiAsked = null; return []; });
-      return emojiAsked;
-    }
-    // the set's own picture, or the emoji as the font draws it
-    function emojiFace(e) {
-      if (e.src) { const i = el('img', 'emo'); i.src = e.src; i.alt = e.emoji; return i; }
-      return el('span', 'emo', e.emoji);
-    }
-    const groupWords = {status: t('Status'), color: t('Colors'), symbol: t('Symbols'), own: t('This site\'s own')};
-    function emojiPanel(button) {
-      const card = pop(button);
-      card.classList.add('editor-emoji');
-      const a = box.selectionStart, b = box.selectionEnd;
-      const find = el('input');
-      find.type = 'search';
-      find.placeholder = t('Find an emoji');
-      find.setAttribute('aria-label', t('Find an emoji'));
-      const grid = el('div', 'editor-emoji-grid');
-      card.append(find, grid);
-      function fill(list) {
-        grid.replaceChildren();
-        const q = find.value.trim().toLowerCase().replace(/:/g, '');
-        let group = null;
-        for (const e of list) {
-          if (q && e.name.toLowerCase().indexOf(q) < 0 && !e.keywords.some(function (k) { return k.indexOf(q) >= 0; })) continue;
-          if (!q && e.group !== group) { group = e.group; grid.appendChild(el('div', 'editor-emoji-group', groupWords[group] || group)); }
-          const cell = el('button', 'editor-emoji-cell');
-          cell.type = 'button';
-          cell.title = e.name + (e.keywords.length ? '  :' + e.keywords[0] + ':' : '');
-          cell.setAttribute('aria-label', e.name);
-          cell.appendChild(emojiFace(e));
-          cell.addEventListener('click', function () { closePop(); replace(a, b, e.emoji); });
-          grid.appendChild(cell);
-        }
-        if (!grid.querySelector('button')) grid.appendChild(el('p', 'editor-emoji-none', t('No emoji has that name.')));
-      }
-      emojiSet().then(function (list) {
-        fill(list);
-        find.addEventListener('input', function () { fill(list); });
-      });
-      find.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); const first = grid.querySelector('button'); if (first) first.click(); }
-      });
-      requestAnimationFrame(function () { find.focus(); });
-    }
-    if (opts.emoji)
-      tool(t('Emoji'), '', svg('<rect x="3.5" y="3.5" width="17" height="17" rx="4.5"/><path d="M8 12.4l2.8 2.8L16.2 9.6"/>'), emojiPanel).setAttribute('aria-haspopup', 'dialog');
-
-    // where the caret is on the screen, measured with a copy of the box's text
-    function caretPoint(index) {
-      const cs = getComputedStyle(box);
-      const copy = el('div');
-      for (const p of ['boxSizing', 'width', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'wordSpacing', 'tabSize',
-        'textIndent', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth'])
-        copy.style[p] = cs[p];
-      copy.style.position = 'absolute';
-      copy.style.visibility = 'hidden';
-      copy.style.whiteSpace = 'pre-wrap';
-      copy.style.overflowWrap = 'break-word';
-      copy.style.borderStyle = 'solid';
-      copy.style.top = '0';
-      copy.style.left = '-9999px';
-      copy.textContent = box.value.slice(0, index);
-      const mark = el('span', '', '​');
-      copy.appendChild(mark);
-      document.body.appendChild(copy);
-      const r = box.getBoundingClientRect();
-      const point = {top: r.top + mark.offsetTop - box.scrollTop + mark.offsetHeight, left: r.left + mark.offsetLeft - box.scrollLeft};
-      copy.remove();
-      return point;
-    }
-    let suggest = null, choices = [], chosen = 0, typedFrom = -1;
-    let eager = false;   // opened by an arrow key: a colon alone is enough
-    let typedAt = -1;    // where the caret was left by typing: arrows open the list only there
-    function closeSuggest() { if (suggest) { suggest.remove(); suggest = null; } choices = []; eager = false; }
-    function takeChoice(i) {
-      const e = choices[i];
-      const at = box.selectionStart;
-      closeSuggest();
-      if (e && typedFrom >= 0) replace(typedFrom, at, e.emoji);
-    }
-    // The one selected row, for the keys and the pointer alike.
-    function mark(i) {
-      chosen = i;
-      Array.from(suggest.children).forEach(function (row, n) { row.classList.toggle('on', n === i); });
-    }
-    function showSuggest() {
-      if (!suggest) {
-        suggest = el('ul', 'editor-suggest');
-        suggest.setAttribute('role', 'listbox');
-        // a click keeps the caret in the text
-        suggest.addEventListener('pointerdown', function (e) { e.preventDefault(); });
-        document.body.appendChild(suggest);
-      }
-      suggest.replaceChildren();
-      choices.forEach(function (e, i) {
-        const row = el('li');
-        row.setAttribute('role', 'option');
-        const key = e.match || e.keywords[0] || '';
-        // a name that only says the keyword again is left out
-        row.append(emojiFace(e), el('span', 'editor-suggest-key', ':' + key + ':'), el('span', 'editor-suggest-name', e.name === key ? '' : e.name));
-        row.addEventListener('mousemove', function () { if (chosen !== i) mark(i); });
-        row.addEventListener('click', function () { takeChoice(i); });
-        suggest.appendChild(row);
-      });
-      mark(0);
-      const p = caretPoint(typedFrom);
-      suggest.style.top = Math.min(p.top + 4, window.innerHeight - suggest.offsetHeight - 8) + 'px';
-      suggest.style.left = Math.max(8, Math.min(p.left, window.innerWidth - suggest.offsetWidth - 8)) + 'px';
-    }
-    if (opts.emoji) {
-      // ev: the input that brought this, none when an arrow key asks
-      const offer = function (ev) {
-        const at = box.selectionStart;
-        // the keyword being typed, as every part finds it (emoji-names.js);
-        // one finished with its second colon becomes its emoji at once
-        const typing = at === box.selectionEnd && EmojiNames.typed(box.value, at, eager);
-        if (!typing || (typing.whole && !(ev && ev.data === ':'))) { closeSuggest(); return; }
-        typedFrom = typing.from;
-        emojiSet().then(function (list) {
-          if (box.selectionStart !== at) return;
-          if (typing.whole) {
-            const hit = EmojiNames.named(list, typing.word);
-            closeSuggest();
-            if (hit) replace(typedFrom, at, hit.emoji);
-            return;
-          }
-          choices = EmojiNames.matches(list, typing.word).slice(0, 8);
-          if (choices.length) showSuggest(); else closeSuggest();
+          Pending -= 1;
+          Busy();
+        };
+        At = Box.value.indexOf(Mark,0);
+        if (At < 0) return;
+        End_ = At + Mark.length;
+        if ((Put === "") && (Box.value.charAt(At + Mark.length) === "\n")) End_ += 1;
+        KeepA = Box.selectionStart;
+        KeepB = Box.selectionEnd;
+        Shift = Put.length - (End_ - At);
+        Replace(At,End_,Put,undefined,undefined);
+        Box.setSelectionRange(Fix(KeepA),Fix(KeepB));
+      };
+      async function Upload(List) {
+        var N = 0;
+        var A = 0;
+        var F = null;
+        var Refusal = undefined;
+        var Name = "";
+        var Mark = "";
+        var V = "";
+        var Lead = "";
+        Fresh();
+        if (Pictures === null) return;
+        if (window["Keys"]) {
+          Pending += 1;
+          try {
+            List = await Promise.all(List.map(Sized));
+          } finally {
+            Pending -= 1;
+          };
+        };
+        for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+          N = $l;
+          F = List[N];
+          Fresh();
+          if (Pictures["refuses"]) {
+            Refusal = Pictures.refuses(F)}
+           else if (Pictures.types.test(F.type)) {
+            Refusal = ""}
+           else Refusal = $impl.T("Only pictures can be added: PNG, JPEG, GIF or WebP. %s is not one.",$impl.Either(F.name,""));
+          if (Refusal) {
+            Say(Refusal,true);
+            continue;
+          };
+          if (!Boolean(F.name) || (new RegExp("^image\\.\\w+$","i")).test("" + F.name)) {
+            Name = "Screenshot " + (new Date()).toISOString().slice(0,19).replace(new RegExp("[T:]","g"),"-") + "." + F.type.split("/")[1].replace("jpeg","jpg")}
+           else Name = "" + F.name;
+          Mark = "[" + $impl.T("Uploading %s…",Name) + "]";
+          A = Box.selectionStart;
+          V = Box.value;
+          if ((A === 0) || (V.charAt(A - 1) === "\n")) {
+            Lead = ""}
+           else Lead = "\n";
+          Replace(A,Box.selectionEnd,Lead + Mark + "\n",undefined,undefined);
+          Send(F,Name,Mark);
+        };
+      };
+      function Tool(Caption, Keys_, Mark, Act) {
+        var Result = null;
+        var B = null;
+        B = $impl.El("button","editor-tool",undefined);
+        B.type = "button";
+        if (Keys_) {
+          B.title = Caption + " (" + ("" + Keys_) + ")"}
+         else B.title = Caption;
+        B.setAttribute("aria-label",Caption);
+        B.innerHTML = Mark;   // safe html: the toolbar's own icons, written here;
+        B.addEventListener("click",function (E) {
+          Act(B);
+        });
+        Tools.appendChild(B);
+        Result = B;
+        return Result;
+      };
+      function Gap() {
+        Tools.appendChild($impl.El("span","editor-tool-gap",undefined));
+      };
+      function EmojiSet() {
+        var Result = null;
+        if (EmojiAsked === null) EmojiAsked = Promise.resolve(undefined).then(Opts["emoji"]).then(function (List) {
+          var Result = undefined;
+          if (Array.isArray(List)) {
+            Result = List}
+           else Result = new Array();
+          return Result;
+        }).catch(function (E) {
+          var Result = undefined;
+          EmojiAsked = null;
+          Result = new Array();
+          return Result;
+        });
+        Result = EmojiAsked;
+        return Result;
+      };
+      function EmojiFace(E) {
+        var Result = null;
+        if (E.src) {
+          Result = $impl.El("img","emo",undefined);
+          Result["src"] = E.src;
+          Result.alt = E.emoji;
+          return Result;
+        };
+        Result = $impl.El("span","emo",E.emoji);
+        return Result;
+      };
+      function EmojiPanel(Button) {
+        var Card = null;
+        var Grid = null;
+        var Find = null;
+        var A = 0;
+        var B = 0;
+        function Fill(List) {
+          var Q = "";
+          var Group = undefined;
+          var N = 0;
+          var E = null;
+          function Add(E) {
+            var Cell = null;
+            Cell = $impl.El("button","editor-emoji-cell",undefined);
+            Cell.type = "button";
+            if (E.keywords.length !== 0) {
+              Cell.title = E.name + "  :" + ("" + E.keywords[0]) + ":"}
+             else Cell.title = E.name;
+            Cell.setAttribute("aria-label",E.name);
+            Cell.appendChild(EmojiFace(E));
+            Cell.addEventListener("click",function (Ev) {
+              ClosePop();
+              Replace(A,B,E.emoji,undefined,undefined);
+            });
+            Grid.appendChild(Cell);
+          };
+          Grid.replaceChildren();
+          Q = Find.value.trim().toLowerCase().replace(new RegExp(":","g"),"");
+          Group = null;
+          for (var $l = 0, $end = List.length - 1; $l <= $end; $l++) {
+            N = $l;
+            E = List[N];
+            if ((Q !== "") && (E.name.toLowerCase().indexOf(Q,0) < 0) && !E.keywords.some(function (K, At, All) {
+              var Result = false;
+              Result = K.indexOf(Q,0) >= 0;
+              return Result;
+            })) continue;
+            if ((Q === "") && !Object.is(E.group,Group)) {
+              Group = E.group;
+              Grid.appendChild($impl.El("div","editor-emoji-group",$impl.Either(GroupWords["" + Group],Group)));
+            };
+            Add(E);
+          };
+          if (Grid.querySelector("button") === null) Grid.appendChild($impl.El("p","editor-emoji-none",$impl.T("No emoji has that name.")));
+        };
+        Card = Pop(Button);
+        Card.classList.add("editor-emoji");
+        A = Box.selectionStart;
+        B = Box.selectionEnd;
+        Find = $impl.El("input",undefined,undefined);
+        Find.type = "search";
+        Find.placeholder = $impl.T("Find an emoji");
+        Find.setAttribute("aria-label",$impl.T("Find an emoji"));
+        Grid = $impl.El("div","editor-emoji-grid",undefined);
+        Card.append(Find,Grid);
+        EmojiSet().then(function (List) {
+          var Result = undefined;
+          Fill(List);
+          Find.addEventListener("input",function (E) {
+            Fill(List);
+          });
+          return Result;
+        });
+        Find.addEventListener("keydown",function (E) {
+          var First = null;
+          if (E.key === "Enter") {
+            E.preventDefault();
+            First = Grid.querySelector("button");
+            if (First !== null) First.click();
+          };
+        });
+        window.requestAnimationFrame(function (Time) {
+          Find.focus();
         });
       };
-      box.addEventListener('input', function (ev) { offer(ev); typedAt = box.selectionStart; });
-      box.addEventListener('keydown', function (e) {
-        const arrow = (e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey;
-        if (!suggest || !choices.length) {
-          // an arrow key after a colon, or a colon and one letter, opens the list
-          const short = arrow && box.selectionStart === typedAt && box.selectionEnd === typedAt && EmojiNames.typed(box.value, typedAt, true);
-          if (!short || short.whole || short.word.length > 1) return;
-          eager = true;
-          offer();
-        } else if (arrow) {
-          mark((chosen + (e.key === 'ArrowDown' ? 1 : choices.length - 1)) % choices.length);
-        } else if (e.key === 'Enter' || e.key === 'Tab') {
-          takeChoice(chosen);
-        } else if (e.key === 'Escape') {
-          closeSuggest();
-          typedAt = -1;
-        } else return;
-        e.preventDefault();
-        e.stopImmediatePropagation();
+      function CaretPoint(Index) {
+        var Result = null;
+        var Cs = null;
+        var Look = null;
+        var Twin = null;
+        var Mark = null;
+        var P = "";
+        var R = null;
+        Cs = window.getComputedStyle(Box);
+        Twin = $impl.El("div",undefined,undefined);
+        Look = Twin.style;
+        for (var $in = $impl.CaretLook, $l = 0, $end = rtl.length($in) - 1; $l <= $end; $l++) {
+          P = $in[$l];
+          Look[P] = Cs[P];
+        };
+        Look["position"] = "absolute";
+        Look["visibility"] = "hidden";
+        Look["whiteSpace"] = "pre-wrap";
+        Look["overflowWrap"] = "break-word";
+        Look["borderStyle"] = "solid";
+        Look["top"] = "0";
+        Look["left"] = "-9999px";
+        Twin.textContent = Box.value.slice(0,Index);
+        Mark = $impl.El("span","","​");
+        Twin.appendChild(Mark);
+        document.body.appendChild(Twin);
+        R = Box.getBoundingClientRect();
+        Result = pas.JS.New(["top",((R.top + Mark.offsetTop) - Box.scrollTop) + Mark.offsetHeight,"left",(R.left + Mark.offsetLeft) - Box.scrollLeft]);
+        Twin.remove();
+        return Result;
+      };
+      function CloseSuggest() {
+        if (Suggest !== null) {
+          Suggest.remove();
+          Suggest = null;
+        };
+        Choices = new Array();
+        Eager = false;
+      };
+      function TakeChoice(N) {
+        var E = null;
+        var At = 0;
+        E = Choices[N];
+        At = Box.selectionStart;
+        CloseSuggest();
+        if (Boolean(E) && (TypedFrom >= 0)) Replace(TypedFrom,At,E.emoji,undefined,undefined);
+      };
+      function Mark(N) {
+        var Rows = null;
+        var At = 0;
+        Chosen = N;
+        Rows = Array.from(Suggest.children);
+        for (var $l = 0, $end = Rows.length - 1; $l <= $end; $l++) {
+          At = $l;
+          Rows[At].classList.toggle("on",At === N);
+        };
+      };
+      function ShowSuggest() {
+        var N = 0;
+        var P = null;
+        function Add(E, N) {
+          var Row = null;
+          var Key = undefined;
+          var Name = undefined;
+          Row = $impl.El("li",undefined,undefined);
+          Row.setAttribute("role","option");
+          Key = $impl.Either($impl.Either(E["match"],E.keywords[0]),"");
+          if (Object.is(E["name"],Key)) {
+            Name = ""}
+           else Name = E["name"];
+          Row.append(EmojiFace(E),$impl.El("span","editor-suggest-key",":" + ("" + Key) + ":"),$impl.El("span","editor-suggest-name",Name));
+          Row.addEventListener("mousemove",function (Ev) {
+            if (Chosen !== N) Mark(N);
+          });
+          Row.addEventListener("click",function (Ev) {
+            TakeChoice(N);
+          });
+          Suggest.appendChild(Row);
+        };
+        if (Suggest === null) {
+          Suggest = $impl.El("ul","editor-suggest",undefined);
+          Suggest.setAttribute("role","listbox");
+          Suggest.addEventListener("pointerdown",function (E) {
+            E.preventDefault();
+          });
+          document.body.appendChild(Suggest);
+        };
+        Suggest.replaceChildren();
+        for (var $l = 0, $end = Choices.length - 1; $l <= $end; $l++) {
+          N = $l;
+          Add(Choices[N],N);
+        };
+        Mark(0);
+        P = CaretPoint(TypedFrom);
+        Suggest.style["top"] = "" + Math.min(P.top + 4,window.innerHeight - Suggest.offsetHeight - 8) + "px";
+        Suggest.style["left"] = "" + Math.max(8,Math.min(P.left,window.innerWidth - Suggest.offsetWidth - 8)) + "px";
+      };
+      function Offer(Ev) {
+        var At = 0;
+        var Typing = null;
+        At = Box.selectionStart;
+        if (At === Box.selectionEnd) {
+          Typing = window.EmojiNames.typed(Box.value,At,Eager)}
+         else Typing = null;
+        if (!Boolean(Typing) || (Typing.whole && !(Boolean(Ev) && (Ev.data === ":")))) {
+          CloseSuggest();
+          return;
+        };
+        TypedFrom = Typing.from;
+        EmojiSet().then(function (List) {
+          var Result = undefined;
+          var Hit = null;
+          if (Box.selectionStart !== At) return Result;
+          if (Typing.whole) {
+            Hit = window.EmojiNames.named(List,Typing.word);
+            CloseSuggest();
+            if (Boolean(Hit)) Replace(TypedFrom,At,Hit.emoji,undefined,undefined);
+            return Result;
+          };
+          Choices = window.EmojiNames.matches(List,Typing.word).slice(0,8);
+          if (Choices.length !== 0) {
+            ShowSuggest()}
+           else CloseSuggest();
+          return Result;
+        });
+      };
+      function Bullets() {
+        Prefix(function (N) {
+          var Result = "";
+          Result = "- ";
+          return Result;
+        },new RegExp("^(\\s*)[-*+]\\s+"));
+      };
+      function Numbers() {
+        Prefix(function (N) {
+          var Result = "";
+          Result = "" + (N + 1) + ". ";
+          return Result;
+        },new RegExp("^(\\s*)\\d+[.)]\\s+"));
+      };
+      function Say(Words, Bad) {
+        window.clearTimeout(NewsTimer);
+        News["textContent"] = Words;
+        News.classList.toggle("bad",Boolean(Bad));
+        if (!Bad) NewsTimer = window.setTimeout(function () {
+          Busy();
+        },4000);
+      };
+      function Busy() {
+        if (Pending !== 0) {
+          News.classList.remove("bad");
+          if (window["tn"]) {
+            News.textContent = window.tn(Pending,"Uploading %d picture…","Uploading %d pictures…")}
+           else News.textContent = $impl.T("Uploading…");
+        } else if (!News.classList.contains("bad")) News.textContent = "";
+      };
+      function Shown() {
+        var Result = "";
+        if ((Mode === "split") && Narrow.matches) {
+          Result = "write"}
+         else Result = Mode;
+        return Result;
+      };
+      function Draw() {
+        var Now = "";
+        var Key = "";
+        var B = undefined;
+        Now = Shown();
+        Panes.dataset["mode"] = Now;
+        Bar.dataset["mode"] = Now;
+        for (Key in Tabs) if (Key === Now) {
+          Tabs[Key].setAttribute("aria-selected","true")}
+         else Tabs[Key].setAttribute("aria-selected","false");
+        Tabs["split"].hidden = Narrow.matches;
+        for (var $in = Tools.querySelectorAll(".editor-tool"), $l = 0, $end = rtl.length($in) - 1; $l <= $end; $l++) {
+          B = $in[$l];
+          B.disabled = Now === "preview";
+        };
+        if (Now === "preview") ClosePop();
+        if ((Now !== "write") && Stale) {
+          Ask()}
+         else if (Now === "split") {
+          Measure();
+          Follow();
+        };
+      };
+      function SetMode(Key) {
+        Mode = Key;
+        try {
+          window.localStorage.setItem(StoreKey,Mode);
+        } catch ($e) {
+        };
+        Draw();
+        if (Shown() !== "preview") Box.focus();
+      };
+      function AddTab(Key, Words) {
+        var B = null;
+        B = $impl.El("button","editor-mode",Words);
+        B.type = "button";
+        B.setAttribute("role","tab");
+        B.dataset["mode"] = Key;
+        B.addEventListener("click",function (E) {
+          SetMode(Key);
+        });
+        Tabs[Key] = B;
+        Modes.appendChild(B);
+      };
+      function SetWhole(On_, Quiet) {
+        Shell.classList.toggle("whole",On_);
+        if (On_) {
+          Foot.after(SendRow)}
+         else Shell.after(SendRow);
+        window.requestAnimationFrame(function (Time) {
+          Measure();
+          Follow();
+        });
+        document.documentElement.classList.toggle("editor-whole",On_);
+        if (On_) {
+          Whole.setAttribute("aria-pressed","true")}
+         else Whole.setAttribute("aria-pressed","false");
+        if (On_) {
+          Whole.title = $impl.T("Leave full screen (Esc)")}
+         else Whole.title = $impl.T("Full screen");
+        Whole.setAttribute("aria-label",Whole.title);
+        if (!Quiet) Box.focus();
+      };
+      async function Ask() {
+        var Mine = null;
+        var Html = "";
+        Stale = false;
+        if (Asking !== null) Asking.abort();
+        Mine = new AbortController();
+        Asking = Mine;
+        View.classList.add("busy");
+        if (View.firstChild === null) View.appendChild($impl.El("p","fine",$impl.T("Making the preview…")));
+        try {
+          try {
+            Html = await Opts.preview(Box.value,Mine.signal);
+            if (Asking !== Mine) return;
+            View.innerHTML = Html;   // safe html: the part's own renderer made it;
+            if (Box.value.trim() === "") {
+              View.replaceChildren($impl.El("p","fine",$impl.Either(Opts["emptyWords"],$impl.T("The preview shows here as you write."))))}
+             else if (Opts["afterPreview"]) Opts.afterPreview(View);
+            Measure();
+            Follow();
+          } catch ($e) {
+            if ($e["name"] == "AbortError") return;
+            Stale = true;
+            View.replaceChildren($impl.El("p","problem",$impl.T("The preview could not be made. It tries again when you type.")));
+          };
+        } finally {
+          if (Asking === Mine) {
+            Asking = null;
+            View.classList.remove("busy");
+          };
+        };
+      };
+      function Plain(Words) {
+        var Result = "";
+        Result = Words.replace(new RegExp("[^\\p{L}\\p{N}]+","gu"),"").toLowerCase();
+        return Result;
+      };
+      function HeadingStarts() {
+        var Result = null;
+        var At = 0;
+        var Fence = "";
+        var Line = "";
+        var Mark = [];
+        Result = new Array();
+        At = 0;
+        Fence = "";
+        for (var $in = Box.value.split("\n"), $l = 0, $end = rtl.length($in) - 1; $l <= $end; $l++) {
+          Line = $in[$l];
+          Mark = (new RegExp("^ {0,3}(`{3,}|~{3,})(.*)$")).exec(Line);
+          if (rtl.length(Mark) > 0) {
+            if (Fence === "") {
+              Fence = Mark[1]}
+             else if ((Mark[1].charAt(0) === Fence.charAt(0)) && (Mark[1].length >= Fence.length) && (Mark[2].trim() === "")) Fence = "";
+          } else if ((Fence === "") && (new RegExp("^ {0,3}#{1,6}([ \\t]|$)")).test(Line)) Result.push(pas.JS.New(["at",At,"words",Plain(Line.replace(new RegExp("^\\s*#+"),"").replace(new RegExp("\\[\\[(?:[^\\]|]*\\|)?([^\\]]*)\\]\\]","g"),"$1").replace(new RegExp("\\[([^\\]]*)\\]\\([^)]*\\)","g"),"$1"))]));
+          At = At + Line.length + 1;
+        };
+        return Result;
+      };
+      function Measure() {
+        var Heads = null;
+        var Paired = null;
+        var Marks = null;
+        var Starts = [];
+        var Next = 0;
+        var K = 0;
+        var N = 0;
+        var From = 0;
+        var H = undefined;
+        var Look = null;
+        var P = "";
+        var Mark = null;
+        var TextMax = 0.0;
+        var ViewMax = 0.0;
+        var Top = 0.0;
+        var A = 0.0;
+        var B = 0.0;
+        var Made = [];
+        var Last = [];
+        Ties = [];
+        if (Shown() !== "split") return;
+        Heads = Array.from(View.querySelectorAll("" + $impl.Either(Opts["heads"],"h1, h2, h3, h4, h5, h6")));
+        Starts = [];
+        Paired = new Array();
+        Next = 0;
+        for (var $in = HeadingStarts(), $l = 0, $end = rtl.length($in) - 1; $l <= $end; $l++) {
+          H = $in[$l];
+          K = Next;
+          while (K < Math.min(Heads.length,Next + 4)) {
+            if (Plain(Heads[K].textContent) === H.words) {
+              Starts.push(H.at);
+              Paired.push(Heads[K]);
+              Next = K + 1;
+              break;
+            };
+            K += 1;
+          };
+        };
+        if (rtl.length(Starts) === 0) return;
+        Look = window.getComputedStyle(Box);
+        for (var $in1 = $impl.MirrorLook, $l1 = 0, $end1 = rtl.length($in1) - 1; $l1 <= $end1; $l1++) {
+          P = $in1[$l1];
+          Mirror.style[P] = Look[P];
+        };
+        Mirror.style["width"] = "" + Box.clientWidth + "px";
+        Mirror.replaceChildren();
+        Marks = new Array();
+        From = 0;
+        for (var $l2 = 0, $end2 = rtl.length(Starts) - 1; $l2 <= $end2; $l2++) {
+          N = $l2;
+          Mirror.append(Box.value.slice(From,Starts[N]));
+          Mark = $impl.El("span",undefined,undefined);
+          Mirror.append(Mark);
+          Marks.push(Mark);
+          From = Starts[N];
+        };
+        Mirror.append(Box.value.slice(From));
+        document.body.appendChild(Mirror);
+        TextMax = Box.scrollHeight - Box.clientHeight;
+        ViewMax = View.scrollHeight - View.clientHeight;
+        Top = View.getBoundingClientRect().top - View.scrollTop;
+        Made = [[0,0]];
+        for (var $l3 = 0, $end3 = Marks.length - 1; $l3 <= $end3; $l3++) {
+          N = $l3;
+          A = Math.min(Marks[N].offsetTop - parseFloat(Look["paddingTop"]),TextMax);
+          B = Math.min(Paired[N].getBoundingClientRect().top - Top - 12,ViewMax);
+          Last = rtl.arrayRef(Made[rtl.length(Made) - 1]);
+          if ((A > Last[0]) && (B >= Last[1])) Made.push(new Array(A,B));
+        };
+        Mirror.remove();
+        Mirror.replaceChildren();
+        Last = rtl.arrayRef(Made[rtl.length(Made) - 1]);
+        if (TextMax > Last[0]) Made.push(new Array(TextMax,Math.max(ViewMax,Last[1])));
+        Ties = rtl.arrayRef(Made);
+      };
+      function Follow() {
+        var Y = 0.0;
+        var Part = 0.0;
+        var Room = 0.0;
+        var N = 0;
+        var A = [];
+        var B = [];
+        if (Shown() !== "split") return;
+        Y = Box.scrollTop;
+        if (rtl.length(Ties) > 1) {
+          N = 0;
+          while ((N < (rtl.length(Ties) - 2)) && (Ties[N + 1][0] <= Y)) N += 1;
+          A = rtl.arrayRef(Ties[N]);
+          B = rtl.arrayRef(Ties[N + 1]);
+          if (B[0] > A[0]) {
+            Part = Math.min(1,Math.max(0,(Y - A[0]) / (B[0] - A[0])))}
+           else Part = 0;
+          View["scrollTop"] = A[1] + (Part * (B[1] - A[1]));
+          return;
+        };
+        Room = Box.scrollHeight - Box.clientHeight;
+        if (Room > 0) {
+          View["scrollTop"] = (Y / Room) * (View.scrollHeight - View.clientHeight)}
+         else View.scrollTop = 0;
+      };
+      function Remeasure() {
+        window.clearTimeout(Again);
+        Again = window.setTimeout(function () {
+          Measure();
+          Follow();
+        },150);
+      };
+      function Save() {
+        var Button = null;
+        if (Pending !== 0) {
+          Say($impl.T("Wait until the pictures are uploaded."),true);
+          return;
+        };
+        if (Form === null) return;
+        Button = Form.querySelector('button[type="submit"]:not([name])');
+        if (Form["requestSubmit"]) {
+          if (Button !== null) {
+            Form.requestSubmit(Button)}
+           else Form.requestSubmit();
+        } else if (Button !== null) Button.click();
+      };
+      function NotSaved() {
+        Saving = false;
+      };
+      if (Box["editor"]) return Box["editor"];
+      if (Boolean(Options)) {
+        Opts = Options}
+       else Opts = new Object();
+      Fresh();
+      Form = Box.closest("form");
+      if (Opts["language"]) {
+        Language = "" + Opts["language"]}
+       else Language = "";
+      Choices = new Array();
+      TypedFrom = -1;
+      TypedAt = -1;
+      Stale = true;
+      Editor = pas.JS.New(["box",Box,"form",Form,"el",$impl.El,"svg",$impl.Svg,"replace",Replace,"wrap",Wrap,"lines",Lines,"prefix",Prefix,"pop",Pop,"closePop",ClosePop,"say",Say,"tool",Tool,"gap",Gap,"upload",Upload,"choose",Choose]);
+      document.addEventListener("pointerdown",function (E) {
+        if ((Open !== null) && !Open.contains(E.target) && (E.target.closest(".editor-tools, .editor-side") === null)) ClosePop();
       });
-      box.addEventListener('blur', closeSuggest);
-      box.addEventListener('scroll', closeSuggest);
-      window.addEventListener('resize', closeSuggest);
-    }
-    function bullets() { prefix(function () { return '- '; }, /^(\s*)[-*+]\s+/); }
-    function numbers() { prefix(function (i) { return (i + 1) + '. '; }, /^(\s*)\d+[.)]\s+/); }
-
-    // ---- write, side by side, preview; and the whole window
-
-    const modes = el('div', 'editor-modes');
-    modes.setAttribute('role', 'tablist');
-    const whole = el('button', 'editor-whole');
-    whole.type = 'button';
-    whole.innerHTML = svg('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>');   // safe html: a fixed icon
-    side.append(modes, whole);
-    const panes = el('div', 'editor-panes');
-    const view = el('div', 'editor-view' + (opts.viewClass ? ' ' + opts.viewClass : ''));
-    view.setAttribute('aria-live', 'polite');
-    const foot = el('div', 'editor-foot');
-    const news = el('span', 'editor-news');
-    news.setAttribute('role', 'status');
-    const hint = el('span', 'editor-hint');
-    const attach = el('button', 'editor-link', (opts.pictures && opts.pictures.label) || t('add pictures'));
-    attach.type = 'button';
-    attach.addEventListener('click', choose);
-    hint.append(document.createTextNode(opts.hint || t('Markdown.')));
-    if (opts.pictures) {
-      hint.append(document.createTextNode(' '), attach);
-      // Android's chooser has the camera and the file browser but no gallery,
-      // unless pictures alone are asked for: a second link asks for those
-      if (opts.pictures.gallery && /Android/.test(navigator.userAgent)) {
-        const gallery = el('button', 'editor-link', /video/.test(opts.pictures.gallery) ? t('Photos and videos') : t('Photos'));
-        gallery.type = 'button';
-        gallery.addEventListener('click', function () { choose(opts.pictures.gallery); });
-        hint.append(document.createTextNode(' · '), gallery);
-      }
-    }
-    const helpButton = el('button', 'editor-link', t('Formatting help'));
-    helpButton.type = 'button';
-    helpButton.setAttribute('aria-expanded', 'false');
-    foot.append(hint, news, helpButton);
-    const help = el('div', 'editor-help');
-    help.hidden = true;
-    // a box inside its label comes out of it: a click on the preview or a
-    // menu would otherwise go to the box, as clicks in a label do
-    const label = box.closest('label');
-    if (label) {
-      if (!box.id) box.id = 'editor-box-' + (++made);
-      label.htmlFor = box.id;
-      label.after(shell);
-    } else box.before(shell);
-    shell.append(bar, panes, askRow, foot, help);
-    panes.append(box, view);
-    // the form's own parts the part wants under the editor: full screen
-    // takes the row along, so the text can be sent without leaving it
-    const sendRow = el('div', 'editor-send');
-    shell.after(sendRow);
-    for (const part of opts.sendRow || []) if (part) sendRow.appendChild(part);
-    sendRow.hidden = !sendRow.firstChild;
-
-    const cheats = [
-      ['## ' + t('Heading'), t('a heading; ### for a smaller one')],
-      ['**' + t('bold') + '**  _' + t('italic') + '_  ~~' + t('struck') + '~~', t('emphasis')],
-      ['`code`', t('code in a sentence')],
-      ['```' + (language || 'pascal') + '\nbegin\nend.\n```', t('a block of code; the word after ``` names its language, for its colors')],
-      ['- ' + t('item') + '\n1. ' + t('item'), t('lists; Tab moves an item in, Shift+Tab out')],
-      ['> ' + t('words'), t('a quotation')],
-      ['[' + t('words') + '](https://…)', t('a link to another site')],
-    ].concat(opts.cheats || []);
-    const sheet = el('table');
-    for (const [mark, what] of cheats) {
-      const tr = el('tr');
-      const a = el('td');
-      a.appendChild(el('code', '', mark));
-      tr.append(a, el('td', '', what));
-      sheet.appendChild(tr);
-    }
-    const keys = el('p', 'fine', t('Keys: %s bold, %s italic, %s link, %s code, %s preview, %s save.', mod + 'B', mod + 'I', mod + 'K', mod + 'E', mod + shiftKey + 'P', mod + 'Enter'));
-    help.append(sheet, keys);
-    if (opts.helpLink) {
-      const more = el('p', 'fine');
-      const guide = el('a', '', opts.helpLink.words);
-      guide.href = opts.helpLink.href;
-      guide.target = '_blank';
-      more.appendChild(guide);
-      help.appendChild(more);
-    }
-    helpButton.addEventListener('click', function () {
-      help.hidden = !help.hidden;
-      helpButton.setAttribute('aria-expanded', help.hidden ? 'false' : 'true');
-    });
-
-    let newsTimer = 0;
-    function say(words, bad) {
-      clearTimeout(newsTimer);
-      news.textContent = words;
-      news.classList.toggle('bad', !!bad);
-      if (!bad) newsTimer = setTimeout(function () { busy(); }, 4000);
-    }
-    function busy() {
-      if (pending) { news.classList.remove('bad'); news.textContent = window.tn ? tn(pending, 'Uploading %d picture…', 'Uploading %d pictures…') : t('Uploading…'); }
-      else if (!news.classList.contains('bad')) news.textContent = '';
-    }
-
-    const narrow = window.matchMedia('(max-width: 899px)');
-    const storeKey = opts.storeKey || 'editor-mode';
-    let mode = opts.mode || 'split';
-    try { mode = localStorage.getItem(storeKey) || mode; } catch (e) { }
-    // a part with no renderer has the text alone
-    if (!opts.preview) { mode = 'write'; modes.hidden = true; }
-    const shown = function () { return mode === 'split' && narrow.matches ? 'write' : mode; };
-    const tabs = {};
-    for (const [key, words] of [['write', t('Write')], ['split', t('Side by side')], ['preview', t('Preview')]]) {
-      const b = el('button', 'editor-mode', words);
-      b.type = 'button';
-      b.setAttribute('role', 'tab');
-      b.dataset.mode = key;
-      b.addEventListener('click', function () { setMode(key); });
-      tabs[key] = b;
-      modes.appendChild(b);
-    }
-    function setMode(key) {
-      mode = key;
-      try { localStorage.setItem(storeKey, mode); } catch (e) { }
-      draw();
-      if (shown() !== 'preview') box.focus();
-    }
-    function draw() {
-      const now = shown();
-      panes.dataset.mode = now;
-      bar.dataset.mode = now;
-      for (const key in tabs) tabs[key].setAttribute('aria-selected', key === now ? 'true' : 'false');
-      tabs.split.hidden = narrow.matches;
-      for (const b of tools.querySelectorAll('.editor-tool')) b.disabled = now === 'preview';
-      if (now === 'preview') closePop();
-      if (now !== 'write' && stale) ask();
-      else if (now === 'split') { measure(); follow(); }
-    }
-    if (narrow.addEventListener) narrow.addEventListener('change', draw);
-
-    function setWhole(on, quiet) {
-      shell.classList.toggle('whole', on);
-      if (on) foot.after(sendRow); else shell.after(sendRow);
-      requestAnimationFrame(function () { measure(); follow(); });
-      document.documentElement.classList.toggle('editor-whole', on);
-      whole.setAttribute('aria-pressed', on ? 'true' : 'false');
-      whole.title = on ? t('Leave full screen (Esc)') : t('Full screen');
-      whole.setAttribute('aria-label', whole.title);
-      if (!quiet) box.focus();
-    }
-    whole.addEventListener('click', function () { setWhole(!shell.classList.contains('whole')); });
-    setWhole(false, true);
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && !open && shell.classList.contains('whole')) setWhole(false);
-    });
-
-    // ---- the preview, a moment after typing stops
-
-    let stale = true, timer = 0, asking = null;
-    async function ask() {
-      stale = false;
-      if (asking) asking.abort();
-      const mine = new AbortController();
-      asking = mine;
-      view.classList.add('busy');
-      // the first time there is nothing to dim: say it is coming
-      if (!view.firstChild) view.appendChild(el('p', 'fine', t('Making the preview…')));
+      document.addEventListener("keydown",function (E) {
+        if ((E.key === "Escape") && (Open !== null)) {
+          ClosePop();
+          Box.focus();
+        };
+      });
+      Chooser = $impl.El("input",undefined,undefined);
+      Chooser.type = "file";
+      if (Pictures !== null) {
+        Chooser["accept"] = Pictures.accept}
+       else Chooser.accept = "";
+      Chooser.multiple = true;
+      Chooser.hidden = true;
+      if (Form !== null) Form.appendChild(Chooser);
+      Chooser.addEventListener("change",function (E) {
+        Upload(Array.from(Chooser.files));
+        Chooser.value = "";
+      });
+      AskRow = $impl.El("div","editor-ask",undefined);
+      if (Pictures !== null) {
+        Box.addEventListener("dragover",function (E) {
+          if (Boolean(E.dataTransfer) && Array.from(E.dataTransfer.types).includes("Files")) {
+            E.preventDefault();
+            Shell.classList.add("dropping");
+          };
+        });
+        Box.addEventListener("dragleave",function (E) {
+          Shell.classList.remove("dropping");
+        });
+        Box.addEventListener("drop",function (E) {
+          var List = null;
+          var P = null;
+          Shell.classList.remove("dropping");
+          if (Boolean(E.dataTransfer)) {
+            List = Array.from(E.dataTransfer.files)}
+           else List = new Array();
+          if (List.length === 0) return;
+          E.preventDefault();
+          if (document["caretPositionFromPoint"]) {
+            P = document.caretPositionFromPoint(E.clientX,E.clientY);
+            if (Boolean(P) && (P.offsetNode === Box)) Box.setSelectionRange(P.offset,P.offset);
+          };
+          Upload(List);
+        });
+        Box.addEventListener("paste",function (E) {
+          var List = null;
+          var Data = null;
+          Data = E.clipboardData;
+          if (Boolean(Data)) {
+            List = Array.from($impl.Either(Data.files,new Array()))}
+           else List = new Array();
+          if (List.length === 0) return;
+          E.preventDefault();
+          Upload(List);
+        });
+      };
+      if (Opts["compact"]) {
+        Shell = $impl.El("div","editor editor-shell editor-compact",undefined)}
+       else Shell = $impl.El("div","editor editor-shell",undefined);
+      Bar = $impl.El("div","editor-bar",undefined);
+      Tools = $impl.El("div","editor-tools",undefined);
+      Tools.setAttribute("role","toolbar");
+      Tools.setAttribute("aria-label",$impl.T("Formatting"));
+      Side = $impl.El("div","editor-side",undefined);
+      Bar.append(Tools,Side);
+      Tool($impl.T("Heading"),"",'H<span class="editor-tool-more" aria-hidden="true">▾</span>',HeadingMenu).setAttribute("aria-haspopup","menu");
+      Tool($impl.T("Bold"),$impl.ModKey + "B","<b>B</b>",function (B) {
+        Wrap("**","**",$impl.T("bold"));
+      });
+      Tool($impl.T("Italic"),$impl.ModKey + "I","<i>I</i>",function (B) {
+        Wrap("_","_",$impl.T("italic"));
+      });
+      Tool($impl.T("Strikethrough"),$impl.ModKey + $impl.ShiftKey + "X","<s>S</s>",function (B) {
+        Wrap("~~","~~",$impl.T("words"));
+      });
+      Gap();
+      Tool($impl.T("Link"),$impl.ModKey + "K",$impl.Svg('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),Link);
+      if (Opts["linkTools"]) Opts.linkTools(Editor);
+      Gap();
+      Tool($impl.T("Bulleted list"),$impl.ModKey + $impl.ShiftKey + "8",$impl.Svg('<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/>'),Bullets);
+      Tool($impl.T("Numbered list"),$impl.ModKey + $impl.ShiftKey + "7","1.",Numbers);
+      Tool($impl.T("Quote"),"","❝",function (B) {
+        Prefix(function (N) {
+          var Result = "";
+          Result = "> ";
+          return Result;
+        },new RegExp("^>\\s?"));
+      });
+      Gap();
+      Tool($impl.T("Code"),$impl.ModKey + "E","&lt;/&gt;",Code);
+      Tool($impl.T("Table"),"",$impl.Svg('<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 10h18M3 14.5h18M9 5v14M15 5v14"/>'),TableGrid);
+      GroupWords = pas.JS.New(["status",$impl.T("Status"),"color",$impl.T("Colors"),"symbol",$impl.T("Symbols"),"own",$impl.T("This site's own")]);
+      if (Opts["emoji"]) Tool($impl.T("Emoji"),"",$impl.Svg('<rect x="3.5" y="3.5" width="17" height="17" rx="4.5"/><path d="M8 12.4l2.8 2.8L16.2 9.6"/>'),EmojiPanel).setAttribute("aria-haspopup","dialog");
+      if (Opts["emoji"]) {
+        Box.addEventListener("input",function (Ev) {
+          Offer(Ev);
+          TypedAt = Box.selectionStart;
+        });
+        Box.addEventListener("keydown",function (Ev) {
+          var E = null;
+          var Arrow = false;
+          var Short = null;
+          E = Ev;
+          Arrow = ((E.key === "ArrowDown") || (E.key === "ArrowUp")) && !E.shiftKey && !E.ctrlKey && !E.altKey && !E.metaKey;
+          if ((Suggest === null) || (Choices.length === 0)) {
+            if (Arrow && (Box.selectionStart === TypedAt) && (Box.selectionEnd === TypedAt)) {
+              Short = window.EmojiNames.typed(Box.value,TypedAt,true)}
+             else Short = null;
+            if (!Boolean(Short) || Short.whole || (Short.word.length > 1)) return;
+            Eager = true;
+            Offer(null);
+          } else if (Arrow) {
+            if (E.key === "ArrowDown") {
+              Mark((Chosen + 1) % Choices.length)}
+             else Mark(((Chosen + Choices.length) - 1) % Choices.length);
+          } else if ((E.key === "Enter") || (E.key === "Tab")) {
+            TakeChoice(Chosen)}
+           else if (E.key === "Escape") {
+            CloseSuggest();
+            TypedAt = -1;
+          } else return;
+          E.preventDefault();
+          E.stopImmediatePropagation();
+        });
+        Box.addEventListener("blur",CloseSuggest);
+        Box.addEventListener("scroll",CloseSuggest);
+        window.addEventListener("resize",CloseSuggest);
+      };
+      Modes = $impl.El("div","editor-modes",undefined);
+      Modes.setAttribute("role","tablist");
+      Whole = $impl.El("button","editor-whole",undefined);
+      Whole.type = "button";
+      Icon = $impl.Svg('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>');
+      Whole.innerHTML = Icon;   // safe html: a fixed icon;
+      Side.append(Modes,Whole);
+      Panes = $impl.El("div","editor-panes",undefined);
+      if (Opts["viewClass"]) {
+        View = $impl.El("div","editor-view " + ("" + Opts["viewClass"]),undefined)}
+       else View = $impl.El("div","editor-view",undefined);
+      View.setAttribute("aria-live","polite");
+      Foot = $impl.El("div","editor-foot",undefined);
+      News = $impl.El("span","editor-news",undefined);
+      News.setAttribute("role","status");
+      Hint = $impl.El("span","editor-hint",undefined);
+      if ((Pictures !== null) && Boolean(Pictures["label"])) {
+        AttachLink = $impl.El("button","editor-link",Pictures["label"])}
+       else AttachLink = $impl.El("button","editor-link",$impl.T("add pictures"));
+      AttachLink.type = "button";
+      AttachLink.addEventListener("click",Choose);
+      Hint.append(document.createTextNode("" + $impl.Either(Opts["hint"],$impl.T("Markdown."))));
+      if (Pictures !== null) {
+        Hint.append(document.createTextNode(" "),AttachLink);
+        if (Boolean(Pictures.gallery) && (new RegExp("Android")).test(window.navigator.userAgent)) {
+          if ((new RegExp("video")).test("" + Pictures.gallery)) {
+            Gallery = $impl.El("button","editor-link",$impl.T("Photos and videos"))}
+           else Gallery = $impl.El("button","editor-link",$impl.T("Photos"));
+          Gallery.type = "button";
+          Gallery.addEventListener("click",function (E) {
+            Choose(Pictures.gallery);
+          });
+          Hint.append(document.createTextNode(" · "),Gallery);
+        };
+      };
+      HelpButton = $impl.El("button","editor-link",$impl.T("Formatting help"));
+      HelpButton.type = "button";
+      HelpButton.setAttribute("aria-expanded","false");
+      Foot.append(Hint,News,HelpButton);
+      Help = $impl.El("div","editor-help",undefined);
+      Help.hidden = true;
+      LabelEl = Box.closest("label");
+      if (LabelEl !== null) {
+        if (Box.id === "") {
+          $impl.Made += 1;
+          Box.id = "editor-box-" + ("" + $impl.Made);
+        };
+        LabelEl.htmlFor = Box.id;
+        LabelEl.after(Shell);
+      } else Box.before(Shell);
+      Shell.append(Bar,Panes,AskRow,Foot,Help);
+      Panes.append(Box,View);
+      SendRow = $impl.El("div","editor-send",undefined);
+      Shell.after(SendRow);
+      if (Opts["sendRow"]) for (var $in = Opts["sendRow"], $l = 0, $end = rtl.length($in) - 1; $l <= $end; $l++) {
+        Part = $in[$l];
+        if (Part) SendRow.appendChild(Part);
+      };
+      SendRow.hidden = SendRow.firstChild === null;
+      Cheats = new Array(new Array("## " + $impl.T("Heading"),$impl.T("a heading; ### for a smaller one")),new Array("**" + $impl.T("bold") + "**  _" + $impl.T("italic") + "_  ~~" + $impl.T("struck") + "~~",$impl.T("emphasis")),new Array("`code`",$impl.T("code in a sentence")),new Array("```" + ("" + $impl.Either(Language,"pascal")) + "\n" + "begin" + "\n" + "end." + "\n" + "```",$impl.T("a block of code; the word after ``` names its language, for its colors")),new Array("- " + $impl.T("item") + "\n" + "1. " + $impl.T("item"),$impl.T("lists; Tab moves an item in, Shift+Tab out")),new Array("> " + $impl.T("words"),$impl.T("a quotation")),new Array("[" + $impl.T("words") + "](https://…)",$impl.T("a link to another site")));
+      if (Opts["cheats"]) Cheats = Cheats.concat(Opts["cheats"]);
+      Sheet = $impl.El("table",undefined,undefined);
+      for (var $l1 = 0, $end1 = Cheats.length - 1; $l1 <= $end1; $l1++) {
+        I = $l1;
+        Pair = Cheats[I];
+        Row = $impl.El("tr",undefined,undefined);
+        Cell = $impl.El("td",undefined,undefined);
+        Cell.appendChild($impl.El("code","",Pair[0]));
+        Row.append(Cell,$impl.El("td","",Pair[1]));
+        Sheet.appendChild(Row);
+      };
+      KeysLine = $impl.El("p","fine",$impl.T("Keys: %s bold, %s italic, %s link, %s code, %s preview, %s save.",$impl.ModKey + "B",$impl.ModKey + "I",$impl.ModKey + "K",$impl.ModKey + "E",$impl.ModKey + $impl.ShiftKey + "P",$impl.ModKey + "Enter"));
+      Help.append(Sheet,KeysLine);
+      if (Opts["helpLink"]) {
+        More = $impl.El("p","fine",undefined);
+        Guide = $impl.El("a","",Opts["helpLink"]["words"]);
+        Guide["href"] = Opts["helpLink"]["href"];
+        Guide["target"] = "_blank";
+        More.appendChild(Guide);
+        Help.appendChild(More);
+      };
+      HelpButton.addEventListener("click",function (E) {
+        Help.hidden = !Help.hidden;
+        if (Help.hidden) {
+          HelpButton.setAttribute("aria-expanded","false")}
+         else HelpButton.setAttribute("aria-expanded","true");
+      });
+      Narrow = window.matchMedia("(max-width: 899px)");
+      StoreKey = "" + $impl.Either(Opts["storeKey"],"editor-mode");
+      Mode = "" + $impl.Either(Opts["mode"],"split");
       try {
-        const html = await opts.preview(box.value, mine.signal);
-        if (asking !== mine) return;
-        view.innerHTML = html;   // safe html: the part's own renderer made it
-        if (!box.value.trim()) view.replaceChildren(el('p', 'fine', opts.emptyWords || t('The preview shows here as you write.')));
-        else if (opts.afterPreview) opts.afterPreview(view);
-        measure();
-        follow();
-      } catch (e) {
-        if (e.name === 'AbortError') return;
-        stale = true;
-        view.replaceChildren(el('p', 'problem', t('The preview could not be made. It tries again when you type.')));
-      } finally {
-        if (asking === mine) { asking = null; view.classList.remove('busy'); }
-      }
-    }
-    box.addEventListener('input', function () {
-      stale = true;
-      clearTimeout(timer);
-      if (shown() !== 'write') timer = setTimeout(ask, 700);
-    });
+        Stored = window.localStorage.getItem(StoreKey);
+        if (Stored) Mode = "" + Stored;
+      } catch ($e) {
+      };
+      if (!Opts["preview"]) {
+        Mode = "write";
+        Modes.hidden = true;
+      };
+      Tabs = new Object();
+      AddTab("write",$impl.T("Write"));
+      AddTab("split",$impl.T("Side by side"));
+      AddTab("preview",$impl.T("Preview"));
+      if (Narrow["addEventListener"]) Narrow.addEventListener("change",Draw);
+      Whole.addEventListener("click",function (E) {
+        SetWhole(!Shell.classList.contains("whole"),false);
+      });
+      SetWhole(false,true);
+      document.addEventListener("keydown",function (E) {
+        if ((E.key === "Escape") && (Open === null) && Shell.classList.contains("whole")) SetWhole(false,false);
+      });
+      Box.addEventListener("input",function (E) {
+        Stale = true;
+        window.clearTimeout(Timer);
+        if (Shown() !== "write") Timer = window.setTimeout(Ask,700);
+      });
+      Mirror = $impl.El("div",undefined,undefined);
+      Mirror.setAttribute("aria-hidden","true");
+      Mirror.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;top:0;left:-9999px;white-space:pre-wrap;overflow-wrap:break-word;" + "box-sizing:border-box;border:0;margin:0;";
+      Box.addEventListener("scroll",Follow,pas.JS.New(["passive",true]));
+      View.addEventListener("load",Remeasure,true);
+      window.addEventListener("resize",Remeasure);
+      Shell.addEventListener("keydown",function (Ev) {
+        var E = null;
+        var K = "";
+        E = Ev;
+        if (!(E.ctrlKey || E.metaKey) || E.altKey) return;
+        K = E.key.toLowerCase();
+        if (K === "enter") {
+          E.preventDefault();
+          Save();
+          return;
+        };
+        if (E.shiftKey && (K === "p")) {
+          E.preventDefault();
+          if (Shown() !== "preview") {
+            SetMode("preview")}
+           else if (Narrow.matches) {
+            SetMode("write")}
+           else SetMode("split");
+        };
+      });
+      Box.addEventListener("keydown",function (Ev) {
+        var E = null;
+        var K = "";
+        var V = "";
+        var Line = "";
+        var Next = "";
+        var Act = null;
+        var At = 0;
+        var Start = 0;
+        var Cut = 0;
+        var Item = [];
+        E = Ev;
+        K = E.key.toLowerCase();
+        if ((E.ctrlKey || E.metaKey) && !E.altKey) {
+          Act = null;
+          if (E.shiftKey) {
+            if (E.code === "Digit8") {
+              K = "8"}
+             else if (E.code === "Digit7") K = "7";
+            if (K === "x") {
+              Act = function () {
+                Wrap("~~","~~",$impl.T("words"));
+              }}
+             else if ((K === "*") || (K === "8")) {
+              Act = Bullets}
+             else if ((K === "&") || (K === "7")) Act = Numbers;
+          } else if (K === "b") {
+            Act = function () {
+              Wrap("**","**",$impl.T("bold"));
+            }}
+           else if (K === "i") {
+            Act = function () {
+              Wrap("_","_",$impl.T("italic"));
+            }}
+           else if (K === "k") {
+            Act = Link}
+           else if (K === "e") Act = Code;
+          if (Act !== null) {
+            E.preventDefault();
+            Act();
+            return;
+          };
+        };
+        if (E.ctrlKey || E.metaKey || E.altKey || (Box.selectionStart !== Box.selectionEnd)) return;
+        V = Box.value;
+        At = Box.selectionStart;
+        Start = V.lastIndexOf("\n",At - 1) + 1;
+        Line = V.slice(Start,At);
+        Item = (new RegExp("^(\\s*)([-*+]|\\d+[.)]|>)(\\s+)")).exec(Line);
+        if ((E.key === "Enter") && !E.shiftKey && (rtl.length(Item) > 0)) {
+          E.preventDefault();
+          if (Line.length === Item[0].length) {
+            Replace(Start,At,"",undefined,undefined);
+            return;
+          };
+          if ((new RegExp("\\d")).test(Item[2])) {
+            Next = "" + (parseInt(Item[2],10) + 1) + Item[2].slice(-1)}
+           else Next = Item[2];
+          Replace(At,At,"\n" + Item[1] + Next + Item[3],undefined,undefined);
+          return;
+        };
+        if ((E.key === "Tab") && (rtl.length(Item) > 0) && (Item[2] !== ">")) {
+          E.preventDefault();
+          if (E.shiftKey) {
+            Cut = Math.min(2,Item[1].length);
+            if (Cut !== 0) Replace(Start,Start + Cut,"",0,0);
+            Box.setSelectionRange(At - Cut,At - Cut);
+          } else {
+            Replace(Start,Start,"  ",0,0);
+            Box.setSelectionRange(At + 2,At + 2);
+          };
+        };
+      });
+      First = Box.value;
+      Saving = false;
+      if (Form !== null) Form.addEventListener("submit",function (E) {
+        if (Pending !== 0) {
+          E.preventDefault();
+          E.stopImmediatePropagation();
+          Say($impl.T("Wait until the pictures are uploaded."),true);
+          return;
+        };
+        Saving = true;
+      },true);
+      Editor["notSaved"] = NotSaved;
+      window.addEventListener("beforeunload",function (E) {
+        if (!Saving && (Box.value !== First)) {
+          E.preventDefault();
+          E["returnValue"] = "";
+        };
+      });
+      Editor["shell"] = Shell;
+      Editor["view"] = View;
+      Draw();
+      if (Shown() !== "write") Ask();
+      Box["editor"] = Editor;
+      Result = Editor;
+      return Result;
+    };
+  };
+  $mod.$init = function () {
+    if (window["t"]) {
+      $impl.T = window["t"]}
+     else $impl.T = function (English) {
+      var Result = "";
+      Result = English;
+      return Result;
+    };
+    $impl.Mac = (new RegExp("Mac|iPhone|iPad")).test(window.navigator.platform);
+    if ($impl.Mac) {
+      $impl.ModKey = "⌘"}
+     else $impl.ModKey = "Ctrl+";
+    if ($impl.Mac) {
+      $impl.ShiftKey = "⇧"}
+     else $impl.ShiftKey = "Shift+";
+    $impl.Made = 0;
+    window["Editor"] = pas.JS.New(["attach",$impl.Attach]);
+  };
+},["JS","weborworker","Web","PageKit","PageGlobals"]);
 
-    // side by side: the preview keeps to the same part of the page as the
-    // text.  Each heading in the text is tied to its heading in the preview,
-    // and between two headings the preview moves in step; a page whose
-    // headings do not pair up one for one goes by how far down the text is.
-    let ties = null;
-    const mirror = el('div');
-    mirror.setAttribute('aria-hidden', 'true');
-    mirror.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;top:0;left:-9999px;white-space:pre-wrap;overflow-wrap:break-word;box-sizing:border-box;border:0;margin:0;';
-
-    // where each heading line of the text starts
-    function headingStarts() {
-      const starts = [];
-      let at = 0, fence = '';
-      for (const line of box.value.split('\n')) {
-        const mark = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
-        if (mark) {
-          if (!fence) fence = mark[1];
-          else if (mark[1][0] === fence[0] && mark[1].length >= fence.length && !mark[2].trim()) fence = '';
-        } else if (!fence && /^ {0,3}#{1,6}([ \t]|$)/.test(line)) starts.push({at: at, words: plain(line.replace(/^\s*#+/, '').replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1'))});
-        at += line.length + 1;
-      }
-      return starts;
-    }
-    // a heading's letters and digits alone, so the text's heading and the page's can be told to be the same
-    function plain(words) { return words.replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase(); }
-
-    function measure() {
-      ties = null;
-      if (shown() !== 'split') return;
-      const heads = Array.from(view.querySelectorAll(opts.heads || 'h1, h2, h3, h4, h5, h6'));
-      // each heading of the text with its own heading in the preview, in order;
-      // one that has no partner (a heading inside a quotation, say) is passed over
-      const starts = [], paired = [];
-      let next = 0;
-      for (const h of headingStarts()) {
-        for (let k = next; k < Math.min(heads.length, next + 4); k++) {
-          if (plain(heads[k].textContent) !== h.words) continue;
-          starts.push(h.at);
-          paired.push(heads[k]);
-          next = k + 1;
-          break;
-        }
-      }
-      if (!starts.length) return;
-      // the text laid out as the box lays it out, with a mark at each heading
-      const look = getComputedStyle(box);
-      for (const k of ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'])
-        mirror.style[k] = look[k];
-      mirror.style.width = box.clientWidth + 'px';
-      mirror.replaceChildren();
-      const marks = [];
-      let from = 0;
-      for (const at of starts) {
-        mirror.append(box.value.slice(from, at));
-        const mark = el('span');
-        mirror.append(mark);
-        marks.push(mark);
-        from = at;
-      }
-      mirror.append(box.value.slice(from));
-      document.body.appendChild(mirror);
-      const textMax = box.scrollHeight - box.clientHeight, viewMax = view.scrollHeight - view.clientHeight;
-      const top = view.getBoundingClientRect().top - view.scrollTop;
-      const made = [[0, 0]];
-      for (let i = 0; i < marks.length; i++) {
-        const a = Math.min(marks[i].offsetTop - parseFloat(look.paddingTop), textMax);
-        const b = Math.min(paired[i].getBoundingClientRect().top - top - 12, viewMax);
-        const last = made[made.length - 1];
-        if (a > last[0] && b >= last[1]) made.push([a, b]);
-      }
-      mirror.remove();
-      mirror.replaceChildren();
-      if (textMax > made[made.length - 1][0]) made.push([textMax, Math.max(viewMax, made[made.length - 1][1])]);
-      ties = made;
-    }
-
-    function follow() {
-      if (shown() !== 'split') return;
-      const y = box.scrollTop;
-      if (ties && ties.length > 1) {
-        let i = 0;
-        while (i < ties.length - 2 && ties[i + 1][0] <= y) i++;
-        const a = ties[i], b = ties[i + 1];
-        const part = b[0] > a[0] ? Math.min(1, Math.max(0, (y - a[0]) / (b[0] - a[0]))) : 0;
-        view.scrollTop = a[1] + part * (b[1] - a[1]);
-        return;
-      }
-      const room = box.scrollHeight - box.clientHeight;
-      view.scrollTop = room > 0 ? (y / room) * (view.scrollHeight - view.clientHeight) : 0;
-    }
-    box.addEventListener('scroll', follow, {passive: true});
-    // a picture that arrives, or a window made wider, moves every heading
-    let again = 0;
-    const remeasure = function () { clearTimeout(again); again = setTimeout(function () { measure(); follow(); }, 150); };
-    view.addEventListener('load', remeasure, true);
-    window.addEventListener('resize', remeasure);
-
-    // ---- keys: the toolbar's, and lists that go on by themselves
-
-    function save() {
-      if (pending) { say(t('Wait until the pictures are uploaded.'), true); return; }
-      if (!form) return;
-      const button = form.querySelector('button[type="submit"]:not([name])');
-      if (form.requestSubmit) form.requestSubmit(button || undefined);
-      else if (button) button.click();
-    }
-
-    shell.addEventListener('keydown', function (e) {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      const k = e.key.toLowerCase();
-      if (k === 'enter') { e.preventDefault(); save(); return; }
-      if (e.shiftKey && k === 'p') { e.preventDefault(); setMode(shown() === 'preview' ? (narrow.matches ? 'write' : 'split') : 'preview'); }
-    });
-
-    box.addEventListener('keydown', function (e) {
-      const k = e.key.toLowerCase();
-      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-        const act = e.shiftKey
-          ? {x: function () { wrap('~~', '~~', t('words')); }, '*': bullets, '8': bullets, '&': numbers, '7': numbers}[e.code === 'Digit8' ? '8' : e.code === 'Digit7' ? '7' : k]
-          : {b: function () { wrap('**', '**', t('bold')); }, i: function () { wrap('_', '_', t('italic')); }, k: link, e: code}[k];
-        if (act) { e.preventDefault(); act(); return; }
-      }
-      if (e.ctrlKey || e.metaKey || e.altKey || box.selectionStart !== box.selectionEnd) return;
-      const v = box.value, at = box.selectionStart;
-      const start = v.lastIndexOf('\n', at - 1) + 1;
-      const line = v.slice(start, at);
-      const item = /^(\s*)([-*+]|\d+[.)]|>)(\s+)/.exec(line);
-      if (e.key === 'Enter' && !e.shiftKey && item) {
-        e.preventDefault();
-        // an empty item ends the list
-        if (line.length === item[0].length) { replace(start, at, ''); return; }
-        const next = /\d/.test(item[2]) ? (parseInt(item[2], 10) + 1) + item[2].slice(-1) : item[2];
-        replace(at, at, '\n' + item[1] + next + item[3]);
-        return;
-      }
-      // Tab moves a list item in or out; elsewhere it leaves the box, as it should
-      if (e.key === 'Tab' && item && item[2] !== '>') {
-        e.preventDefault();
-        if (e.shiftKey) {
-          const cut = Math.min(2, item[1].length);
-          if (cut) replace(start, start + cut, '', 0, 0);
-          box.setSelectionRange(at - cut, at - cut);
-        } else {
-          replace(start, start, '  ', 0, 0);
-          box.setSelectionRange(at + 2, at + 2);
-        }
-      }
-    });
-
-    // ---- not leaving with changes unsaved, nor sending half an upload
-
-    const first = box.value;
-    let saving = false;
-    // heard first (capture), so a part that sends the form itself does not
-    // send it with a file still on its way
-    if (form) form.addEventListener('submit', function (e) {
-      if (pending) { e.preventDefault(); e.stopImmediatePropagation(); say(t('Wait until the pictures are uploaded.'), true); return; }
-      saving = true;
-    }, true);
-    // a part whose save was refused says so: the text is still unsaved
-    editor.notSaved = function () { saving = false; };
-    window.addEventListener('beforeunload', function (e) {
-      if (!saving && box.value !== first) { e.preventDefault(); e.returnValue = ''; }
-    });
-
-    editor.shell = shell;
-    editor.view = view;
-    draw();
-    if (shown() !== 'write') ask();
-    box.editor = editor;
-    return editor;
-  }
-
-  window.Editor = {attach: attach};
-})();
+rtl.run('EditorPage');
+}
