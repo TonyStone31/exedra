@@ -110,7 +110,7 @@ file you already have:
 
 ```sh
 sh install.sh --dir ~/exedra --no-service
-sh install.sh --dir ~/exedra --no-service --from exedra-0.1.1-linux-x86_64.tar.gz
+sh install.sh --dir ~/exedra --no-service --from exedra-0.2.0-linux-x86_64.tar.gz
 ~/exedra/exedra ~/exedra/exedra.ini
 ```
 

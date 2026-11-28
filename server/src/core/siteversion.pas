@@ -8,7 +8,7 @@ unit SiteVersion;
 interface
 
 const
-  ExedraVersion = '0.1.1';
+  ExedraVersion = '0.2.0';
 
 implementation
 
